@@ -1,0 +1,911 @@
+const express = require('express');
+const router = express.Router();
+const Seller = require('../models/sellerModel');
+const Product = require('../models/productModel');
+const Category = require('../models/Category');
+const Order = require('../models/orderModel');
+const { sendOtp, verifyOtp } = require('../utils/otp');
+const jwt = require('jsonwebtoken');
+const authenticateToken = require('../middleware/auth');
+const multer = require('multer');
+const { uploadToCloudinary } = require('../config/clowdnaryConfig');
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+// Multer setup for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (!validTypes.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or JPG files allowed'));
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit per file
+});
+
+// Utility function to generate JWT token
+const generateToken = (id, phoneNumber) => {
+  return jwt.sign({ id, phoneNumber }, process.env.JWT_SECRET, { expiresIn: '7d' });
+};
+
+// Input validation middleware
+const validateRequiredFields = (fields) => (req, res, next) => {
+  const missingFields = fields.filter((field) => {
+    if (field === 'images' || field === 'profilePicture') {
+      return !req.files && !req.file; // Check for single file or array
+    }
+    return !req.body[field];
+  });
+  if (missingFields.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Missing required fields: ${missingFields.join(', ')}`,
+    });
+  }
+  next();
+};
+
+// Send OTP
+router.post('/send-otp', validateRequiredFields(['phoneNumber']), async (req, res) => {
+  const { phoneNumber } = req.body;
+
+  try {
+    const existingSeller = await Seller.findOne({ phoneNumber });
+    if (existingSeller) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number already registered',
+      });
+    }
+
+    await sendOtp(phoneNumber);
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully',
+    });
+  } catch (error) {
+    console.error('OTP send error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP',
+      error: error.message,
+    });
+  }
+});
+
+// Register Seller
+router.post(
+  '/register',
+  upload.single('profilePicture'),
+  validateRequiredFields(['phoneNumber', 'otp', 'name', 'shopName', 'address', 'password', 'profilePicture']),
+  async (req, res) => {
+    const { phoneNumber, otp, name, shopName, address, password } = req.body;
+
+    try {
+      const isValidOtp = verifyOtp(phoneNumber, otp);
+      if (!isValidOtp) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid OTP',
+        });
+      }
+
+      const existingSeller = await Seller.findOne({ phoneNumber });
+      if (existingSeller) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number already registered',
+        });
+      }
+
+      let profilePictureUrl = '';
+      if (req.file) {
+        const result = await uploadToCloudinary(req.file.buffer, {
+          folder: 'seller_profiles',
+          resource_type: 'image',
+        });
+        profilePictureUrl = result.url;
+      }
+
+      const seller = new Seller({
+        phoneNumber,
+        name: name.trim(),
+        shopName: shopName.trim(),
+        address: address.trim(),
+        password,
+        role: 'seller',
+        profilePicture: profilePictureUrl,
+        status: 'pending',
+      });
+
+      await seller.save();
+      const token = generateToken(seller._id, seller.phoneNumber);
+
+      res.status(201).json({
+        success: true,
+        message: 'Seller registered successfully',
+        data: {
+          seller: {
+            id: seller._id,
+            name: seller.name,
+            phoneNumber: seller.phoneNumber,
+            role: seller.role,
+            profilePicture: seller.profilePicture,
+            status: seller.status,
+          },
+          token,
+        },
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Server error during registration',
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Login Seller
+router.post('/login', validateRequiredFields(['phoneNumber', 'password']), async (req, res) => {
+  const { phoneNumber, password } = req.body;
+
+  try {
+    console.log('Login Attempt:', { phoneNumber, password }); // Debug
+    const seller = await Seller.findOne({ phoneNumber }).select('+password');
+    console.log('Seller Found:', seller ? seller.phoneNumber : 'No seller'); // Debug
+    if (!seller || seller.role !== 'seller') {
+      return res.status(404).json({
+        success: false,
+        message: 'Seller not found',
+      });
+    }
+
+    const isMatch = await seller.matchPassword(password);
+    console.log('Password Match:', isMatch); // Debug
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials',
+      });
+    }
+
+    const token = generateToken(seller._id, seller.phoneNumber);
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        seller: {
+          id: seller._id,
+          name: seller.name,
+          phoneNumber: seller.phoneNumber,
+          role: seller.role,
+          profilePicture: seller.profilePicture,
+          status: seller.status,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login',
+      error: error.message,
+    });
+  }
+});
+
+// Get Categories
+router.get('/categories', authenticateToken, async (req, res) => {
+  try {
+    const categories = await Category.find().select('name _id');
+    res.status(200).json({
+      success: true,
+      message: 'Categories retrieved successfully',
+      data: { categories },
+    });
+  } catch (error) {
+    console.error('Categories retrieval error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error retrieving categories',
+      error: error.message,
+    });
+  }
+});
+router.post(
+  '/products',
+  authenticateToken,
+  upload.array('images'),
+  validateRequiredFields([
+    'name', 'category', 'quantity', 'price', 'description', 'images',
+    'sizes', 'colors', 'material', 'gender', 'brand', 'fit', 'careInstructions'
+  ]),
+  async (req, res) => {
+    const {
+      name, category, quantity, price, description, sizes, colors, material,
+      gender, brand, fit, careInstructions, isReturnable, returnPeriod,
+      dimensions, weight, isCashOnDeliveryAvailable, onlinePaymentPercentage
+    } = req.body;
+
+    try {
+      if (!req.seller?.id) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Seller not authenticated',
+        });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(category)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid category ID',
+        });
+      }
+
+      // Parse and validate numeric fields
+      const parsedQuantity = Number(quantity);
+      const parsedPrice = Number(price);
+      const parsedReturnPeriod = Number(returnPeriod) || 0;
+      const parsedWeight = weight ? Number(weight) : 0;
+      const parsedOnlinePaymentPercentage = onlinePaymentPercentage !== undefined ? Number(onlinePaymentPercentage) : 100; // Default to 100 if not provided
+      const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
+
+      if (isNaN(parsedQuantity) || parsedQuantity < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Quantity must be a non-negative number',
+        });
+      }
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Price must be a positive number',
+        });
+      }
+      if (parsedWeight < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Weight cannot be negative',
+        });
+      }
+      if (isNaN(parsedOnlinePaymentPercentage) || parsedOnlinePaymentPercentage < 0 || parsedOnlinePaymentPercentage > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Online payment percentage must be between 0 and 100',
+        });
+      }
+      if (!parsedIsCashOnDeliveryAvailable && parsedOnlinePaymentPercentage !== 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Online payment percentage must be 100 if COD is not available',
+        });
+      }
+
+      // Validate sizes and colors (expecting arrays)
+      const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes || '[]');
+      const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors || '[]');
+      if (parsedSizes.length === 0 || parsedColors.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'At least one size and one color are required',
+        });
+      }
+
+      // Validate dimensions if provided
+      let parsedDimensions = {};
+      if (dimensions) {
+        parsedDimensions = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions;
+        if (parsedDimensions.chest < 0 || parsedDimensions.length < 0 || parsedDimensions.sleeve < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Dimensions cannot be negative',
+          });
+        }
+      }
+
+      const [categoryDoc, seller] = await Promise.all([
+        Category.findById(category),
+        Seller.findById(req.seller.id),
+      ]);
+
+      if (!categoryDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Category does not exist',
+        });
+      }
+      if (!seller || seller.status !== 'enabled') {
+        return res.status(403).json({
+          success: false,
+          message: 'Seller account is disabled or not found',
+        });
+      }
+
+      const imageUploads = await Promise.all(
+        req.files.map((file) =>
+          uploadToCloudinary(file.buffer, { folder: 'products', resource_type: 'image' })
+        )
+      );
+      const imageUrls = imageUploads.map((result) => result.url);
+
+      const isProductReturnable = isReturnable === 'true' || isReturnable === true;
+      if (isProductReturnable && (parsedReturnPeriod <= 0 || parsedReturnPeriod > 30)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Return period must be between 1 and 30 days for returnable products',
+        });
+      }
+
+      const product = new Product({
+        sellerId: req.seller.id,
+        name: name.trim(),
+        category,
+        quantity: parsedQuantity,
+        price: parsedPrice,
+        description: description.trim(),
+        images: imageUrls,
+        sizes: parsedSizes,
+        colors: parsedColors,
+        material: material.trim(),
+        gender,
+        brand: brand.trim(),
+        fit,
+        careInstructions: careInstructions.trim(),
+        status: 'enabled',
+        isReturnable: isProductReturnable,
+        returnPeriod: isProductReturnable ? parsedReturnPeriod : 0,
+        dimensions: parsedDimensions.chest ? parsedDimensions : undefined,
+        weight: parsedWeight || undefined,
+        isCashOnDeliveryAvailable: parsedIsCashOnDeliveryAvailable,
+        onlinePaymentPercentage: parsedOnlinePaymentPercentage,
+      });
+
+      await product.save();
+      await product.populate('category', 'name');
+
+      res.status(201).json({
+        success: true,
+        message: 'Clothing product created successfully',
+        data: { product },
+      });
+    } catch (error) {
+      console.error('Product creation error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Server error creating product',
+        error: error.message,
+      });
+    }
+  }
+);
+
+router.get('/products', authenticateToken, async (req, res) => {
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const products = await Product.find({ sellerId: req.seller.id })
+      .populate('category', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: 'Clothing products retrieved successfully',
+      data: { products },
+    });
+  } catch (error) {
+    console.error('Products retrieval error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error retrieving products',
+      error: error.message,
+    });
+  }
+});
+router.put(
+  '/products/:id',
+  authenticateToken,
+  upload.array('images'),
+  async (req, res) => {
+    const { id } = req.params;
+    const {
+      name, category, quantity, price, description, sizes, colors, material,
+      gender, brand, fit, careInstructions, isReturnable, returnPeriod, status,
+      dimensions, weight, isCashOnDeliveryAvailable, onlinePaymentPercentage
+    } = req.body;
+
+    try {
+      if (!req.seller?.id) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Seller not authenticated',
+        });
+      }
+
+      const product = await Product.findOne({ _id: id, sellerId: req.seller.id });
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Product not found or unauthorized',
+        });
+      }
+
+      if (name) product.name = name.trim();
+
+      if (category) {
+        if (!mongoose.Types.ObjectId.isValid(category)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid category ID',
+          });
+        }
+        const categoryExists = await Category.findById(category);
+        if (!categoryExists) {
+          return res.status(400).json({
+            success: false,
+            message: 'Category does not exist',
+          });
+        }
+        product.category = category;
+      }
+
+      if (quantity !== undefined) {
+        const parsedQuantity = Number(quantity);
+        if (isNaN(parsedQuantity) || parsedQuantity < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Quantity must be a non-negative number',
+          });
+        }
+        product.quantity = parsedQuantity;
+      }
+
+      if (price !== undefined) {
+        const parsedPrice = Number(price);
+        if (isNaN(parsedPrice) || parsedPrice <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Price must be a positive number',
+          });
+        }
+        product.price = parsedPrice;
+      }
+
+      if (description !== undefined) product.description = description.trim();
+
+      if (sizes) {
+        const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes);
+        if (parsedSizes.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'At least one size is required',
+          });
+        }
+        product.sizes = parsedSizes;
+      }
+
+      if (colors) {
+        const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors);
+        if (parsedColors.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'At least one color is required',
+          });
+        }
+        product.colors = parsedColors;
+      }
+
+      if (material) product.material = material.trim();
+      if (gender) product.gender = gender;
+      if (brand) product.brand = brand.trim();
+      if (fit) product.fit = fit;
+      if (careInstructions) product.careInstructions = careInstructions.trim();
+
+      if (req.files && req.files.length > 0) {
+        const imageUploads = await Promise.all(
+          req.files.map((file) =>
+            uploadToCloudinary(file.buffer, { folder: 'products', resource_type: 'image' })
+          )
+        );
+        product.images = imageUploads.map((result) => result.url);
+      }
+
+      if (isReturnable !== undefined) {
+        const isProductReturnable = isReturnable === 'true' || isReturnable === true;
+        const parsedReturnPeriod = Number(returnPeriod) || product.returnPeriod;
+        if (isProductReturnable && (parsedReturnPeriod <= 0 || parsedReturnPeriod > 30)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Return period must be between 1 and 30 days for returnable products',
+          });
+        }
+        product.isReturnable = isProductReturnable;
+        product.returnPeriod = isProductReturnable ? parsedReturnPeriod : 0;
+      }
+
+      if (status) {
+        if (!['enabled', 'disabled'].includes(status)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid status value',
+          });
+        }
+        product.status = status;
+      }
+
+      if (dimensions) {
+        const parsedDimensions = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions;
+        if (parsedDimensions.chest < 0 || parsedDimensions.length < 0 || parsedDimensions.sleeve < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Dimensions cannot be negative',
+          });
+        }
+        product.dimensions = parsedDimensions;
+      }
+
+      if (weight !== undefined) {
+        const parsedWeight = Number(weight);
+        if (isNaN(parsedWeight) || parsedWeight < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Weight cannot be negative',
+          });
+        }
+        product.weight = parsedWeight;
+      }
+
+      // Update COD and payment split fields
+      if (isCashOnDeliveryAvailable !== undefined) {
+        const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
+        const parsedOnlinePaymentPercentage = onlinePaymentPercentage !== undefined ? Number(onlinePaymentPercentage) : product.onlinePaymentPercentage;
+
+        if (isNaN(parsedOnlinePaymentPercentage) || parsedOnlinePaymentPercentage < 0 || parsedOnlinePaymentPercentage > 100) {
+          return res.status(400).json({
+            success: false,
+            message: 'Online payment percentage must be between 0 and 100',
+          });
+        }
+        if (!parsedIsCashOnDeliveryAvailable && parsedOnlinePaymentPercentage !== 100) {
+          return res.status(400).json({
+            success: false,
+            message: 'Online payment percentage must be 100 if COD is not available',
+          });
+        }
+
+        product.isCashOnDeliveryAvailable = parsedIsCashOnDeliveryAvailable;
+        product.onlinePaymentPercentage = parsedOnlinePaymentPercentage;
+      }
+
+      await product.save();
+      await product.populate('category', 'name');
+
+      res.status(200).json({
+        success: true,
+        message: 'Clothing product updated successfully',
+        data: { product },
+      });
+    } catch (error) {
+      console.error('Product update error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Server error updating product',
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Toggle Product Status
+router.put('/products/:id/toggle-status', authenticateToken, async (req, res) => {
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const product = await Product.findOne({ _id: req.params.id, sellerId: req.seller.id });
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found or unauthorized',
+      });
+    }
+
+    product.status = product.status === 'enabled' ? 'disabled' : 'enabled';
+    await product.save();
+    await product.populate('category', 'name');
+
+    res.status(200).json({
+      success: true,
+      message: `Product ${product.status} successfully`,
+      data: { product },
+    });
+  } catch (error) {
+    console.error('Toggle product status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error toggling product status',
+      error: error.message,
+    });
+  }
+});
+
+// Delete Product
+router.delete('/products/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const product = await Product.findOneAndDelete({ _id: id, sellerId: req.seller.id });
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found or unauthorized',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Product deleted successfully',
+    });
+  } catch (error) {
+    console.error('Product deletion error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error deleting product',
+      error: error.message,
+    });
+  }
+});
+
+router.put('/profile', authenticateToken, upload.single('profilePicture'), async (req, res) => {
+  try {
+    const { name, shopName, phoneNumber, address, paymentId, aadharId, bankAccount, upiId, razorpayAccountId } = req.body;
+
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (shopName) updateData.shopName = shopName.trim();
+    if (phoneNumber) updateData.phoneNumber = phoneNumber.trim();
+    if (address) updateData.address = address.trim();
+    if (paymentId) updateData.paymentId = paymentId.trim();
+    if (aadharId) updateData.aadharId = aadharId.trim();
+
+    // Handle paymentDetails
+    if (bankAccount || upiId || razorpayAccountId) {
+      updateData.paymentDetails = {};
+      if (bankAccount) {
+        const parsedBank = typeof bankAccount === 'string' ? JSON.parse(bankAccount) : bankAccount;
+        updateData.paymentDetails.bankAccount = {
+          accountNumber: parsedBank.accountNumber,
+          ifscCode: parsedBank.ifscCode,
+          accountHolderName: parsedBank.accountHolderName,
+        };
+      }
+      if (upiId) updateData.paymentDetails.upiId = upiId.trim();
+      if (razorpayAccountId) updateData.paymentDetails.razorpayAccountId = razorpayAccountId.trim();
+    }
+
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, {
+        folder: 'seller_profiles',
+        resource_type: 'image',
+      });
+      updateData.profilePicture = result.url;
+    }
+
+    const seller = await Seller.findByIdAndUpdate(
+      req.seller.id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!seller) return res.status(404).json({ success: false, message: 'Seller not found' });
+
+    res.status(200).json({ success: true, message: 'Profile updated successfully', data: { seller } });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// Get Seller Profile
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    const seller = await Seller.findById(req.seller.id).select('-password');
+    if (!seller) return res.status(404).json({ success: false, message: 'Seller not found' });
+    res.status(200).json({ success: true, data: { seller } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// Search Products
+router.get('/products/search', authenticateToken, async (req, res) => {
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const { name } = req.query;
+    const products = await Product.find({
+      sellerId: req.seller.id,
+      $or: [
+        { name: { $regex: name, $options: 'i' } },
+        { description: { $regex: name, $options: 'i' } },
+        { brand: { $regex: name, $options: 'i' } },
+      ],
+    }).populate('category', 'name');
+
+    res.status(200).json({
+      success: true,
+      message: 'Clothing products retrieved successfully',
+      data: { products },
+    });
+  } catch (error) {
+    console.error('Product search error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error searching products',
+      error: error.message,
+    });
+  }
+});
+
+// Get Seller's Orders
+router.get('/orders', authenticateToken, async (req, res) => {
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const orders = await Order.find({ sellerId: req.seller.id }).sort({ createdAt: -1 });
+    res.status(200).json({
+      success: true,
+      message: 'Orders retrieved successfully',
+      data: { orders },
+    });
+  } catch (error) {
+    console.error('Orders retrieval error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error retrieving orders',
+      error: error.message,
+    });
+  }
+});
+
+router.put('/orders/:id', authenticateToken, async (req, res) => {
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const { status } = req.body;
+    const validStatuses = [
+      'order confirmed',
+      'processing',
+      'shipped',
+      'out for delivery',
+      'delivered',
+      'cancelled',
+      'returned',
+    ];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value',
+      });
+    }
+
+    const order = await Order.findOne({ _id: req.params.id, sellerId: req.seller.id });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or unauthorized',
+      });
+    }
+
+    // Update order status
+    order.status = status;
+    if (status === 'delivered' && order.paymentMethod !== 'Razorpay') {
+      order.paymentStatus = 'completed'; // COD or split payment completed on delivery
+    } else if (status === 'cancelled' || status === 'returned') {
+      order.paymentStatus = 'failed'; // No payment due
+    }
+
+    await order.save();
+
+    // Update seller revenue
+    const seller = await Seller.findById(req.seller.id);
+    const orders = await Order.find({ sellerId: req.seller.id, status: { $ne: 'cancelled' } });
+    seller.revenue.total = orders.reduce((acc, o) => acc + (o.total || 0), 0);
+    seller.revenue.online = orders.reduce((acc, o) => acc + (o.onlineAmount || 0), 0);
+    seller.revenue.cod = orders.reduce((acc, o) => acc + (o.codAmount || 0), 0);
+    seller.revenue.pendingCod = orders
+      .filter((o) => o.paymentStatus === 'pending' && o.codAmount > 0)
+      .reduce((acc, o) => acc + (o.codAmount || 0), 0);
+    await seller.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Order updated successfully',
+      data: { order },
+    });
+  } catch (error) {
+    console.error('Order update error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error updating order',
+      error: error.message,
+    });
+  }
+});
+
+// Get Seller Revenue (Updated to Use Seller Document)
+router.get('/revenue', authenticateToken, async (req, res) => {
+  try {
+    if (!req.seller?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Seller not authenticated',
+      });
+    }
+
+    const seller = await Seller.findById(req.seller.id);
+    if (!seller) {
+      return res.status(404).json({
+        success: false,
+        message: 'Seller not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Revenue retrieved successfully',
+      data: {
+        totalRevenue: seller.revenue.total,
+        onlineRevenue: seller.revenue.online,
+        codRevenue: seller.revenue.cod,
+        pendingCodRevenue: seller.revenue.pendingCod,
+      },
+    });
+  } catch (error) {
+    console.error('Revenue retrieval error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error retrieving revenue',
+      error: error.message,
+    });
+  }
+});
+
+module.exports = router;  
