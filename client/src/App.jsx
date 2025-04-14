@@ -8,7 +8,7 @@ import LoginRegister from "./pages/LoginRegister";
 import SellerAuth from "./pages/SellerAuth";
 import SellerDashboard from "./pages/SellerDashboard";
 import UserDashboard from "./pages/UserDashboard";
-import AdminAuth from "./pages/Adminauth";
+import AdminAuth from "./pages/AdminAuth";
 import AdminDashboard from "./pages/AdminDashboard";
 import WishlistPage from "./pages/WishlistPage";
 import CategoryPage from "./pages/CategoryPage";
