@@ -2,6 +2,7 @@ const dotenv = require('dotenv')
 dotenv.config()
 const express = require("express");
 const cors = require('cors');
+const multer = require('multer');
 const app = express();
 const connectDB = require('./config/db');
 const userAuthRoutes = require('./routes/userRouter');
@@ -9,7 +10,7 @@ const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
 app.use(cors({
-  origin: 'http://localhost:5173', // Your frontend URL
+  origin: 'http://localhost:5173', 
   credentials: true
 }));
 app.use((err, req, res, next) => {
