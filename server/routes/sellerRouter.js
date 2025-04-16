@@ -219,6 +219,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
     });
   }
 });
+
 router.post(
   '/products',
   authenticateToken,

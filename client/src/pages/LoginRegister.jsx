@@ -240,7 +240,7 @@ const LoginRegister = () => {
             } catch (err) {
               console.error('Profile check failed:', err.response?.data || err.message);
               toast.error('Please complete your profile.');
-              navigate('/setup-profile'); // Adjust based on your app
+              navigate('/'); // Adjust based on your app
             }
           }
         }
