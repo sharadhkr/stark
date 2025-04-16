@@ -9,7 +9,7 @@ import SellerAuth from "./pages/SellerAuth";
 import SellerDashboard from "./pages/SellerDashboard";
 import UserDashboard from "./pages/UserDashboard";
 import AdminAuth from "./pages/AdminAuth";
-const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
+import AdminDashboard from "./pages/AdminDashboard";
 import WishlistPage from "./pages/WishlistPage";
 import CategoryPage from "./pages/CategoryPage";
 import OwnerProfilePage from "./pages/OwnerProfilePage";
@@ -24,7 +24,7 @@ import SearchResults from "./pages/SearchResults";
 const Layout = ({ children }) => {
   const location = useLocation();
 
-
+  
   const userRoutes = [
     "/",
     "/cart",
@@ -77,9 +77,9 @@ function App() {
         <Route path="/order/:orderId" element={<Layout><OrderDetails /></Layout>} />
         <Route path="/category/:categoryName" element={<Layout><CategoryPage /></Layout>} />
         <Route path="/seller/:sellerId" element={<Layout><OwnerProfilePage /></Layout>} />
-        <Route path="/order/:orderId" element={<Layout><OrderDetails /></Layout>} />
+        <Route path="/order/:orderId" element={<Layout><OrderDetails/></Layout>} />
         <Route path="/product/:productId" element={<Layout><ProductPage /></Layout>} />
-        <Route path="/search" element={<Layout><SearchResults /></Layout>} />
+        <Route path="/search" element={<Layout><SearchResults/></Layout>} />
 
         {/* Routes without Layout */}
         <Route path="/checkout" element={<CheckoutPage />} />
@@ -89,15 +89,7 @@ function App() {
         <Route path="/seller/login" element={<SellerAuth />} /> {/* Fixed typo */}
         <Route path="/seller/dashboard" element={<SellerDashboard />} /> {/* Fixed typo */}
         <Route path="/admin/login" element={<AdminAuth />} />
-        {/* <Route path="/admin/dashboard" element={<AdminDashboard />} /> */}
-        <Route
-          path="/admin/dashboard"
-          element={
-            <React.Suspense fallback={<div>Loading...</div>}>
-              <AdminDashboard />
-            </React.Suspense>
-          }
-        />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Routes>
     </Router>
   );

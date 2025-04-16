@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import axios from '../axios';
-const AdminNavBar = React.lazy(() => import("../components/admin/AdminNavBar"));
+import AdminNavBar from '../components/admin/AdminNavBar';
 import AdminOverview from '../components/admin/AdminOverview';
 import AdminSellers from '../components/admin/AdminSellers';
 import AdminProducts from '../components/admin/AdminProducts';
@@ -100,10 +100,7 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 to-blue-200 font-inter">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-
-      <React.Suspense fallback={<div>Loading...</div>}>
-        <AdminNavBar activeSection={activeSection} setActiveSection={setActiveSection} handleLogout={handleLogout} />
-      </React.Suspense>
+      <AdminNavBar activeSection={activeSection} setActiveSection={setActiveSection} handleLogout={handleLogout} />
       <main className="max-w-7xl mx-auto p-4 sm:p-6">
         <motion.div
           initial="hidden"

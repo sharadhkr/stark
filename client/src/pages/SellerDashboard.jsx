@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import axios from '../selleraxios';
-import Overview from '../components/seller/Overview';
+import Overview from "../components/seller/Overview";
 import Products from '../components/seller/Products';
 import Orders from '../components/seller/Orders';
 import Profile from '../components/seller/Profile';
