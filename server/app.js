@@ -9,10 +9,17 @@ const userAuthRoutes = require('./routes/userRouter');
 const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
+// Ensure CLIENT_URL is correctly read from environment variables
+const clientUrl = process.env.CLIENT_URL || 'https://kidney-1-b2qy.onrender.com';
+
+// Configure CORS
 app.use(cors({
-  origin: 'Process.env.CLIENT_URL', 
-  credentials: true
+  origin: clientUrl, // Allow requests from the frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // If you're using cookies or auth tokens
 }));
+
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: `Multer error: ${err.message}` });
