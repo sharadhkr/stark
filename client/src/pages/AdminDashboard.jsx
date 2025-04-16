@@ -5,11 +5,11 @@ import { motion } from 'framer-motion';
 import axios from '../axios';
 import AdminNavBar from '../Components/admin/AdminNavBar';
 import AdminOverview from '../Components/admin/AdminOverview';
-import AdminSellers from '../components/admin/AdminSellers';
-import AdminProducts from '../components/admin/AdminProducts';
-import AdminOrders from '../components/admin/AdminOrders';
-import AdminUsers from '../components/admin/AdminUsers';
-import AdminCategories from '../components/admin/AdminCategories';
+import AdminSellers from '../Components/admin/AdminSellers';
+import AdminProducts from '../Components/admin/AdminProducts';
+import AdminOrders from '../Components/admin/AdminOrders';
+import AdminUsers from '../Components/admin/AdminUsers';
+import AdminCategories from '../Components/admin/AdminCategories';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
