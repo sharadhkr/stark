@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../axios';
 import toast, { Toaster } from 'react-hot-toast';
 import ProductCard from '../Components/ProductCard';
-import ProductCardSkeleton from '../components/ProductCardSkeleton';
+import ProductCardSkeleton from '../Components/productCardSkeleton';
 import SearchBar from '../Components/SearchBar';
 import { motion } from 'framer-motion';
 import { MdArrowBack, MdFilterList, MdLogout } from 'react-icons/md';

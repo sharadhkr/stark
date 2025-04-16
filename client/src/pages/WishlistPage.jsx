@@ -4,7 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdArrowBack, MdFavorite } from 'react-icons/md';
 import axios from '../useraxios';
-import WishlistProductCard from '../Components/WishlistProductCard'; // Adjust path as needed
+import WishlistProductCard from '../Components/cdsvx'; // Adjust path as needed
 import ProductCardSkeleton from '../Components/ProductCardSkeleton'; // Adjust path as needed
 
 // Animation Variants
