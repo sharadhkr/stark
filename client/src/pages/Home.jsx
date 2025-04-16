@@ -1,16 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import agroLogo from '../assets/logo.png';
-import agrotade from '../assets/logoname.png';
 import { FaSearch, FaShoppingCart, FaFilter, FaStore } from 'react-icons/fa';
 import ProductCard from '../Components/ProductCard';
-import CategoryCard from '../components/CategoryCard';
-import SellerCard from '../components/SellerCard';
-import axios from '../useraxios'; // Using the custom axios instance
+import CategoryCard from '../Components/CategoryCard';
+import SellerCard from '../Components/SellerCard';
+import SearchBar from '../Components/SearchBar';
+import axios from '../useraxios';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import SearchBar from '../components/SearchBar';
 
 const Home = () => {
   const [searchQuery, setSearchQuery] = useState('');

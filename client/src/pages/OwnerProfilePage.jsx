@@ -4,7 +4,7 @@ import axios from '../axios';
 import toast, { Toaster } from 'react-hot-toast';
 import ProductCard from '../Components/wdsefs';
 import ProductCardSkeleton from '../components/ProductCardSkeleton';
-import SearchBar from '../components/SearchBar';
+import SearchBar from '../Components/SearchBar';
 import agroLogo from '../assets/logo.png';
 import { motion } from 'framer-motion';
 import { FaStore, FaEnvelope, FaPhone, FaMapMarkerAlt, FaFilter } from 'react-icons/fa';
