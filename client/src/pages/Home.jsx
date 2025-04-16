@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import agroLogo from '../assets/logo.png';
 import agrotade from '../assets/logoname.png';
 import { FaSearch, FaShoppingCart, FaFilter, FaStore } from 'react-icons/fa';
-import ProductCard from '../components/ProductCard';
+import ProductCard from '../Components/wdsefs';
 import CategoryCard from '../components/CategoryCard';
 import SellerCard from '../components/SellerCard';
 import axios from '../useraxios'; // Using the custom axios instance

@@ -10,7 +10,7 @@ const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
 app.use(cors({
-  origin: 'http://localhost:5173', 
+  origin: 'Process.env.CLIENT_URL', 
   credentials: true
 }));
 app.use((err, req, res, next) => {

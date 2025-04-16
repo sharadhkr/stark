@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
-import ProductCard from '../components/ProductCard';
+import ProductCard from './wdsefs';
 
 const sectionVariants = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.3 } } };
 
