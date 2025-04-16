@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FaEdit, FaUser } from 'react-icons/fa';
-import ProfileForm from './dwedas';
+import ProfileForm from './ProfileForm';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
