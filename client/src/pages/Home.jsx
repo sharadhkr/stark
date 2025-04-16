@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import agroLogo from '../assets/logo.png';
 import agrotade from '../assets/logoname.png';
 import { FaSearch, FaShoppingCart, FaFilter, FaStore } from 'react-icons/fa';
-import ProductCard from '../components/ProductCard';
+const ProductCard = React.lazy(() => import("../components/ProductCard"));
 import CategoryCard from '../components/CategoryCard';
 import SellerCard from '../components/SellerCard';
 import axios from '../useraxios'; // Using the custom axios instance
@@ -116,7 +116,7 @@ const Home = () => {
           setSearchQuery={setSearchQuery}
           placeholder={`go for search ...`}
         />
-        
+
 
         <motion.div
           initial="hidden"
@@ -263,7 +263,9 @@ const Home = () => {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.4 }}
                 >
+                  <React.Suspense fallback={<div>Loading...</div>}>
                   <ProductCard product={product} />
+                  </React.Suspense>
                 </motion.div>
               ))
             )}
