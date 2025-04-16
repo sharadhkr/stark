@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../axios';
 import toast, { Toaster } from 'react-hot-toast';
-import ProductCard from '../Components/wdsefs';
+import ProductCard from '../Components/ProductCard';
 import ProductCardSkeleton from '../components/ProductCardSkeleton';
 import SearchBar from '../Components/SearchBar';
 import agroLogo from '../assets/logo.png';
