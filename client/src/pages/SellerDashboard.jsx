@@ -4,7 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import axios from '../selleraxios';
 import Overview from '../Components/seller/Overview';
-import Products from '../components/seller/Products';
+import Products from '../Components/seller/Products';
 import Orders from '../Components/seller/Orders';
 import Profile from '../Components/seller/Profile';
 import { FaChartBar, FaBox, FaShoppingCart, FaUser, FaSignOutAlt, FaBan } from 'react-icons/fa';
