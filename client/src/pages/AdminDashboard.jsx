@@ -11,7 +11,7 @@ import AdminOrders from '../Components/admin/AdminOrders';
 import AdminUsers from '../Components/admin/AdminUsers';
 import AdminCategories from '../Components/admin/AdminCategories';
 import AdminAds from '../Components/admin/AdminAds';
-import AdminComboOffer from '../Components/admin/AdminComboOffer'; // Fixed incorrect import
+import AdminComboOffer from '../Components/admin/AdminComboOffer';
 import AdminSponsoredProducts from '../Components/admin/AdminSponsoredProducts';
 
 // Error Boundary Component
@@ -78,9 +78,14 @@ const AdminDashboard = () => {
           throw new Error('No admin token found. Please log in.');
         }
 
-        // Verify token first
+        // Verify token
+        console.log('Verifying admin token:', token);
         const verifyRes = await axios.get('/api/admin/auth/verify-token');
-        if (verifyRes.data.admin?.role !== 'admin') {
+        console.log('Verify token response:', verifyRes.data);
+
+        // Check if the user is an admin
+        const adminData = verifyRes.data.admin;
+        if (!adminData || (adminData.role !== 'admin' && !verifyRes.data.success)) {
           throw new Error('Admin access required');
         }
 
@@ -142,6 +147,8 @@ const AdminDashboard = () => {
           setUsers(usersRes.data.users || []);
           setCategories(categoriesRes.data.categories || []);
           setComboOffers(comboOffersRes.data.comboOffers || []);
+          console.log('Products prop:', productsRes.data.products || []);
+          console.log('ComboOffers prop:', comboOffersRes.data.comboOffers || []);
         }
       } catch (error) {
         console.error('Dashboard fetch error:', {
