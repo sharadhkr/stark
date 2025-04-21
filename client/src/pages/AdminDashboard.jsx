@@ -11,9 +11,8 @@ import AdminOrders from '../Components/admin/AdminOrders';
 import AdminUsers from '../Components/admin/AdminUsers';
 import AdminCategories from '../Components/admin/AdminCategories';
 import AdminAds from '../Components/admin/AdminAds';
-import AdminComboOffer from '../Components/admin/AdminUsers';
+import AdminComboOffer from '../Components/admin/AdminComboOffer'; // Fixed incorrect import
 import AdminSponsoredProducts from '../Components/admin/AdminSponsoredProducts';
-import AdminLayout from '../Components/admin/AdminNavBar'; // New component
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -68,7 +67,10 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchDashboardData = async () => {
+      if (!isMounted) return;
       setLoading(true);
       try {
         const token = localStorage.getItem('adminToken');
@@ -128,34 +130,43 @@ const AdminDashboard = () => {
             .filter((img) => img && img.url);
         };
 
-        setAds({
-          singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
-          doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
-          tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
-        });
-
-        setSellers(sellersRes.data.sellers || []);
-        setProducts(productsRes.data.products || []);
-        setOrders(ordersRes.data.orders || []);
-        setUsers(usersRes.data.users || []);
-        setCategories(categoriesRes.data.categories || []);
-        setComboOffers(comboOffersRes.data.comboOffers || []);
+        if (isMounted) {
+          setAds({
+            singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
+            doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
+            tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
+          });
+          setSellers(sellersRes.data.sellers || []);
+          setProducts(productsRes.data.products || []);
+          setOrders(ordersRes.data.orders || []);
+          setUsers(usersRes.data.users || []);
+          setCategories(categoriesRes.data.categories || []);
+          setComboOffers(comboOffersRes.data.comboOffers || []);
+        }
       } catch (error) {
         console.error('Dashboard fetch error:', {
           message: error.message,
           status: error.response?.status,
           data: error.response?.data,
+          stack: error.stack,
         });
-        toast.error(error.message || 'Failed to load dashboard data');
-        if (error.response?.status === 401 || error.response?.status === 403) {
-          localStorage.removeItem('adminToken');
-          navigate('/admin/login');
+        if (isMounted) {
+          toast.error(error.response?.data?.message || error.message || 'Failed to load dashboard data');
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            localStorage.removeItem('adminToken');
+            navigate('/admin/login');
+          }
         }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
+
     fetchDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [navigate]);
 
   const handleLogout = () => {
@@ -180,8 +191,6 @@ const AdminDashboard = () => {
               ? 'Combo Offers'
               : activeSection === 'sponsored-products'
               ? 'Sponsored Products'
-              : activeSection === 'layout'
-              ? 'Homepage Layout'
               : activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
           </h2>
         </motion.div>
@@ -231,9 +240,6 @@ const AdminDashboard = () => {
           )}
           {activeSection === 'sponsored-products' && (
             <AdminSponsoredProducts products={products} loading={loading} />
-          )}
-          {activeSection === 'layout' && (
-            <AdminLayout categories={categories} loading={loading} />
           )}
         </ErrorBoundary>
       </main>
