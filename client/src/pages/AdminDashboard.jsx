@@ -11,9 +11,9 @@ import AdminOrders from '../Components/admin/AdminOrders';
 import AdminUsers from '../Components/admin/AdminUsers';
 import AdminCategories from '../Components/admin/AdminCategories';
 import AdminAds from '../Components/admin/AdminAds';
-import AdminComboOffer from '../Components/admin/AdminComboOffer';
+import AdminComboOffer from '../Components/admin/AdminUsers';
 import AdminSponsoredProducts from '../Components/admin/AdminSponsoredProducts';
-import AdminLayout from '../Components/admin/AdminLayout'; // New component
+import AdminLayout from '../Components/admin/AdminNavBar'; // New component
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
