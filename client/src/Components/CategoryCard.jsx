@@ -2,7 +2,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import Navbar from './Navbar';
+import Navbar from './BottomNavbar';
 
 const CategoryCard = ({ category }) => {
   const navigate = useNavigate();
