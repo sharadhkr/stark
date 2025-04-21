@@ -8,7 +8,7 @@ const { Client } = require('@elastic/elasticsearch');
 const User = require('../models/userModel');
 const Product = require('../models/productModel');
 const Seller = require('../models/sellerModel');
-const Category = require('../models/categoryModel');
+const Category = require('../models/Category');
 const Order = require('../models/orderModel');
 const { sendOtp, verifyOtp } = require('../utils/otp');
 const userLoggedin = require('../middleware/userLoggedin');
@@ -26,6 +26,7 @@ const razorpay = new Razorpay({
 });
 
 const tempOrdersStore = new Map();
+
 // Optional Elasticsearch Client
 const elasticsearch = process.env.ELASTICSEARCH_URL
   ? new Client({
@@ -64,6 +65,10 @@ const indexData = async () => {
           category: product.category,
           sellerId: product.sellerId,
           image: product.image,
+          images: product.images,
+          price: product.price,
+          viewCount: product.viewCount,
+          isSponsored: product.isSponsored,
         }
       )
     );
@@ -265,7 +270,7 @@ router.get('/products', async (req, res) => {
     if (sellerId) query.sellerId = sellerId;
 
     const products = await Product.find(query)
-      .populate('sellerId', 'name phoneNumber')
+      .populate('sellerId', 'name phoneNumber shopName')
       .populate('category', 'name');
 
     res.status(200).json({ products: products.length ? products : [], message: products.length ? undefined : 'No products found' });
@@ -275,7 +280,13 @@ router.get('/products', async (req, res) => {
   }
 });
 
-router.get('/products/:productId', userLoggedin, async (req, res) => {
+// Alias for compatibility with Home.jsx
+router.get('/user/auth/products', (req, res, next) => {
+  req.url = '/products';
+  router.handle(req, res, next);
+});
+
+router.get('/products/:productId', async (req, res) => {
   try {
     const productId = req.params.productId;
     if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -287,12 +298,113 @@ router.get('/products/:productId', userLoggedin, async (req, res) => {
       .populate('category', 'name');
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    await Product.updateOne({ _id: productId }, { $inc: { views: 1 } });
+    // Track view for authenticated users
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.id);
+        if (user) {
+          user.recentlyViewed = [
+            { productId, viewedAt: new Date() },
+            ...user.recentlyViewed.filter((v) => v.productId.toString() !== productId).slice(0, 9),
+          ];
+          await user.save();
+          await Product.updateOne({ _id: productId }, { $inc: { viewCount: 1, views: 1 } });
+        }
+      } catch (error) {
+        console.warn('Token invalid for view tracking:', error.message);
+      }
+    }
 
     res.status(200).json({ product });
   } catch (error) {
     console.error('Fetch Product Error:', error);
     res.status(500).json({ message: 'Failed to fetch product', error: error.message });
+  }
+});
+
+router.post('/products/by-ids', async (req, res) => {
+  const { productIds } = req.body;
+  try {
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ message: 'productIds must be a non-empty array' });
+    }
+    const products = await Product.find({ _id: { $in: productIds } })
+      .populate('sellerId', 'name shopName')
+      .populate('category', 'name');
+    res.json({ success: true, products });
+  } catch (error) {
+    console.error('Error fetching products by IDs:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/products/sponsored', async (req, res) => {
+  try {
+    const products = await Product.find({ isSponsored: true })
+      .limit(10)
+      .populate('sellerId', 'name shopName')
+      .populate('category', 'name');
+    res.json({ success: true, products });
+  } catch (error) {
+    console.error('Error fetching sponsored products:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/products/most-viewed-ordered', async (req, res) => {
+  try {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 2);
+
+    // Most viewed
+    const viewed = await Product.find({ viewCount: { $gt: 0 }, createdAt: { $gte: startDate } })
+      .sort({ viewCount: -1 })
+      .limit(10)
+      .select('name price images category sellerId')
+      .populate('sellerId', 'name shopName')
+      .populate('category', 'name');
+
+    // Most ordered
+    const ordered = await Order.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      { $unwind: '$items' },
+      { $group: { _id: '$items.productId', count: { $sum: '$items.quantity' } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+      { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
+      { $unwind: '$product' },
+      {
+        $project: {
+          _id: '$product._id',
+          name: '$product.name',
+          price: '$product.price',
+          images: '$product.images',
+          category: '$product.category',
+          sellerId: '$product.sellerId',
+        },
+      },
+    ]);
+
+    // Combine and deduplicate
+    const combined = [...viewed, ...ordered].reduce((acc, item) => {
+      if (!acc.find((p) => p._id.toString() === item._id.toString())) {
+        acc.push(item);
+      }
+      return acc;
+    }, []).slice(0, 10);
+
+    // Populate category and seller for ordered products
+    await Product.populate(combined, [
+      { path: 'category', select: 'name' },
+      { path: 'sellerId', select: 'name shopName' },
+    ]);
+
+    res.json({ success: true, products: combined });
+  } catch (error) {
+    console.error('Error fetching most viewed/ordered products:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -318,6 +430,12 @@ router.get('/sellers', async (req, res) => {
   }
 });
 
+// Alias for compatibility with Home.jsx
+router.get('/user/auth/sellers', (req, res, next) => {
+  req.url = '/sellers';
+  router.handle(req, res, next);
+});
+
 router.get('/seller/:sellerId', async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
@@ -336,7 +454,7 @@ const authSeller = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: 'No token provided' });
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const seller = await Seller.findById(decoded._id).select('+password');
+    const seller = await Seller.findById(decoded.id).select('+password');
     if (!seller) return res.status(404).json({ message: 'Seller not found' });
 
     req.seller = seller;
@@ -440,14 +558,22 @@ router.get('/cart', userLoggedin, async (req, res) => {
     const user = await User.findById(req.user.id).populate('cart.productId');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    res.status(200).json({ cart: user.cart });
+    // Transform cart to match frontend expectations
+    const cartItems = user.cart.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      size: item.size,
+      color: item.color,
+    }));
+
+    res.status(200).json({ success: true, cart: { items: cartItems } });
   } catch (error) {
     console.error('Fetch Cart Error:', error);
     res.status(500).json({ message: 'Failed to fetch cart', error: error.message });
   }
 });
 
-router.post('/cart', userLoggedin, async (req, res) => {
+router.post('/cart/add', userLoggedin, async (req, res) => {
   try {
     const { productId, quantity, size, color } = req.body;
     if (!productId || !quantity || !size || !color) {
@@ -470,7 +596,14 @@ router.post('/cart', userLoggedin, async (req, res) => {
     await user.updateCart(cartItem);
 
     await user.populate('cart.productId');
-    res.status(201).json({ message: 'Added to cart', cart: user.cart });
+    const cartItems = user.cart.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      size: item.size,
+      color: item.color,
+    }));
+
+    res.status(201).json({ success: true, message: 'Added to cart', cart: { items: cartItems } });
   } catch (error) {
     console.error('Add to Cart Error:', error);
     res.status(500).json({ message: 'Failed to add to cart', error: error.message });
@@ -507,28 +640,20 @@ router.put('/cart/:productId', userLoggedin, async (req, res) => {
     await user.save();
 
     await user.populate('cart.productId');
-    res.status(200).json({ message: 'Cart updated', cart: user.cart });
+    const cartItems = user.cart.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      size: item.size,
+      color: item.color,
+    }));
+
+    res.status(200).json({ success: true, message: 'Cart updated', cart: { items: cartItems } });
   } catch (error) {
     console.error('Update Cart Error:', error);
     res.status(500).json({ message: 'Failed to update cart', error: error.message });
   }
 });
 
-
-// Save for Later Routes
-router.get('/save-for-later', userLoggedin, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate('savedForLater.productId');
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    res.status(200).json({ savedForLater: user.savedForLater });
-  } catch (error) {
-    console.error('Fetch Saved For Later Error:', error);
-    res.status(500).json({ message: 'Failed to fetch saved for later', error: error.message });
-  }
-});
-// ... (Previous imports and routes remain unchanged)
-
-// Cart Routes
 router.delete('/cart/:productId', userLoggedin, async (req, res) => {
   try {
     const { size, color } = req.body;
@@ -542,17 +667,6 @@ router.delete('/cart/:productId', userLoggedin, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Log state before operation
-    console.log('Cart before remove:', JSON.stringify(user.cart));
-
-    const cartIndex = user.cart.findIndex(
-      (item) => item.productId.toString() === req.params.productId && item.size === size && item.color === color
-    );
-    if (cartIndex === -1) {
-      return res.status(404).json({ message: 'Item not found in cart' });
-    }
-
-    // Atomically remove the item from cart
     const updateResult = await User.findOneAndUpdate(
       { _id: req.user.id, 'cart.productId': req.params.productId, 'cart.size': size, 'cart.color': color },
       { $pull: { cart: { productId: req.params.productId, size, color } } },
@@ -560,11 +674,17 @@ router.delete('/cart/:productId', userLoggedin, async (req, res) => {
     ).populate('cart.productId');
 
     if (!updateResult) {
-      return res.status(500).json({ message: 'Failed to update cart due to concurrency issue' });
+      return res.status(404).json({ message: 'Item not found in cart' });
     }
 
-    console.log('Cart after remove:', JSON.stringify(updateResult.cart));
-    res.status(200).json({ message: 'Item removed from cart', cart: updateResult.cart });
+    const cartItems = updateResult.cart.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      size: item.size,
+      color: item.color,
+    }));
+
+    res.status(200).json({ success: true, message: 'Item removed from cart', cart: { items: cartItems } });
   } catch (error) {
     console.error('Remove from Cart Error:', error);
     res.status(500).json({ message: 'Failed to remove item from cart', error: error.message });
@@ -572,6 +692,17 @@ router.delete('/cart/:productId', userLoggedin, async (req, res) => {
 });
 
 // Save for Later Routes
+router.get('/save-for-later', userLoggedin, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate('savedForLater.productId');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.status(200).json({ savedForLater: user.savedForLater });
+  } catch (error) {
+    console.error('Fetch Saved For Later Error:', error);
+    res.status(500).json({ message: 'Failed to fetch saved for later', error: error.message });
+  }
+});
+
 router.post('/save-for-later', userLoggedin, async (req, res) => {
   try {
     const { productId, quantity, size, color } = req.body;
@@ -588,16 +719,11 @@ router.post('/save-for-later', userLoggedin, async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    // Log state before operation
-    console.log('Cart before save:', JSON.stringify(user.cart));
-    console.log('Saved for later before save:', JSON.stringify(user.savedForLater));
-
-    // Atomically update cart and savedForLater
     const updateResult = await User.findOneAndUpdate(
       { _id: req.user.id },
       {
-        $pull: { cart: { productId, size, color } }, // Remove from cart if exists
-        $addToSet: { savedForLater: { productId, quantity, size, color } }, // Add to savedForLater if not already present
+        $pull: { cart: { productId, size, color } },
+        $addToSet: { savedForLater: { productId, quantity, size, color } },
       },
       { new: true }
     )
@@ -608,11 +734,17 @@ router.post('/save-for-later', userLoggedin, async (req, res) => {
       return res.status(500).json({ message: 'Failed to update due to concurrency issue' });
     }
 
-    console.log('Cart after save:', JSON.stringify(updateResult.cart));
-    console.log('Saved for later after save:', JSON.stringify(updateResult.savedForLater));
+    const cartItems = updateResult.cart.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      size: item.size,
+      color: item.color,
+    }));
+
     res.status(201).json({
+      success: true,
       message: 'Saved for later',
-      cart: updateResult.cart,
+      cart: { items: cartItems },
       savedForLater: updateResult.savedForLater,
     });
   } catch (error) {
@@ -620,8 +752,6 @@ router.post('/save-for-later', userLoggedin, async (req, res) => {
     res.status(500).json({ message: 'Failed to save for later', error: error.message });
   }
 });
-
-// ... (Rest of router.js remains unchanged)
 
 router.delete('/save-for-later/:productId', userLoggedin, async (req, res) => {
   try {
@@ -636,19 +766,379 @@ router.delete('/save-for-later/:productId', userLoggedin, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const itemIndex = user.savedForLater.findIndex(
-      (item) => item.productId.toString() === req.params.productId && item.size === size && item.color === color
-    );
-    if (itemIndex === -1) return res.status(404).json({ message: 'Item not found in saved for later' });
+    const updateResult = await User.findOneAndUpdate(
+      { _id: req.user.id, 'savedForLater.productId': req.params.productId, 'savedForLater.size': size, 'savedForLater.color': color },
+      { $pull: { savedForLater: { productId: req.params.productId, size, color } } },
+      { new: true }
+    ).populate('savedForLater.productId');
 
-    user.savedForLater.splice(itemIndex, 1);
-    await user.save();
+    if (!updateResult) {
+      return res.status(404).json({ message: 'Item not found in saved for later' });
+    }
 
-    await user.populate('savedForLater.productId');
-    res.status(200).json({ message: 'Item removed from saved for later', savedForLater: user.savedForLater });
+    res.status(200).json({ success: true, message: 'Item removed from saved for later', savedForLater: updateResult.savedForLater });
   } catch (error) {
     console.error('Remove Saved For Later Error:', error);
     res.status(500).json({ message: 'Failed to remove from saved for later', error: error.message });
+  }
+});
+
+router.post('/recently-viewed', userLoggedin, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const userId = req.user._id;
+
+    // Validate productId
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $pull: { recentlyViewed: { productId } }, // Remove if already viewed
+        $push: {
+          recentlyViewed: {
+            productId,
+            viewedAt: new Date(),
+            $position: 0, // Add to start
+          },
+        },
+      },
+      { new: true }
+    );
+
+    res.status(200).json({ success: true, message: 'Product view recorded' });
+  } catch (error) {
+    console.error('Record Recently Viewed Error:', error);
+    res.status(500).json({ message: 'Failed to record view', error: error.message });
+  }
+});
+
+// Fetch recently viewed products
+router.get('/recently-viewed', userLoggedin, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    console.log('Fetching recently viewed products for user:', userId);
+
+    const user = await User.findById(userId, 'recentlyViewed')
+      .populate({
+        path: 'recentlyViewed.productId',
+        select: '_id name price discountedPrice images category',
+        model: Product,
+      })
+      .lean();
+
+    const products = (user?.recentlyViewed || [])
+      .filter((rv) => rv.productId)
+      .sort((a, b) => new Date(b.viewedAt) - new Date(a.viewedAt))
+      .map((rv) => ({
+        _id: rv.productId._id,
+        name: rv.productId.name,
+        price: rv.productId.price,
+        discountedPrice: rv.productId.discountedPrice,
+        images: rv.productId.images || [],
+        category: rv.productId.category,
+      }))
+      .slice(0, 10); // Limit to 10 products
+
+    console.log('Recently viewed products:', products.length);
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    console.error('Fetch Recently Viewed Error:', {
+      message: error.message,
+      stack: error.stack,
+      userId,
+    });
+    res.status(500).json({ message: 'Failed to fetch recently viewed products', error: error.message });
+  }
+});
+router.post('/products-by-ids', async (req, res) => {
+  try {
+    const { productIds } = req.body;
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ message: 'Invalid or empty product IDs' });
+    }
+
+    const products = await Product.find({
+      _id: { $in: productIds },
+    })
+      .select('_id name price discountedPrice images category')
+      .lean();
+
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    console.error('Fetch Products by IDs Error:', error);
+    res.status(500).json({ message: 'Failed to fetch products', error: error.message });
+  }
+});
+
+// Search Routes
+router.get('/searches/recent', userLoggedin, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('recentSearches');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const searchesWithSimilar = await Promise.all(
+      (user.recentSearches || []).map(async (query) => {
+        let similarProducts = [];
+        if (elasticsearch) {
+          try {
+            const productSearch = await elasticsearch.search({
+              index: 'products',
+              body: {
+                query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                size: 4,
+              },
+            });
+            similarProducts = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          } catch (elasticError) {
+            console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
+          }
+        }
+        if (!similarProducts.length) {
+          similarProducts = await Product.find({
+            $or: [
+              { name: { $regex: query, $options: 'i' } },
+              { description: { $regex: query, $options: 'i' } },
+            ],
+          })
+            .limit(4)
+            .select('name price images category sellerId')
+            .populate('sellerId', 'name shopName')
+            .populate('category', 'name');
+        }
+        return { query, similarProducts };
+      })
+    );
+
+    res.json({ success: true, searches: searchesWithSimilar });
+  } catch (error) {
+    console.error('Recent Searches Error:', error);
+    res.status(500).json({ message: 'Failed to fetch recent searches' });
+  }
+});
+
+router.post('/searches', userLoggedin, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.status(400).json({ message: 'Query is required' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (!user.recentSearches) user.recentSearches = [];
+    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
+    await user.save();
+
+    res.json({ success: true, message: 'Search saved' });
+  } catch (error) {
+    console.error('Save Recent Search Error:', error);
+    res.status(500).json({ message: 'Failed to save search' });
+  }
+});
+
+// Existing Search Routes (Updated for Consistency)
+router.get('/search/recent', userLoggedin, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const searchesWithSimilar = await Promise.all(
+      (user.recentSearches || []).map(async (query) => {
+        let similarProducts = [];
+        if (elasticsearch) {
+          try {
+            const productSearch = await elasticsearch.search({
+              index: 'products',
+              body: {
+                query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                size: 4,
+              },
+            });
+            similarProducts = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          } catch (elasticError) {
+            console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
+          }
+        }
+        if (!similarProducts.length) {
+          similarProducts = await Product.find({
+            $or: [
+              { name: { $regex: query, $options: 'i' } },
+              { description: { $regex: query, $options: 'i' } },
+            ],
+          })
+            .limit(4)
+            .select('name price images category sellerId')
+            .populate('sellerId', 'name shopName')
+            .populate('category', 'name');
+        }
+        return { query, similarProducts };
+      })
+    );
+
+    res.status(200).json({ recentSearches: searchesWithSimilar });
+  } catch (error) {
+    console.error('Recent Searches Error:', error);
+    res.status(500).json({ message: 'Failed to fetch recent searches' });
+  }
+});
+
+router.post('/search/recent', userLoggedin, async (req, res) => {
+  try {
+    const { query } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!query) {
+      user.recentSearches = [];
+      await user.save();
+      return res.status(200).json({ message: 'Recent searches cleared' });
+    }
+
+    if (!user.recentSearches) user.recentSearches = [];
+    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
+    await user.save();
+    res.status(200).json({ message: 'Search saved' });
+  } catch (error) {
+    console.error('Save/Clear Recent Search Error:', error);
+    res.status(500).json({ message: 'Failed to save or clear search' });
+  }
+});
+
+router.get('/search/trending', userLoggedin, async (req, res) => {
+  try {
+    const trendingSearches = ['phones', 'laptops', 'clothes', 'shoes', 'accessories'];
+    const topSellers = await Seller.find()
+      .sort({ totalOrders: -1 })
+      .limit(5)
+      .select('name shopName _id');
+    const topCategories = await Category.find()
+      .sort({ productCount: -1 })
+      .limit(5)
+      .select('name _id');
+    const topProducts = await Product.find()
+      .sort({ viewCount: -1 })
+      .limit(5)
+      .select('name images _id');
+
+    res.status(200).json({
+      trendingSearches,
+      topSellers,
+      topCategories,
+      topProducts,
+    });
+  } catch (error) {
+    console.error('Trending Data Error:', error);
+    res.status(500).json({ message: 'Failed to fetch trending data' });
+  }
+});
+
+router.get('/search/suggestions', userLoggedin, async (req, res) => {
+  try {
+    const { q } = req.query;
+    const user = await User.findById(req.user.id);
+
+    let products = [];
+    let categories = [];
+    let sellers = [];
+    let recentSearches = q ? [] : user.recentSearches || [];
+
+    if (q) {
+      if (elasticsearch) {
+        try {
+          const [productSearch, categorySearch, sellerSearch] = await Promise.all([
+            elasticsearch.search({
+              index: 'products',
+              body: {
+                query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                size: 8,
+              },
+            }),
+            elasticsearch.search({
+              index: 'categories',
+              body: { query: { match: { name: q } }, size: 8 },
+            }),
+            elasticsearch.search({
+              index: 'sellers',
+              body: {
+                query: { multi_match: { query: q, fields: ['name', 'shopName'], fuzziness: 'AUTO' } },
+                size: 8,
+              },
+            }),
+          ]);
+
+          products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          categories = categorySearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          sellers = sellerSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          console.log('Elasticsearch search successful');
+        } catch (elasticError) {
+          console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
+        }
+      }
+
+      if (!products.length) {
+        const [mongoProducts, mongoCategories, mongoSellers] = await Promise.all([
+          Product.find({ $text: { $search: q } })
+            .limit(8)
+            .select('name images _id'),
+          Category.find({ $text: { $search: q } })
+            .limit(8)
+            .select('name _id'),
+          Seller.find({ $text: { $search: q } })
+            .limit(8)
+            .select('name shopName _id'),
+        ]);
+
+        products = mongoProducts;
+        categories = mongoCategories;
+        sellers = mongoSellers;
+        console.log('MongoDB search successful');
+      }
+    }
+
+    res.status(200).json({
+      recentSearches,
+      products,
+      categories,
+      sellers,
+    });
+  } catch (error) {
+    console.error('Search Suggestions Error:', error);
+    res.status(500).json({ message: 'Failed to fetch suggestions' });
+  }
+});
+
+router.get('/search', userLoggedin, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ message: 'Query parameter is required' });
+
+    let products = [];
+    if (elasticsearch) {
+      try {
+        const productSearch = await elasticsearch.search({
+          index: 'products',
+          body: {
+            query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+          },
+        });
+        products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+        console.log('Elasticsearch full search successful');
+      } catch (elasticError) {
+        console.warn('Elasticsearch unavailable for full search, falling back to MongoDB:', elasticError);
+      }
+    }
+
+    if (!products.length) {
+      products = await Product.find({ $text: { $search: q } })
+        .select('name images _id description')
+        .populate('sellerId', 'name shopName');
+      console.log('MongoDB full search successful');
+    }
+
+    res.status(200).json({ products });
+  } catch (error) {
+    console.error('Search Error:', error);
+    res.status(500).json({ message: 'Failed to perform search' });
   }
 });
 
@@ -658,7 +1148,7 @@ router.get('/order/:orderId', userLoggedin, async (req, res) => {
     const order = await Order.findOne({ orderId: req.params.orderId })
       .populate({
         path: 'items.productId',
-        select: 'name image price',
+        select: 'name images price',
       })
       .lean();
 
@@ -683,8 +1173,6 @@ router.get('/orders', userLoggedin, async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch orders', error: error.message });
   }
 });
-
-
 
 router.post('/create-order', userLoggedin, async (req, res) => {
   try {
@@ -724,10 +1212,9 @@ router.post('/create-order', userLoggedin, async (req, res) => {
     let razorpayOrder = null;
     if (paymentMethod === 'Razorpay' && onlineAmount > 0) {
       const razorpayOptions = {
-        amount: Math.round(onlineAmount * 100), // Convert to paise
+        amount: Math.round(onlineAmount * 100),
         currency: 'INR',
         receipt: `receipt_${Date.now()}`,
-        // No transfers array
       };
       razorpayOrder = await razorpay.orders.create(razorpayOptions);
     } else if (paymentMethod !== 'Cash on Delivery') {
@@ -989,6 +1476,8 @@ router.post('/checkout', userLoggedin, async (req, res) => {
         name: item.productId.name,
         price: item.productId.price,
         quantity: item.quantity,
+        size: item.size,
+        color: item.color,
       });
     }
 
@@ -1032,12 +1521,14 @@ router.post('/checkout', userLoggedin, async (req, res) => {
 router.post('/checkout/:productId', userLoggedin, async (req, res) => {
   try {
     const productId = req.params.productId;
-    const { quantity } = req.body;
+    const { quantity, size, color } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
       return res.status(400).json({ message: 'Invalid product ID' });
     }
-    if (!quantity || quantity <= 0) return res.status(400).json({ message: 'Valid quantity is required' });
+    if (!quantity || quantity <= 0 || !size || !color) {
+      return res.status(400).json({ message: 'Valid quantity, size, and color are required' });
+    }
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -1059,7 +1550,7 @@ router.post('/checkout/:productId', userLoggedin, async (req, res) => {
         phoneNumber: user.phoneNumber,
         address: `${user.addresses[0].street}, ${user.addresses[0].city}, ${user.addresses[0].state}, ${user.addresses[0].postalCode}, ${user.addresses[0].country}`,
       },
-      items: [{ productId: product._id, name: product.name, price: product.price, quantity }],
+      items: [{ productId: product._id, name: product.name, price: product.price, quantity, size, color }],
       total: total,
       status: 'pending',
     });
@@ -1080,176 +1571,7 @@ router.post('/checkout/:productId', userLoggedin, async (req, res) => {
   }
 });
 
-// Search Routes
-router.get('/search/recent', userLoggedin, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    res.status(200).json({ recentSearches: user.recentSearches || [] });
-  } catch (error) {
-    console.error('Recent Searches Error:', error);
-    res.status(500).json({ message: 'Failed to fetch recent searches' });
-  }
-});
-
-router.post('/search/recent', userLoggedin, async (req, res) => {
-  try {
-    const { query } = req.body;
-    const user = await User.findById(req.user.id);
-
-    if (!query) {
-      user.recentSearches = [];
-      await user.save();
-      return res.status(200).json({ message: 'Recent searches cleared' });
-    }
-
-    if (!user.recentSearches) user.recentSearches = [];
-    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
-    await user.save();
-    res.status(200).json({ message: 'Search saved' });
-  } catch (error) {
-    console.error('Save/Clear Recent Search Error:', error);
-    res.status(500).json({ message: 'Failed to save or clear search' });
-  }
-});
-
-router.get('/search/trending', userLoggedin, async (req, res) => {
-  try {
-    const trendingSearches = ['phones', 'laptops', 'clothes', 'shoes', 'accessories'];
-    const topSellers = await Seller.find()
-      .sort({ totalOrders: -1 })
-      .limit(5)
-      .select('name shopName _id');
-    const topCategories = await Category.find()
-      .sort({ productCount: -1 })
-      .limit(5)
-      .select('name _id');
-    const topProducts = await Product.find()
-      .sort({ views: -1 })
-      .limit(5)
-      .select('name image _id');
-
-    res.status(200).json({
-      trendingSearches,
-      topSellers,
-      topCategories,
-      topProducts,
-    });
-  } catch (error) {
-    console.error('Trending Data Error:', error);
-    res.status(500).json({ message: 'Failed to fetch trending data' });
-  }
-});
-
-router.get('/search/suggestions', userLoggedin, async (req, res) => {
-  try {
-    const { q } = req.query;
-    const user = await User.findById(req.user.id);
-
-    let products = [];
-    let categories = [];
-    let sellers = [];
-    let recentSearches = q ? [] : user.recentSearches || [];
-
-    if (q) {
-      if (elasticsearch) {
-        try {
-          const [productSearch, categorySearch, sellerSearch] = await Promise.all([
-            elasticsearch.search({
-              index: 'products',
-              body: {
-                query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
-                size: 8,
-              },
-            }),
-            elasticsearch.search({
-              index: 'categories',
-              body: { query: { match: { name: q } }, size: 8 },
-            }),
-            elasticsearch.search({
-              index: 'sellers',
-              body: {
-                query: { multi_match: { query: q, fields: ['name', 'shopName'], fuzziness: 'AUTO' } },
-                size: 8,
-              },
-            }),
-          ]);
-
-          products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          categories = categorySearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          sellers = sellerSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          console.log('Elasticsearch search successful');
-        } catch (elasticError) {
-          console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
-        }
-      }
-
-      if (!products.length) {
-        const [mongoProducts, mongoCategories, mongoSellers] = await Promise.all([
-          Product.find({ $text: { $search: q } })
-            .limit(8)
-            .select('name image _id'),
-          Category.find({ $text: { $search: q } })
-            .limit(8)
-            .select('name _id'),
-          Seller.find({ $text: { $search: q } })
-            .limit(8)
-            .select('name shopName _id'),
-        ]);
-
-        products = mongoProducts;
-        categories = mongoCategories;
-        sellers = mongoSellers;
-        console.log('MongoDB search successful');
-      }
-    }
-
-    res.status(200).json({
-      recentSearches, // Fixed typo from RihannaSearches
-      products,
-      categories,
-      sellers,
-    });
-  } catch (error) {
-    console.error('Search Suggestions Error:', error);
-    res.status(500).json({ message: 'Failed to fetch suggestions' });
-  }
-});
-
-router.get('/search', userLoggedin, async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ message: 'Query parameter is required' });
-
-    let products = [];
-    if (elasticsearch) {
-      try {
-        const productSearch = await elasticsearch.search({
-          index: 'products',
-          body: {
-            query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
-          },
-        });
-        products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-        console.log('Elasticsearch full search successful');
-      } catch (elasticError) {
-        console.warn('Elasticsearch unavailable for full search, falling back to MongoDB:', elasticError);
-      }
-    }
-
-    if (!products.length) {
-      products = await Product.find({ $text: { $search: q } })
-        .select('name image _id description')
-        .populate('sellerId', 'name shopName');
-      console.log('MongoDB full search successful');
-    }
-
-    res.status(200).json({ products });
-  } catch (error) {
-    console.error('Search Error:', error);
-    res.status(500).json({ message: 'Failed to perform search' });
-  }
-});
-
+// Additional Routes for Categories
 router.get('/productss', async (req, res) => {
   try {
     const { category, gender, brand, excludeProductId, limit, random } = req.query;
@@ -1284,4 +1606,97 @@ router.get('/productss', async (req, res) => {
   }
 });
 
+router.get('/', async (req, res) => {
+  try {
+    const categories = await Category.find().lean();
+    res.status(200).json({ categories });
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/category/:categoryId', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+
+    const products = await Product.find({ category: categoryId }).lean();
+    res.status(200).json({ products });
+  } catch (error) {
+    console.error('Error fetching products by category:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+const SponsoredProduct = require('../models/SponsoredProductModel'); // Adjust path
+
+router.get('/sponsored', async (req, res) => {
+  try {
+    const sponsoredProducts = await SponsoredProduct.find()
+      .populate({
+        path: 'productId',
+        select: '_id name price discountedPrice images category',
+      })
+      .sort({ addedAt: -1 }); // Sort by most recently added
+
+    const products = sponsoredProducts
+      .filter((sp) => sp.productId) // Ensure populated product exists
+      .map((sp) => sp.productId);
+
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    console.error('Fetch Sponsored Products Error:', error);
+    res.status(500).json({ message: 'Failed to fetch sponsored products', error: error.message });
+  }
+});
+
+router.get('/trending', async (req, res) => {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Fetch products with high orders or viewCount for today
+    const trendingProducts = await Product.aggregate([
+      {
+        $match: {
+          updatedAt: { $gte: startOfDay, $lte: endOfDay }, // Products updated today
+          $or: [
+            { orders: { $gt: 0 } }, // Has sales
+            { viewCount: { $gt: 0 } }, // Has views
+          ],
+        },
+      },
+      {
+        $addFields: {
+          trendScore: { $add: [{ $ifNull: ['$orders', 0] }, { $ifNull: ['$viewCount', 0] }] },
+        },
+      },
+      { $sort: { trendScore: -1, orders: -1, viewCount: -1 } }, // Sort by combined score, then orders, then views
+      { $limit: 10 }, // Limit to top 10 trending products
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          price: 1,
+          discountedPrice: 1,
+          images: 1,
+          viewCount: 1,
+          orders: 1,
+          category: 1,
+        },
+      },
+    ]);
+
+    res.status(200).json({ success: true, products: trendingProducts });
+  } catch (error) {
+    console.error('Fetch Trending Products Error:', error);
+    res.status(500).json({ message: 'Failed to fetch trending products', error: error.message });
+  }
+});
 module.exports = router;

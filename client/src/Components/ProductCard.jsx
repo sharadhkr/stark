@@ -21,6 +21,7 @@ const ProductCard = ({ product = {} }) => {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isInCart, setIsInCart] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
   const [showPopup, setShowPopup] = useState(false);
   const [productDetails, setProductDetails] = useState(null);
   const [selectedSize, setSelectedSize] = useState('');
@@ -31,12 +32,18 @@ const ProductCard = ({ product = {} }) => {
   const {
     name = 'Dried Apricots',
     price = 5.99,
-    image = [],
-    discount = null,
+    discount = 0,
+    discountPercentage = 0,
+    discountedPrice = price,
+    images = [],
     _id,
   } = product;
 
-  const displayImage = Array.isArray(image) && image.length > 0 ? image[0] : placeholderImage;
+  // Normalize image URL (use HTTPS, fallback to placeholder)
+  const displayImage =
+    Array.isArray(images) && images.length > 0 && images[0]
+      ? images[0].replace(/^http:/, 'https:')
+      : placeholderImage;
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -45,8 +52,12 @@ const ProductCard = ({ product = {} }) => {
 
       try {
         const [wishlistResponse, cartResponse] = await Promise.all([
-          axios.get('/api/user/auth/wishlist', { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get('/api/user/auth/cart', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('/api/user/auth/wishlist', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get('/api/user/auth/cart', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
         ]);
 
         const wishlist = wishlistResponse.data.wishlist || [];
@@ -55,9 +66,9 @@ const ProductCard = ({ product = {} }) => {
         );
         setIsWishlisted(wishlistIds.includes(_id));
 
-        const cart = cartResponse.data.cart || [];
-        const cartIds = cart.map((item) =>
-          item.productId?._id?.toString() || item.productId.toString()
+        const cartItems = cartResponse.data.cart?.items || [];
+        const cartIds = cartItems.map((item) =>
+          item.product?._id?.toString() || item.productId.toString()
         );
         setIsInCart(cartIds.includes(_id));
       } catch (error) {
@@ -131,12 +142,12 @@ const ProductCard = ({ product = {} }) => {
         throw new Error('Product details incomplete');
       }
       setProductDetails(fetchedProduct);
-      setSelectedSize(fetchedProduct.sizes[0] || ''); // Default to first size
-      setSelectedColor(fetchedProduct.colors[0] || ''); // Default to first color
+      setSelectedSize(fetchedProduct.sizes[0] || '');
+      setSelectedColor(fetchedProduct.colors[0] || '');
       setShowPopup(true);
     } catch (error) {
       console.error('Error fetching product details:', error);
-      toast.error('Failed to load product details');
+      toast.error(error.response?.data?.message || 'Failed to load product details');
     } finally {
       setLoading(false);
     }
@@ -163,8 +174,7 @@ const ProductCard = ({ product = {} }) => {
         size: selectedSize,
         color: selectedColor,
       };
-      console.log('Sending to cart:', payload); // Debug log
-      const response = await axios.post('/api/user/auth/cart', payload, {
+      await axios.post('/api/user/auth/cart', payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setIsInCart(true);
@@ -212,16 +222,28 @@ const ProductCard = ({ product = {} }) => {
         aria-label={`Product: ${name}`}
       >
         <div className="relative w-full h-40 bg-gray-100 flex-shrink-0">
+          {imageLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
           <img
             src={displayImage}
             alt={name}
-            className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
-            onError={(e) => (e.target.src = placeholderImage)}
+            className={`w-full h-full object-contain transition-transform duration-300 hover:scale-110 ${
+              imageLoading ? 'opacity-0' : 'opacity-100'
+            }`}
+            onLoad={() => setImageLoading(false)}
+            onError={(e) => {
+              e.target.src = placeholderImage;
+              setImageLoading(false);
+              console.warn(`Failed to load image: ${displayImage}`);
+            }}
             loading="lazy"
           />
-          {discount && (
+          {(discount > 0 || discountPercentage > 0) && (
             <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm">
-              -{discount}%
+              {discount > 0 ? `₹${discount} OFF` : `${discountPercentage}% OFF`}
             </span>
           )}
         </div>
@@ -230,7 +252,12 @@ const ProductCard = ({ product = {} }) => {
           <h3 className="text-sm font-semibold text-gray-800 truncate tracking-tight" title={name}>
             {name}
           </h3>
-          <p className="text-base font-bold text-blue-600">₹{price.toFixed(2)}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-base font-bold text-blue-600">₹{discountedPrice.toFixed(2)}</p>
+            {(discount > 0 || discountPercentage > 0) && (
+              <p className="text-sm text-gray-500 line-through">₹{price.toFixed(2)}</p>
+            )}
+          </div>
         </div>
 
         <div className="p-3 pt-0 flex justify-between items-center flex-shrink-0">

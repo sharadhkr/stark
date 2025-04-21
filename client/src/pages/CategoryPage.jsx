@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../axios';
 import toast, { Toaster } from 'react-hot-toast';
-import ProductCard from '../Components/ProductCard';
-import ProductCardSkeleton from '../Components/ProductCardSkeleton';
-import SearchBar from '../Components/SearchBar';
+import ProductCard from '../components/ProductCard';
+import ProductCardSkeleton from '../components/ProductCardSkeleton';
+import SearchBar from '../components/SearchBar';
+import agroLogo from '../assets/logo.png';
+import agrotade from '../assets/logoname.png'; // Assuming you have this asset
 import { motion } from 'framer-motion';
 import { MdArrowBack, MdFilterList, MdLogout } from 'react-icons/md';
 

@@ -10,6 +10,8 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
     category: editingProduct?.category._id || '',
     quantity: editingProduct?.quantity || '',
     price: editingProduct?.price || '',
+    discount: editingProduct?.discount || 0,
+    discountPercentage: editingProduct?.discountPercentage || 0,
     description: editingProduct?.description || '',
     images: [],
     sizes: editingProduct?.sizes || [],
@@ -49,6 +51,13 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
         let newState = { ...prev, [name]: type === 'checkbox' ? checked : value };
         if (name === 'isCashOnDeliveryAvailable' && !checked) {
           newState.onlinePaymentPercentage = 100;
+        }
+        // Ensure only one discount type is active
+        if (name === 'discount' && value > 0) {
+          newState.discountPercentage = 0;
+        }
+        if (name === 'discountPercentage' && value > 0) {
+          newState.discount = 0;
         }
         return newState;
       });
@@ -126,6 +135,22 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
     }
     if (!productForm.isCashOnDeliveryAvailable && productForm.onlinePaymentPercentage !== 100) {
       toast.error('Online payment percentage must be 100 if COD is not available');
+      return;
+    }
+    if (productForm.discount < 0) {
+      toast.error('Discount cannot be negative');
+      return;
+    }
+    if (productForm.discount > productForm.price) {
+      toast.error('Discount cannot exceed the product price');
+      return;
+    }
+    if (productForm.discountPercentage < 0 || productForm.discountPercentage > 100) {
+      toast.error('Discount percentage must be between 0 and 100');
+      return;
+    }
+    if (productForm.discount > 0 && productForm.discountPercentage > 0) {
+      toast.error('Cannot apply both fixed discount and percentage discount');
       return;
     }
 
@@ -228,6 +253,35 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
                 step="0.01"
                 required
                 aria-label="Product price"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fixed Discount (₹)</label>
+              <input
+                type="number"
+                name="discount"
+                value={productForm.discount}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none transition-all duration-200"
+                min="0"
+                step="0.01"
+                aria-label="Fixed discount"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Discount Percentage (%)</label>
+              <input
+                type="number"
+                name="discountPercentage"
+                value={productForm.discountPercentage}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none transition-all duration-200"
+                min="0"
+                max="100"
+                step="0.1"
+                aria-label="Discount percentage"
               />
             </div>
           </div>

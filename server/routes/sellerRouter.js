@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Seller = require('../models/sellerModel');
 const Product = require('../models/productModel');
-const Category = require('../models/categoryModel');
+const Category = require('../models/Category');
 const Order = require('../models/orderModel');
 const { sendOtp, verifyOtp } = require('../utils/otp');
 const jwt = require('jsonwebtoken');
@@ -220,6 +220,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
   }
 });
 
+// Create Product
 router.post(
   '/products',
   authenticateToken,
@@ -230,9 +231,10 @@ router.post(
   ]),
   async (req, res) => {
     const {
-      name, category, quantity, price, description, sizes, colors, material,
-      gender, brand, fit, careInstructions, isReturnable, returnPeriod,
-      dimensions, weight, isCashOnDeliveryAvailable, onlinePaymentPercentage
+      name, category, quantity, price, discount, discountPercentage, description,
+      sizes, colors, material, gender, brand, fit, careInstructions,
+      isReturnable, returnPeriod, dimensions, weight, isCashOnDeliveryAvailable,
+      onlinePaymentPercentage
     } = req.body;
 
     try {
@@ -253,11 +255,13 @@ router.post(
       // Parse and validate numeric fields
       const parsedQuantity = Number(quantity);
       const parsedPrice = Number(price);
+      const parsedDiscount = discount !== undefined ? Number(discount) : 0;
+      const parsedDiscountPercentage = discountPercentage !== undefined ? Number(discountPercentage) : 0;
       const parsedReturnPeriod = Number(returnPeriod) || 0;
       const parsedWeight = weight ? Number(weight) : 0;
-      const parsedOnlinePaymentPercentage = onlinePaymentPercentage !== undefined ? Number(onlinePaymentPercentage) : 100; // Default to 100 if not provided
-      const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
+      const parsedOnlinePaymentPercentage = onlinePaymentPercentage !== undefined ? Number(onlinePaymentPercentage) : 100;
 
+      // Validate numeric fields
       if (isNaN(parsedQuantity) || parsedQuantity < 0) {
         return res.status(400).json({
           success: false,
@@ -270,7 +274,25 @@ router.post(
           message: 'Price must be a positive number',
         });
       }
-      if (parsedWeight < 0) {
+      if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Discount must be a non-negative number',
+        });
+      }
+      if (parsedDiscount > parsedPrice) {
+        return res.status(400).json({
+          success: false,
+          message: 'Discount cannot exceed the product price',
+        });
+      }
+      if (isNaN(parsedDiscountPercentage) || parsedDiscountPercentage < 0 || parsedDiscountPercentage > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Discount percentage must be between 0 and 100',
+        });
+      }
+      if (isNaN(parsedWeight) || parsedWeight < 0) {
         return res.status(400).json({
           success: false,
           message: 'Weight cannot be negative',
@@ -282,6 +304,8 @@ router.post(
           message: 'Online payment percentage must be between 0 and 100',
         });
       }
+
+      const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
       if (!parsedIsCashOnDeliveryAvailable && parsedOnlinePaymentPercentage !== 100) {
         return res.status(400).json({
           success: false,
@@ -289,7 +313,7 @@ router.post(
         });
       }
 
-      // Validate sizes and colors (expecting arrays)
+      // Validate sizes and colors
       const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes || '[]');
       const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors || '[]');
       if (parsedSizes.length === 0 || parsedColors.length === 0) {
@@ -311,6 +335,7 @@ router.post(
         }
       }
 
+      // Check category and seller
       const [categoryDoc, seller] = await Promise.all([
         Category.findById(category),
         Seller.findById(req.seller.id),
@@ -329,6 +354,7 @@ router.post(
         });
       }
 
+      // Upload images to Cloudinary
       const imageUploads = await Promise.all(
         req.files.map((file) =>
           uploadToCloudinary(file.buffer, { folder: 'products', resource_type: 'image' })
@@ -336,6 +362,7 @@ router.post(
       );
       const imageUrls = imageUploads.map((result) => result.url);
 
+      // Validate return period
       const isProductReturnable = isReturnable === 'true' || isReturnable === true;
       if (isProductReturnable && (parsedReturnPeriod <= 0 || parsedReturnPeriod > 30)) {
         return res.status(400).json({
@@ -344,12 +371,15 @@ router.post(
         });
       }
 
+      // Create product
       const product = new Product({
         sellerId: req.seller.id,
         name: name.trim(),
         category,
         quantity: parsedQuantity,
         price: parsedPrice,
+        discount: parsedDiscount,
+        discountPercentage: parsedDiscountPercentage,
         description: description.trim(),
         images: imageUrls,
         sizes: parsedSizes,
@@ -387,6 +417,7 @@ router.post(
   }
 );
 
+// Get Seller's Products
 router.get('/products', authenticateToken, async (req, res) => {
   try {
     if (!req.seller?.id) {
@@ -414,6 +445,8 @@ router.get('/products', authenticateToken, async (req, res) => {
     });
   }
 });
+
+// Update Product
 router.put(
   '/products/:id',
   authenticateToken,
@@ -421,9 +454,10 @@ router.put(
   async (req, res) => {
     const { id } = req.params;
     const {
-      name, category, quantity, price, description, sizes, colors, material,
-      gender, brand, fit, careInstructions, isReturnable, returnPeriod, status,
-      dimensions, weight, isCashOnDeliveryAvailable, onlinePaymentPercentage
+      name, category, quantity, price, discount, discountPercentage, description,
+      sizes, colors, material, gender, brand, fit, careInstructions,
+      isReturnable, returnPeriod, status, dimensions, weight,
+      isCashOnDeliveryAvailable, onlinePaymentPercentage
     } = req.body;
 
     try {
@@ -442,6 +476,7 @@ router.put(
         });
       }
 
+      // Update fields if provided
       if (name) product.name = name.trim();
 
       if (category) {
@@ -481,6 +516,34 @@ router.put(
           });
         }
         product.price = parsedPrice;
+      }
+
+      if (discount !== undefined) {
+        const parsedDiscount = Number(discount);
+        if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Discount must be a non-negative number',
+          });
+        }
+        if (parsedDiscount > (price !== undefined ? Number(price) : product.price)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Discount cannot exceed the product price',
+          });
+        }
+        product.discount = parsedDiscount;
+      }
+
+      if (discountPercentage !== undefined) {
+        const parsedDiscountPercentage = Number(discountPercentage);
+        if (isNaN(parsedDiscountPercentage) || parsedDiscountPercentage < 0 || parsedDiscountPercentage > 100) {
+          return res.status(400).json({
+            success: false,
+            message: 'Discount percentage must be between 0 and 100',
+          });
+        }
+        product.discountPercentage = parsedDiscountPercentage;
       }
 
       if (description !== undefined) product.description = description.trim();
@@ -567,7 +630,6 @@ router.put(
         product.weight = parsedWeight;
       }
 
-      // Update COD and payment split fields
       if (isCashOnDeliveryAvailable !== undefined) {
         const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
         const parsedOnlinePaymentPercentage = onlinePaymentPercentage !== undefined ? Number(onlinePaymentPercentage) : product.onlinePaymentPercentage;
@@ -679,6 +741,7 @@ router.delete('/products/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Update Seller Profile
 router.put('/profile', authenticateToken, upload.single('profilePicture'), async (req, res) => {
   try {
     const { name, shopName, phoneNumber, address, paymentId, aadharId, bankAccount, upiId, razorpayAccountId } = req.body;
@@ -691,7 +754,6 @@ router.put('/profile', authenticateToken, upload.single('profilePicture'), async
     if (paymentId) updateData.paymentId = paymentId.trim();
     if (aadharId) updateData.aadharId = aadharId.trim();
 
-    // Handle paymentDetails
     if (bankAccount || upiId || razorpayAccountId) {
       updateData.paymentDetails = {};
       if (bankAccount) {
@@ -801,6 +863,7 @@ router.get('/orders', authenticateToken, async (req, res) => {
   }
 });
 
+// Update Order Status
 router.put('/orders/:id', authenticateToken, async (req, res) => {
   try {
     if (!req.seller?.id) {
@@ -835,17 +898,15 @@ router.put('/orders/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // Update order status
     order.status = status;
     if (status === 'delivered' && order.paymentMethod !== 'Razorpay') {
-      order.paymentStatus = 'completed'; // COD or split payment completed on delivery
+      order.paymentStatus = 'completed';
     } else if (status === 'cancelled' || status === 'returned') {
-      order.paymentStatus = 'failed'; // No payment due
+      order.paymentStatus = 'failed';
     }
 
     await order.save();
 
-    // Update seller revenue
     const seller = await Seller.findById(req.seller.id);
     const orders = await Order.find({ sellerId: req.seller.id, status: { $ne: 'cancelled' } });
     seller.revenue.total = orders.reduce((acc, o) => acc + (o.total || 0), 0);
@@ -871,7 +932,7 @@ router.put('/orders/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get Seller Revenue (Updated to Use Seller Document)
+// Get Seller Revenue
 router.get('/revenue', authenticateToken, async (req, res) => {
   try {
     if (!req.seller?.id) {
@@ -909,4 +970,4 @@ router.get('/revenue', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = router;  
+module.exports = router;

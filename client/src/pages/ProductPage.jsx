@@ -40,6 +40,7 @@ const ProductPage = () => {
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please login to view this page');
+      navigate('/login');
       return;
     }
 

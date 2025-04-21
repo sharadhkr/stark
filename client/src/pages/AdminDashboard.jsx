@@ -10,6 +10,10 @@ import AdminProducts from '../Components/admin/AdminProducts';
 import AdminOrders from '../Components/admin/AdminOrders';
 import AdminUsers from '../Components/admin/AdminUsers';
 import AdminCategories from '../Components/admin/AdminCategories';
+import AdminAds from '../Components/admin/AdminAds';
+import AdminComboOffer from '../Components/admin/AdminComboOffer';
+import AdminSponsoredProducts from '../Components/admin/AdminSponsoredProducts';
+import AdminLayout from '../Components/admin/AdminLayout'; // New component
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -49,6 +53,12 @@ const AdminDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [comboOffers, setComboOffers] = useState([]);
+  const [ads, setAds] = useState({
+    singleadd: { images: [] },
+    doubleadd: { images: [] },
+    tripleadd: { images: [] },
+  });
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
 
@@ -62,24 +72,81 @@ const AdminDashboard = () => {
       setLoading(true);
       try {
         const token = localStorage.getItem('adminToken');
-        if (!token) throw new Error('No admin token found. Please log in.');
+        if (!token) {
+          throw new Error('No admin token found. Please log in.');
+        }
 
-        const [sellersRes, productsRes, ordersRes, usersRes, categoriesRes] = await Promise.all([
+        // Verify token first
+        const verifyRes = await axios.get('/api/admin/auth/verify-token');
+        if (verifyRes.data.admin?.role !== 'admin') {
+          throw new Error('Admin access required');
+        }
+
+        const [
+          sellersRes,
+          productsRes,
+          ordersRes,
+          usersRes,
+          categoriesRes,
+          comboOffersRes,
+          adsRes,
+        ] = await Promise.all([
           axios.get('/api/admin/auth/sellers'),
           axios.get('/api/admin/auth/products'),
           axios.get('/api/admin/auth/orders'),
           axios.get('/api/admin/auth/users'),
           axios.get('/api/categories'),
+          axios.get('/api/admin/auth/combo-offers'),
+          axios.get('/api/admin/auth/ads'),
         ]);
+
+        // Normalize ads data
+        const normalizeImages = (images) => {
+          if (!Array.isArray(images)) return [];
+          return images
+            .map((img) => {
+              if (!img) return null;
+              if (typeof img === 'string') {
+                return { url: img.replace(/^http:/, 'https:'), disabled: false };
+              }
+              if (typeof img === 'object' && img.url) {
+                return { url: img.url.replace(/^http:/, 'https:'), disabled: !!img.disabled };
+              }
+              if (typeof img === 'object') {
+                const url = Object.keys(img)
+                  .filter((key) => !['disabled', '_id'].includes(key))
+                  .sort((a, b) => parseInt(a) - parseInt(b))
+                  .map((key) => img[key])
+                  .join('');
+                if (url) {
+                  return { url: url.replace(/^http:/, 'https:'), disabled: !!img.disabled };
+                }
+              }
+              console.warn('Invalid image data in normalizeImages:', img);
+              return null;
+            })
+            .filter((img) => img && img.url);
+        };
+
+        setAds({
+          singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
+          doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
+          tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
+        });
 
         setSellers(sellersRes.data.sellers || []);
         setProducts(productsRes.data.products || []);
         setOrders(ordersRes.data.orders || []);
         setUsers(usersRes.data.users || []);
         setCategories(categoriesRes.data.categories || []);
+        setComboOffers(comboOffersRes.data.comboOffers || []);
       } catch (error) {
+        console.error('Dashboard fetch error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
         toast.error(error.message || 'Failed to load dashboard data');
-        console.error('Dashboard fetch error:', error);
         if (error.response?.status === 401 || error.response?.status === 403) {
           localStorage.removeItem('adminToken');
           navigate('/admin/login');
@@ -109,7 +176,13 @@ const AdminDashboard = () => {
           className="bg-blue-50 flex items-center justify-center p-4 sm:p-6 rounded-2xl shadow-lg mb-6"
         >
           <h2 className="text-xl sm:text-2xl font-semibold text-gray-700">
-            {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
+            {activeSection === 'combo-offers'
+              ? 'Combo Offers'
+              : activeSection === 'sponsored-products'
+              ? 'Sponsored Products'
+              : activeSection === 'layout'
+              ? 'Homepage Layout'
+              : activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
           </h2>
         </motion.div>
         <ErrorBoundary>
@@ -143,6 +216,24 @@ const AdminDashboard = () => {
           )}
           {activeSection === 'categories' && (
             <AdminCategories categories={categories} setCategories={setCategories} loading={loading} />
+          )}
+          {activeSection === 'ads' && (
+            <AdminAds ads={ads} setAds={setAds} loading={loading} />
+          )}
+          {activeSection === 'combo-offers' && (
+            <AdminComboOffer
+              comboOffers={comboOffers}
+              setComboOffers={setComboOffers}
+              products={products}
+              setProducts={setProducts}
+              loading={loading}
+            />
+          )}
+          {activeSection === 'sponsored-products' && (
+            <AdminSponsoredProducts products={products} loading={loading} />
+          )}
+          {activeSection === 'layout' && (
+            <AdminLayout categories={categories} loading={loading} />
           )}
         </ErrorBoundary>
       </main>

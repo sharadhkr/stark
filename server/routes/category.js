@@ -1,7 +1,7 @@
 // routes/category.js
 const express = require('express');
 const router = express.Router();
-const Category = require('../models/categoryModel'); // Ensure the path is correct
+const Category = require('../models/category'); // Ensure the path is correct
 const Product = require('../models/productModel'); // Ensure the path is correct
 const authMiddleware = require('../middleware/auth'); // Authentication middleware
 const adminMiddleware = require('../middleware/adminLoggedin'); // Admin middleware

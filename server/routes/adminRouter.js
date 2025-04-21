@@ -6,12 +6,14 @@ const Seller = require('../models/sellerModel');
 const Product = require('../models/productModel');
 const User = require('../models/userModel');
 const Order = require('../models/orderModel');
-const Category = require('../models/categoryModel');
+const Category = require('../models/Category');
 const adminLoggedin = require('../middleware/adminLoggedin');
 const multer = require('multer');
 const { uploadToCloudinary } = require('../config/clowdnaryConfig');
 const mongoose = require('mongoose');
+const SponsoredProduct = require('../models/SponsoredProductModel'); // Adjust path
 require('dotenv').config();
+const ComboOffer = require('../models/ComboOffer');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -26,8 +28,19 @@ const upload = multer({
     }
     cb(null, true);
   },
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
+
+// Multer error handling middleware
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ success: false, message: 'File upload error', error: err.message });
+  }
+  if (err) {
+    return res.status(400).json({ success: false, message: 'Invalid file type or size', error: err.message });
+  }
+  next();
+};
 
 // Validation middleware
 const validateRequiredFields = (fields) => (req, res, next) => {
@@ -102,22 +115,53 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Verify Token
+// Verify Token Endpoint
 router.get('/verify-token', adminLoggedin, async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin.id).select('-password');
     if (!admin) {
-      return res.status(401).json({ success: false, message: 'Admin not found' });
+      return res.status(404).json({ success: false, message: 'Admin not found' });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Token is valid',
-      admin: { id: admin._id, phoneNumber: admin.phoneNumber, name: admin.name, role: 'admin' },
-    });
+    // Normalize image data
+    const normalizeImages = (images) => {
+      if (!Array.isArray(images)) return [];
+      return images
+        .map((img) => {
+          if (!img) return null;
+          if (typeof img === 'string') {
+            return { url: img.replace(/^http:/, 'https:'), disabled: false };
+          }
+          if (typeof img === 'object' && img.url) {
+            return { url: img.url.replace(/^http:/, 'https:'), disabled: !!img.disabled };
+          }
+          if (typeof img === 'object') {
+            const url = Object.keys(img)
+              .filter((key) => !['disabled', '_id'].includes(key))
+              .sort((a, b) => parseInt(a) - parseInt(b))
+              .map((key) => img[key])
+              .join('');
+            if (url) {
+              return { url: url.replace(/^http:/, 'https:'), disabled: !!img.disabled };
+            }
+          }
+          console.warn('Invalid image data in verify-token:', img);
+          return null;
+        })
+        .filter((img) => img && img.url);
+    };
+
+    const normalizedAdmin = {
+      ...admin.toObject(),
+      singleadd: { images: normalizeImages(admin.singleadd?.images || []) },
+      doubleadd: { images: normalizeImages(admin.doubleadd?.images || []) },
+      tripleadd: { images: normalizeImages(admin.tripleadd?.images || []) },
+    };
+
+    res.status(200).json({ success: true, admin: normalizedAdmin });
   } catch (error) {
-    console.error('Token verification failed:', error);
-    res.status(401).json({ success: false, message: 'Invalid or expired token', error: error.message });
+    console.error('Verify token error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
 
@@ -197,6 +241,7 @@ router.post(
   '/products',
   adminLoggedin,
   upload.array('images', 10),
+  handleMulterError,
   validateRequiredFields([
     'name',
     'sellerId',
@@ -220,6 +265,8 @@ router.post(
       category,
       quantity,
       price,
+      discount,
+      discountPercentage,
       description,
       sizes,
       colors,
@@ -255,6 +302,8 @@ router.post(
 
       const parsedQuantity = Number(quantity);
       const parsedPrice = Number(price);
+      const parsedDiscount = discount !== undefined ? Number(discount) : 0;
+      const parsedDiscountPercentage = discountPercentage !== undefined ? Number(discountPercentage) : 0;
       const parsedReturnPeriod = Number(returnPeriod) || 0;
       const parsedWeight = Number(weight) || 0;
       const parsedOnlinePaymentPercentage = Number(onlinePaymentPercentage) || 100;
@@ -268,6 +317,15 @@ router.post(
       }
       if (isNaN(parsedPrice) || parsedPrice <= 0) {
         return res.status(400).json({ success: false, message: 'Price must be a positive number' });
+      }
+      if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+        return res.status(400).json({ success: false, message: 'Discount must be a non-negative number' });
+      }
+      if (parsedDiscount > parsedPrice) {
+        return res.status(400).json({ success: false, message: 'Discount cannot exceed the product price' });
+      }
+      if (isNaN(parsedDiscountPercentage) || parsedDiscountPercentage < 0 || parsedDiscountPercentage > 100) {
+        return res.status(400).json({ success: false, message: 'Discount percentage must be between 0 and 100' });
       }
       if (parsedWeight < 0) {
         return res.status(400).json({ success: false, message: 'Weight cannot be negative' });
@@ -318,6 +376,8 @@ router.post(
         category,
         quantity: parsedQuantity,
         price: parsedPrice,
+        discount: parsedDiscount,
+        discountPercentage: parsedDiscountPercentage,
         description: description.trim(),
         images: imageUrls,
         sizes: parsedSizes,
@@ -351,166 +411,191 @@ router.post(
 );
 
 // Update Product
-router.put('/products/:id', adminLoggedin, upload.array('images', 10), async (req, res) => {
-  const { id } = req.params;
-  const {
-    name,
-    sellerId,
-    category,
-    quantity,
-    price,
-    description,
-    sizes,
-    colors,
-    material,
-    gender,
-    brand,
-    fit,
-    careInstructions,
-    isReturnable,
-    returnPeriod,
-    status,
-    dimensions,
-    weight,
-    isCashOnDeliveryAvailable,
-    onlinePaymentPercentage,
-  } = req.body;
+router.put(
+  '/products/:id',
+  adminLoggedin,
+  upload.array('images', 10),
+  handleMulterError,
+  async (req, res) => {
+    const { id } = req.params;
+    const {
+      name,
+      sellerId,
+      category,
+      quantity,
+      price,
+      discount,
+      discountPercentage,
+      description,
+      sizes,
+      colors,
+      material,
+      gender,
+      brand,
+      fit,
+      careInstructions,
+      isReturnable,
+      returnPeriod,
+      status,
+      dimensions,
+      weight,
+      isCashOnDeliveryAvailable,
+      onlinePaymentPercentage,
+    } = req.body;
 
-  try {
-    const product = await Product.findById(id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
+    try {
+      const product = await Product.findById(id);
+      if (!product) {
+        return res.status(404).json({ success: false, message: 'Product not found' });
+      }
 
-    if (sellerId && !mongoose.Types.ObjectId.isValid(sellerId)) {
-      return res.status(400).json({ success: false, message: 'Invalid seller ID' });
-    }
-    if (category && !mongoose.Types.ObjectId.isValid(category)) {
-      return res.status(400).json({ success: false, message: 'Invalid category ID' });
-    }
+      if (sellerId && !mongoose.Types.ObjectId.isValid(sellerId)) {
+        return res.status(400).json({ success: false, message: 'Invalid seller ID' });
+      }
+      if (category && !mongoose.Types.ObjectId.isValid(category)) {
+        return res.status(400).json({ success: false, message: 'Invalid category ID' });
+      }
 
-    if (sellerId && sellerId !== product.sellerId.toString()) {
-      const seller = await Seller.findById(sellerId);
-      if (!seller || seller.status !== 'enabled') {
-        return res.status(400).json({ success: false, message: 'Seller is disabled or not found' });
+      if (sellerId && sellerId !== product.sellerId.toString()) {
+        const seller = await Seller.findById(sellerId);
+        if (!seller || seller.status !== 'enabled') {
+          return res.status(400).json({ success: false, message: 'Seller is disabled or not found' });
+        }
+        await Seller.findByIdAndUpdate(product.sellerId, { $pull: { products: id } });
+        await Seller.findByIdAndUpdate(sellerId, { $push: { products: id } });
+        product.sellerId = sellerId;
       }
-      await Seller.findByIdAndUpdate(product.sellerId, { $pull: { products: id } });
-      await Seller.findByIdAndUpdate(sellerId, { $push: { products: id } });
-      product.sellerId = sellerId;
-    }
-    if (category) {
-      const categoryDoc = await Category.findById(category);
-      if (!categoryDoc) {
-        return res.status(400).json({ success: false, message: 'Category does not exist' });
+      if (category) {
+        const categoryDoc = await Category.findById(category);
+        if (!categoryDoc) {
+          return res.status(400).json({ success: false, message: 'Category does not exist' });
+        }
+        product.category = category;
       }
-      product.category = category;
-    }
 
-    if (name) product.name = name.trim();
-    if (description) product.description = description.trim();
-    if (material) product.material = material.trim();
-    if (gender) product.gender = gender;
-    if (brand) product.brand = brand.trim();
-    if (fit) product.fit = fit;
-    if (careInstructions) product.careInstructions = careInstructions.trim();
-    if (status && ['enabled', 'disabled'].includes(status)) product.status = status;
+      if (name) product.name = name.trim();
+      if (description) product.description = description.trim();
+      if (material) product.material = material.trim();
+      if (gender) product.gender = gender;
+      if (brand) product.brand = brand.trim();
+      if (fit) product.fit = fit;
+      if (careInstructions) product.careInstructions = careInstructions.trim();
+      if (status && ['enabled', 'disabled'].includes(status)) product.status = status;
 
-    if (quantity !== undefined) {
-      const parsedQuantity = Number(quantity);
-      if (isNaN(parsedQuantity) || parsedQuantity < 0) {
-        return res.status(400).json({ success: false, message: 'Quantity must be a non-negative number' });
+      if (quantity !== undefined) {
+        const parsedQuantity = Number(quantity);
+        if (isNaN(parsedQuantity) || parsedQuantity < 0) {
+          return res.status(400).json({ success: false, message: 'Quantity must be a non-negative number' });
+        }
+        product.quantity = parsedQuantity;
       }
-      product.quantity = parsedQuantity;
-    }
-    if (price !== undefined) {
-      const parsedPrice = Number(price);
-      if (isNaN(parsedPrice) || parsedPrice <= 0) {
-        return res.status(400).json({ success: false, message: 'Price must be a positive number' });
+      if (price !== undefined) {
+        const parsedPrice = Number(price);
+        if (isNaN(parsedPrice) || parsedPrice <= 0) {
+          return res.status(400).json({ success: false, message: 'Price must be a positive number' });
+        }
+        product.price = parsedPrice;
       }
-      product.price = parsedPrice;
-    }
-    if (sizes) {
-      const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes);
-      if (parsedSizes.length === 0) {
-        return res.status(400).json({ success: false, message: 'At least one size is required' });
+      if (discount !== undefined) {
+        const parsedDiscount = Number(discount);
+        if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+          return res.status(400).json({ success: false, message: 'Discount must be a non-negative number' });
+        }
+        if (parsedDiscount > (price !== undefined ? Number(price) : product.price)) {
+          return res.status(400).json({ success: false, message: 'Discount cannot exceed the product price' });
+        }
+        product.discount = parsedDiscount;
       }
-      product.sizes = parsedSizes;
-    }
-    if (colors) {
-      const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors);
-      if (parsedColors.length === 0) {
-        return res.status(400).json({ success: false, message: 'At least one color is required' });
+      if (discountPercentage !== undefined) {
+        const parsedDiscountPercentage = Number(discountPercentage);
+        if (isNaN(parsedDiscountPercentage) || parsedDiscountPercentage < 0 || parsedDiscountPercentage > 100) {
+          return res.status(400).json({ success: false, message: 'Discount percentage must be between 0 and 100' });
+        }
+        product.discountPercentage = parsedDiscountPercentage;
       }
-      product.colors = parsedColors;
-    }
-    if (req.files && req.files.length > 0) {
-      const imageUploads = await Promise.all(
-        req.files.map((file) => uploadToCloudinary(file.buffer, { folder: 'products', resource_type: 'image' }))
-      );
-      product.images = imageUploads.map((result) => result.url);
-    }
-    if (isReturnable !== undefined) {
-      const isProductReturnable = isReturnable === 'true' || isReturnable === true;
-      const parsedReturnPeriod = Number(returnPeriod) || product.returnPeriod;
-      if (isProductReturnable && (parsedReturnPeriod <= 0 || parsedReturnPeriod > 30)) {
-        return res.status(400).json({ success: false, message: 'Return period must be between 1 and 30 days' });
+      if (sizes) {
+        const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes);
+        if (parsedSizes.length === 0) {
+          return res.status(400).json({ success: false, message: 'At least one size is required' });
+        }
+        product.sizes = parsedSizes;
       }
-      product.isReturnable = isProductReturnable;
-      product.returnPeriod = isProductReturnable ? parsedReturnPeriod : 0;
-    }
-    if (dimensions) {
-      const parsedDimensions = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions;
-      if (
-        parsedDimensions.chest &&
-        parsedDimensions.chest < 0 ||
-        parsedDimensions.length &&
-        parsedDimensions.length < 0 ||
-        parsedDimensions.sleeve &&
-        parsedDimensions.sleeve < 0
-      ) {
-        return res.status(400).json({ success: false, message: 'Dimensions cannot be negative' });
+      if (colors) {
+        const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors);
+        if (parsedColors.length === 0) {
+          return res.status(400).json({ success: false, message: 'At least one color is required' });
+        }
+        product.colors = parsedColors;
       }
-      product.dimensions = parsedDimensions;
-    }
-    if (weight !== undefined) {
-      const parsedWeight = Number(weight);
-      if (isNaN(parsedWeight) || parsedWeight < 0) {
-        return res.status(400).json({ success: false, message: 'Weight cannot be negative' });
+      if (req.files && req.files.length > 0) {
+        const imageUploads = await Promise.all(
+          req.files.map((file) => uploadToCloudinary(file.buffer, { folder: 'products', resource_type: 'image' }))
+        );
+        product.images = imageUploads.map((result) => result.url);
       }
-      product.weight = parsedWeight;
-    }
-    if (isCashOnDeliveryAvailable !== undefined) {
-      const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
-      const parsedOnlinePaymentPercentage = Number(onlinePaymentPercentage) || product.onlinePaymentPercentage;
-      if (
-        isNaN(parsedOnlinePaymentPercentage) ||
-        parsedOnlinePaymentPercentage < 0 ||
-        parsedOnlinePaymentPercentage > 100
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: 'Online payment percentage must be between 0 and 100',
-        });
+      if (isReturnable !== undefined) {
+        const isProductReturnable = isReturnable === 'true' || isReturnable === true;
+        const parsedReturnPeriod = Number(returnPeriod) || product.returnPeriod;
+        if (isProductReturnable && (parsedReturnPeriod <= 0 || parsedReturnPeriod > 30)) {
+          return res.status(400).json({ success: false, message: 'Return period must be between 1 and 30 days' });
+        }
+        product.isReturnable = isProductReturnable;
+        product.returnPeriod = isProductReturnable ? parsedReturnPeriod : 0;
       }
-      if (!parsedIsCashOnDeliveryAvailable && parsedOnlinePaymentPercentage !== 100) {
-        return res.status(400).json({
-          success: false,
-          message: 'Online payment percentage must be 100 if COD is not available',
-        });
+      if (dimensions) {
+        const parsedDimensions = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions;
+        if (
+          parsedDimensions.chest &&
+          parsedDimensions.chest < 0 ||
+          parsedDimensions.length &&
+          parsedDimensions.length < 0 ||
+          parsedDimensions.sleeve &&
+          parsedDimensions.sleeve < 0
+        ) {
+          return res.status(400).json({ success: false, message: 'Dimensions cannot be negative' });
+        }
+        product.dimensions = parsedDimensions;
       }
-      product.isCashOnDeliveryAvailable = parsedIsCashOnDeliveryAvailable;
-      product.onlinePaymentPercentage = parsedOnlinePaymentPercentage;
-    }
+      if (weight !== undefined) {
+        const parsedWeight = Number(weight);
+        if (isNaN(parsedWeight) || parsedWeight < 0) {
+          return res.status(400).json({ success: false, message: 'Weight cannot be negative' });
+        }
+        product.weight = parsedWeight;
+      }
+      if (isCashOnDeliveryAvailable !== undefined) {
+        const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
+        const parsedOnlinePaymentPercentage = Number(onlinePaymentPercentage) || product.onlinePaymentPercentage;
+        if (
+          isNaN(parsedOnlinePaymentPercentage) ||
+          parsedOnlinePaymentPercentage < 0 ||
+          parsedOnlinePaymentPercentage > 100
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: 'Online payment percentage must be between 0 and 100',
+          });
+        }
+        if (!parsedIsCashOnDeliveryAvailable && parsedOnlinePaymentPercentage !== 100) {
+          return res.status(400).json({
+            success: false,
+            message: 'Online payment percentage must be 100 if COD is not available',
+          });
+        }
+        product.isCashOnDeliveryAvailable = parsedIsCashOnDeliveryAvailable;
+        product.onlinePaymentPercentage = parsedOnlinePaymentPercentage;
+      }
 
-    await product.save();
-    await product.populate('sellerId', 'name shopName').populate('category', 'name');
+      await product.save();
+      await product.populate('sellerId', 'name shopName').populate('category', 'name');
 
-    res.status(200).json({ success: true, message: 'Product updated successfully', product });
-  } catch (error) {
-    console.error('Product update error:', error);
-    res.status(500).json({ success: false, message: 'Server error updating product', error: error.message });
+      res.status(200).json({ success: true, message: 'Product updated successfully', product });
+    } catch (error) {
+      console.error('Product update error:', error);
+      res.status(500).json({ success: false, message: 'Server error updating product', error: error.message });
+    }
   }
-});
+);
 
 // Delete Product
 router.delete('/products/:id', adminLoggedin, async (req, res) => {
@@ -710,4 +795,549 @@ router.get('/analytics', adminLoggedin, async (req, res) => {
   }
 });
 
+// Add Ad Images
+router.post(
+  '/ads/:type',
+  adminLoggedin,
+  upload.array('images'),
+  handleMulterError,
+  validateRequiredFields(['images']),
+  async (req, res) => {
+    const { type } = req.params;
+    const validAdTypes = ['single', 'double', 'triple'];
+    if (!validAdTypes.includes(type)) {
+      return res.status(400).json({ success: false, message: 'Invalid ad type. Use single, double, or triple.' });
+    }
+
+    try {
+      const admin = await Admin.findById(req.admin.id);
+      if (!admin) {
+        return res.status(404).json({ success: false, message: 'Admin not found' });
+      }
+
+      const imageUploads = await Promise.all(
+        req.files.map((file) => uploadToCloudinary(file.buffer, { folder: 'ads', resource_type: 'image' }))
+      );
+      const imageUrls = imageUploads.map((result) => result.url.replace(/^http:/, 'https:'));
+
+      const urlRegex = /^https:\/\/res\.cloudinary\.com\/.*$/;
+      const invalidUrls = imageUrls.filter((url) => !urlRegex.test(url));
+      if (invalidUrls.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Cloudinary URLs detected',
+          invalidUrls,
+        });
+      }
+
+      const field = `${type}add`;
+      const newImages = imageUrls.map((url) => ({ url, disabled: false }));
+      admin[field] = { images: [...(admin[field]?.images || []), ...newImages] };
+      await admin.save();
+
+      res.status(201).json({
+        success: true,
+        message: `${type.charAt(0).toUpperCase() + type.slice(1)} ad images added successfully`,
+        [field]: admin[field],
+      });
+    } catch (error) {
+      console.error(`Failed to add ${type} ad images:`, error);
+      if (error.name === 'ValidationError') {
+        const errors = Object.values(error.errors).map((err) => err.message);
+        return res.status(400).json({
+          success: false,
+          message: `Validation failed for ${type} ad images`,
+          errors,
+        });
+      }
+      res.status(500).json({
+        success: false,
+        message: `Server error adding ${type} ad images`,
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Replace Ad Images
+router.put(
+  '/ads/:type',
+  adminLoggedin,
+  upload.array('images'),
+  handleMulterError,
+  validateRequiredFields(['images']),
+  async (req, res) => {
+    const { type } = req.params;
+    const validAdTypes = ['single', 'double', 'triple'];
+    if (!validAdTypes.includes(type)) {
+      return res.status(400).json({ success: false, message: 'Invalid ad type. Use single, double, or triple.' });
+    }
+
+    try {
+      const admin = await Admin.findById(req.admin.id);
+      if (!admin) {
+        return res.status(404).json({ success: false, message: 'Admin not found' });
+      }
+
+      const imageUploads = await Promise.all(
+        req.files.map((file) =>
+          uploadToCloudinary(file.buffer, { folder: 'ads', resource_type: 'image' })
+        )
+      );
+      const imageUrls = imageUploads.map((result) => result.url.replace(/^http:/, 'https:'));
+
+      const urlRegex = /^https:\/\/res\.cloudinary\.com\/.*$/;
+      const invalidUrls = imageUrls.filter((url) => !urlRegex.test(url));
+      if (invalidUrls.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Cloudinary URLs detected',
+          invalidUrls,
+        });
+      }
+
+      const field = `${type}add`;
+      admin[field] = { images: imageUrls };
+      await admin.save();
+
+      res.status(200).json({
+        success: true,
+        message: `${type.charAt(0).toUpperCase() + type.slice(1)} ad images updated successfully`,
+        [field]: admin[field],
+      });
+    } catch (error) {
+      console.error(`Failed to update ${type} ad images:`, error);
+      if (error.name === 'ValidationError') {
+        const errors = Object.values(error.errors).map((err) => err.message);
+        return res.status(400).json({
+          success: false,
+          message: `Validation failed for ${type} ad images`,
+          errors,
+        });
+      }
+      res.status(500).json({
+        success: false,
+        message: `Server error updating ${type} ad images`,
+        error: error.message,
+      });
+    }
+  }
+);
+
+// Toggle Ad Image Status
+router.patch('/ads/:type/image/:index/toggle', adminLoggedin, async (req, res) => {
+  const { type, index } = req.params;
+  const validAdTypes = ['single', 'double', 'triple'];
+  if (!validAdTypes.includes(type)) {
+    return res.status(400).json({ success: false, message: 'Invalid ad type.' });
+  }
+
+  try {
+    const admin = await Admin.findById(req.admin.id);
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    const field = `${type}add`;
+    if (!admin[field]?.images[index]) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    admin[field].images[index].disabled = !admin[field].images[index].disabled;
+    await admin.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Image ${admin[field].images[index].disabled ? 'disabled' : 'enabled'} for ${type} ad`,
+      [field]: admin[field],
+    });
+  } catch (error) {
+    console.error(`Failed to toggle ${type} ad image:`, error);
+    res.status(500).json({
+      success: false,
+      message: `Server error toggling ${type} ad image`,
+      error: error.message,
+    });
+  }
+});
+
+// Delete Ad Image
+router.delete('/ads/:type/image/:index', adminLoggedin, async (req, res) => {
+  const { type, index } = req.params;
+  const validAdTypes = ['single', 'double', 'triple'];
+  if (!validAdTypes.includes(type)) {
+    return res.status(400).json({ success: false, message: 'Invalid ad type.' });
+  }
+
+  try {
+    const admin = await Admin.findById(req.admin.id);
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    const field = `${type}add`;
+    if (!admin[field]?.images[index]) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    admin[field].images.splice(index, 1);
+    await admin.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Image removed from ${type} ad`,
+      [field]: admin[field],
+    });
+  } catch (error) {
+    console.error(`Failed to remove ${type} ad image:`, error);
+    res.status(500).json({
+      success: false,
+      message: `Server error removing ${type} ad image`,
+      error: error.message,
+    });
+  }
+});
+
+// Get All Ad Images
+router.get('/ads', async (req, res) => {
+  try {
+    const admins = await Admin.find().select('singleadd doubleadd tripleadd');
+    const ads = admins.reduce((acc, admin) => {
+      if (admin.singleadd?.images?.length) acc.push({ type: 'Single Ad', images: admin.singleadd.images });
+      if (admin.doubleadd?.images?.length) acc.push({ type: 'Double Ad', images: admin.doubleadd.images });
+      if (admin.tripleadd?.images?.length) acc.push({ type: 'Triple Ad', images: admin.tripleadd.images });
+      return acc;
+    }, []);
+    res.status(200).json({ success: true, ads });
+  } catch (error) {
+    console.error('Failed to fetch ad images:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching ad images', error: error.message });
+  }
+});
+router.patch('/products/:id/sponsored', adminLoggedin, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    product.isSponsored = !product.isSponsored;
+    await product.save();
+    res.json({ success: true, product });
+  } catch (error) {
+    console.error('Error toggling sponsored status:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+// Create a combo offer (Admin only)
+router.post('/combo-offers', adminLoggedin, async (req, res) => {
+  try {
+    const { name, productIds, price, discount, isActive } = req.body;
+
+    // Validate inputs
+    if (!name || !productIds || !Array.isArray(productIds) || productIds.length < 1 || !price) {
+      return res.status(400).json({ success: false, message: 'Name, at least one product ID, and price are required' });
+    }
+
+    // Check if products exist
+    const products = await Product.find({ _id: { $in: productIds } });
+    if (products.length !== productIds.length) {
+      return res.status(404).json({ success: false, message: 'One or more products not found' });
+    }
+
+    const comboOffer = new ComboOffer({
+      name,
+      products: productIds,
+      price,
+      discount: discount || 0,
+      isActive: isActive || false,
+    });
+
+    await comboOffer.save();
+    res.status(201).json({ success: true, message: 'Combo offer created', comboOffer });
+  } catch (error) {
+    console.error('Error creating combo offer:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Upload images for a combo offer (Admin only)
+router.post('/combo-offers/:id/images', adminLoggedin, upload.array('images', 5), handleMulterError, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const comboOffer = await ComboOffer.findById(id);
+    if (!comboOffer) {
+      return res.status(404).json({ success: false, message: 'Combo offer not found' });
+    }
+
+    const imageUploads = await Promise.all(
+      req.files.map((file) => uploadToCloudinary(file.buffer, { folder: 'combo-offers', resource_type: 'image' }))
+    );
+    const newImages = imageUploads.map((result) => ({
+      url: result.url.replace(/^http:/, 'https:'),
+      disabled: false,
+    }));
+
+    comboOffer.images.push(...newImages);
+    await comboOffer.save();
+
+    res.status(200).json({ success: true, message: 'Images uploaded', comboOffer });
+  } catch (error) {
+    console.error('Error uploading images:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Delete an image from a combo offer (Admin only)
+router.delete('/combo-offers/:id/image/:index', adminLoggedin, async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const comboOffer = await ComboOffer.findById(id);
+    if (!comboOffer) {
+      return res.status(404).json({ success: false, message: 'Combo offer not found' });
+    }
+
+    if (index < 0 || index >= comboOffer.images.length) {
+      return res.status(400).json({ success: false, message: 'Invalid image index' });
+    }
+
+    comboOffer.images.splice(index, 1);
+    await comboOffer.save();
+
+    res.status(200).json({ success: true, message: 'Image deleted', comboOffer });
+  } catch (error) {
+    console.error('Error deleting image:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Toggle image disabled status (Admin only)
+router.patch('/combo-offers/:id/image/:index/toggle', adminLoggedin, async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const comboOffer = await ComboOffer.findById(id);
+    if (!comboOffer) {
+      return res.status(404).json({ success: false, message: 'Combo offer not found' });
+    }
+
+    if (index < 0 || index >= comboOffer.images.length) {
+      return res.status(400).json({ success: false, message: 'Invalid image index' });
+    }
+
+    comboOffer.images[index].disabled = !comboOffer.images[index].disabled;
+    await comboOffer.save();
+
+    res.status(200).json({ success: true, message: 'Image status toggled', comboOffer });
+  } catch (error) {
+    console.error('Error toggling image:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get all combo offers (Admin only)
+router.get('/combo-offers', adminLoggedin, async (req, res) => {
+  try {
+    const comboOffers = await ComboOffer.find().populate('products', 'name price images');
+    res.status(200).json({ success: true, comboOffers });
+  } catch (error) {
+    console.error('Error fetching combo offers:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get active combo offers (for homepage)
+router.get('/combo-offers/active', async (req, res) => {
+  try {
+    const comboOffers = await ComboOffer.find({ isActive: true }).populate('products', 'name price images');
+    res.status(200).json({ success: true, comboOffers });
+  } catch (error) {
+    console.error('Error fetching active combo offers:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update a combo offer (Admin only)
+router.put('/combo-offers/:id', adminLoggedin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, productIds, price, discount, isActive } = req.body;
+
+    // Validate inputs
+    if (productIds && (!Array.isArray(productIds) || productIds.length < 1)) {
+      return res.status(400).json({ success: false, message: 'At least one product ID is required' });
+    }
+
+    // Check if products exist
+    if (productIds) {
+      const products = await Product.find({ _id: { $in: productIds } });
+      if (products.length !== productIds.length) {
+        return res.status(404).json({ success: false, message: 'One or more products not found' });
+      }
+    }
+
+    const comboOffer = await ComboOffer.findByIdAndUpdate(
+      id,
+      { name, products: productIds, price, discount, isActive },
+      { new: true, runValidators: true }
+    );
+
+    if (!comboOffer) {
+      return res.status(404).json({ success: false, message: 'Combo offer not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Combo offer updated', comboOffer });
+  } catch (error) {
+    console.error('Error updating combo offer:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get a single combo offer by ID
+router.get('/combo-offers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const comboOffer = await ComboOffer.findById(id).populate('products', 'name price images');
+    if (!comboOffer) {
+      return res.status(404).json({ success: false, message: 'Combo offer not found' });
+    }
+    res.status(200).json({ success: true, comboOffer });
+  } catch (error) {
+    console.error('Error fetching combo offer:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Search combo offers by name (Admin only)
+router.get('/combo-offers/search', adminLoggedin, async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Name query parameter is required' });
+    }
+    const comboOffers = await ComboOffer.find({
+      name: { $regex: name, $options: 'i' },
+    }).populate('products', 'name price images');
+    res.status(200).json({ success: true, comboOffers });
+  } catch (error) {
+    console.error('Error searching combo offers:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Bulk delete combo offers (Admin only)
+router.delete('combo-offers/bulk', adminLoggedin, async (req, res) => {
+  try {
+    const { comboOfferIds } = req.body;
+    if (!comboOfferIds || !Array.isArray(comboOfferIds) || comboOfferIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'comboOfferIds array is required' });
+    }
+    await ComboOffer.deleteMany({ _id: { $in: comboOfferIds } });
+    res.status(200).json({ success: true, message: 'Combo offers deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting combo offers:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+
+
+router.post('/sponsored', adminLoggedin, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    if (!productId) {
+      return res.status(400).json({ message: 'Product ID is required' });
+    }
+
+    // Verify product exists
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Check if already sponsored
+    const existing = await SponsoredProduct.findOne({ productId });
+    if (existing) {
+      return res.status(400).json({ message: 'Product is already sponsored' });
+    }
+
+    const sponsoredProduct = new SponsoredProduct({ productId });
+    await sponsoredProduct.save();
+
+    res.status(201).json({ success: true, message: 'Product added to sponsored list' });
+  } catch (error) {
+    console.error('Add Sponsored Product Error:', error);
+    res.status(500).json({ message: 'Failed to add sponsored product', error: error.message });
+  }
+});
+
+// Remove a product from sponsored list
+router.delete('/sponsored/:productId', adminLoggedin, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const result = await SponsoredProduct.findOneAndDelete({ productId });
+    if (!result) {
+      return res.status(404).json({ message: 'Sponsored product not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Product removed from sponsored list' });
+  } catch (error) {
+    console.error('Remove Sponsored Product Error:', error);
+    res.status(500).json({ message: 'Failed to remove sponsored product', error: error.message });
+  }
+});
+
+// List all sponsored products (for admin panel)
+router.get('/sponsored', adminLoggedin, async (req, res) => {
+  try {
+    const sponsoredProducts = await SponsoredProduct.find().populate('productId', 'name price images');
+    res.status(200).json({ success: true, products: sponsoredProducts });
+  } catch (error) {
+    console.error('List Sponsored Products Error:', error);
+    res.status(500).json({ message: 'Failed to fetch sponsored products', error: error.message });
+  }
+});
+
+
+const Layout = require('../models/layoutModel'); // Assuming you have a Layout model
+router.get('/layout', async (req, res) => {
+  try {
+    const layout = await Layout.findOne();
+    if (!layout) {
+      return res.status(200).json({ components: [] });
+    }
+    res.status(200).json(layout);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching layout', error: error.message });
+  }
+});
+
+// Save Homepage Layout
+router.post('/layout', async (req, res) => {
+  try {
+    const { components } = req.body;
+    let layout = await Layout.findOne();
+    if (layout) {
+      layout.components = components;
+      await layout.save();
+    } else {
+      layout = new Layout({ components });
+      await layout.save();
+    }
+    res.status(200).json({ message: 'Layout saved successfully', layout });
+  } catch (error) {
+    res.status(500).json({ message: 'Error saving layout', error: error.message });
+  }
+});
 module.exports = router;

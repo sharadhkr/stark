@@ -6,13 +6,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaArrowLeft, FaTruck, FaCreditCard, FaCheckCircle, FaMapMarkerAlt, FaMoneyBillWave, FaWallet } from 'react-icons/fa';
 import placeholderImage from '../assets/logo.png';
 
-// Load Razorpay script with cache busting
+// Load Razorpay script with cache busting and error handling
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
+    if (document.querySelector('script[src*="checkout.razorpay.com"]')) {
+      resolve(true); // Script already loaded
+      return;
+    }
     const script = document.createElement('script');
-    script.src = `https://checkout.razorpay.com/v1/checkout.js?t=${Date.now()}`; // Prevent caching
+    script.src = `https://checkout.razorpay.com/v1/checkout.js?t=${Date.now()}`; // Cache busting
+    script.async = true;
     script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    script.onerror = () => {
+      console.error('Failed to load Razorpay checkout script');
+      resolve(false);
+    };
     document.body.appendChild(script);
   });
 };
@@ -54,14 +62,11 @@ const CheckoutPage = () => {
 
     const fetchCheckoutData = async () => {
       try {
-        console.log('Fetching user profile...');
         const userRes = await axios.get('/api/user/auth/profile', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        console.log('User Response:', userRes.data);
-
         const user = userRes.data.user || userRes.data.data?.user || userRes.data;
-        if (!user) throw new Error('User data not found in response');
+        if (!user) throw new Error('User data not found');
 
         setUserDetails({
           name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.phoneNumber,
@@ -73,19 +78,13 @@ const CheckoutPage = () => {
 
         let items = [];
         if (state?.cart?.length) {
-          console.log('Processing state.cart:', state.cart);
           items = await Promise.all(
             state.cart.map(async (item) => {
-              console.log(`Fetching product ${item.productId}...`);
               const productRes = await axios.get(`/api/user/auth/products/${item.productId}`, {
                 headers: { Authorization: `Bearer ${token}` },
               });
-              console.log(`Product Response for ${item.productId}:`, productRes.data);
               const product = productRes.data.product || productRes.data.data?.product;
-              if (!product) {
-                console.warn(`Product ${item.productId} not found`);
-                return null;
-              }
+              if (!product) return null;
               return {
                 productId: item.productId,
                 name: item.name,
@@ -99,16 +98,13 @@ const CheckoutPage = () => {
                 sellerId: product.sellerId?._id || product.sellerId,
               };
             })
-          );
-          items = items.filter((item) => item !== null);
+          ).then((items) => items.filter((item) => item !== null));
         } else {
-          console.log('Fetching cart from API...');
           const cartRes = await axios.get('/api/user/auth/cart', {
             headers: { Authorization: `Bearer ${token}` },
           });
-          console.log('Cart Response:', cartRes.data);
           const cart = cartRes.data.cart || cartRes.data.data?.cart;
-          if (!cart) throw new Error('Cart data not found in response');
+          if (!cart) throw new Error('Cart data not found');
           items = cart.map((item) => ({
             productId: item.productId._id || item.productId,
             name: item.productId.name,
@@ -264,7 +260,7 @@ const CheckoutPage = () => {
       } else {
         const scriptLoaded = await loadRazorpayScript();
         if (!scriptLoaded) {
-          toast.error('Failed to load payment gateway');
+          toast.error('Failed to load payment gateway. Please check your internet connection or try again later.');
           setIsProcessing(false);
           return;
         }
@@ -278,11 +274,12 @@ const CheckoutPage = () => {
           throw new Error('Razorpay order creation failed');
         }
   
+        const RAZORPAY_KEY = 'rzp_live_q3VDcaCSe5gBVo'; // Hardcoded for now; replace with env in production
         const options = {
-          key:  'rzp_live_q3VDcaCSe5gBVo', // Use env if available, else fallback
+          key: RAZORPAY_KEY,
           amount: razorpay.amount,
           currency: razorpay.currency,
-          name: 'Stark strips',
+          name: 'Stark Strips',
           description: 'Order Payment',
           order_id: razorpay.orderId,
           handler: async (response) => {
@@ -313,10 +310,17 @@ const CheckoutPage = () => {
             email: userDetails.email || 'customer@example.com',
           },
           theme: { color: '#3B82F6' },
+          modal: {
+            ondismiss: () => {
+              setIsProcessing(false);
+              toast.error('Payment cancelled by user');
+            },
+          },
         };
   
         const paymentObject = new window.Razorpay(options);
         paymentObject.on('payment.failed', (response) => {
+          setIsProcessing(false);
           toast.error(`Payment failed: ${response.error.description}`);
         });
         paymentObject.open();
@@ -330,7 +334,7 @@ const CheckoutPage = () => {
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 0;
+  const shipping = 50; // Fixed shipping cost as per your code
   const total = subtotal + shipping;
 
   if (loading) {
@@ -359,7 +363,6 @@ const CheckoutPage = () => {
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
       <div className="max-w-5xl mx-auto">
-        {/* Progress Bar */}
         <div className="flex items-center justify-between mb-8 relative">
           {[
             { step: 1, label: 'Address', icon: <FaTruck className="w-5 h-5" /> },
@@ -399,7 +402,6 @@ const CheckoutPage = () => {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <motion.button
             onClick={() => navigate('/cart')}

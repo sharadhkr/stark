@@ -28,7 +28,49 @@ const adminSchema = new mongoose.Schema({
     select: false,
     minlength: [6, 'Password must be at least 6 characters'],
   },
-  createdAt: { type: Date, default: Date.now },
+  singleadd: {
+    images: [{
+      url: {
+        type: String,
+        trim: true,
+        match: [/^https:\/\/res\.cloudinary\.com\/.*$/, 'Please provide a valid Cloudinary URL'],
+      },
+      disabled: {
+        type: Boolean,
+        default: false,
+      },
+    }],
+  },
+  doubleadd: {
+    images: [{
+      url: {
+        type: String,
+        trim: true,
+        match: [/^https:\/\/res\.cloudinary\.com\/.*$/, 'Please provide a valid Cloudinary URL'],
+      },
+      disabled: {
+        type: Boolean,
+        default: false,
+      },
+    }],
+  },
+  tripleadd: {
+    images: [{
+      url: {
+        type: String,
+        trim: true,
+        match: [/^https:\/\/res\.cloudinary\.com\/.*$/, 'Please provide a valid Cloudinary URL'],
+      },
+      disabled: {
+        type: Boolean,
+        default: false,
+      },
+    }],
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
 });
 
 adminSchema.pre('save', async function (next) {

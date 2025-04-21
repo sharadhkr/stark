@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FaUsers, FaStore, FaBox, FaShoppingCart, FaList, FaSignOutAlt, FaChartBar } from 'react-icons/fa';
+import { FaUsers, FaStore, FaBox, FaShoppingCart, FaList, FaSignOutAlt, FaChartBar, FaImages, FaGift, FaStar, FaLayerGroup } from 'react-icons/fa';
 
 const AdminNavBar = ({ activeSection, setActiveSection, handleLogout }) => {
   const fadeIn = {
@@ -15,10 +15,14 @@ const AdminNavBar = ({ activeSection, setActiveSection, handleLogout }) => {
     { name: 'orders', icon: FaShoppingCart, label: 'Orders' },
     { name: 'users', icon: FaUsers, label: 'Users' },
     { name: 'categories', icon: FaList, label: 'Categories' },
+    { name: 'ads', icon: FaImages, label: 'Ads' },
+    { name: 'combo-offers', icon: FaGift, label: 'Combo Offers' },
+    { name: 'sponsored-products', icon: FaStar, label: 'Sponsored Products' },
+    { name: 'layout', icon: FaLayerGroup, label: 'Layout' }, // New Layout section
   ];
 
   return (
-    <nav className="bg-gradient-to-r from-blue-100 to-blue-200 p-4 shadow-sm ">
+    <nav className="bg-gradient-to-r from-blue-100 to-blue-200 p-4 shadow-sm">
       <div className="max-w-7xl mx-auto flex flex-col gap-4">
         <motion.h1
           initial="hidden"

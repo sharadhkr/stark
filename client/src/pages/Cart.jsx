@@ -443,26 +443,26 @@ const fetchCart = async (setCart, setLoading, toast, navigate) => {
       axios.get('/api/user/auth/save-for-later', { headers: { Authorization: `Bearer ${token}` } }),
     ]);
 
-    const cartItems = cartResponse.data.cart.map((item) => ({
-      productId: item.productId?._id || item.productId,
-      name: item.productId?.name || 'Unnamed Product',
-      price: item.productId?.price || 0,
+    const cartItems = (cartResponse.data.cart?.items || []).map((item) => ({
+      productId: item.product?._id || item.productId,
+      name: item.product?.name || 'Unnamed Product',
+      price: item.product?.price || 0,
       quantity: item.quantity || 1,
       size: item.size || 'N/A',
       color: item.color || 'N/A',
-      image: item.productId?.image || null,
-      stock: item.productId?.quantity || 0,
-      discount: item.productId?.discount || 0,
+      image: item.product?.images?.[0] || null,
+      stock: item.product?.quantity || 0,
+      discount: item.product?.discount || 0,
     }));
 
-    const savedItems = savedResponse.data.savedForLater.map((item) => ({
+    const savedItems = (savedResponse.data.savedForLater || []).map((item) => ({
       productId: item.productId?._id || item.productId,
       name: item.productId?.name || 'Unnamed Product',
       price: item.productId?.price || 0,
       quantity: item.quantity || 1,
       size: item.size || 'N/A',
       color: item.color || 'N/A',
-      image: item.productId?.image || null,
+      image: item.productId?.images?.[0] || null,
       stock: item.productId?.quantity || 0,
       discount: item.productId?.discount || 0,
     }));

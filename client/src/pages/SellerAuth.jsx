@@ -21,7 +21,7 @@ const formVariants = {
 
 const SellerAuth = () => {
   const navigate = useNavigate();
-  const [isRegister, setIsRegister] = useState(false); // Default to login
+  const [isRegister, setIsRegister] = useState(false);
   const [formData, setFormData] = useState({
     phoneNumber: '',
     countryCode: '+91',
@@ -42,12 +42,19 @@ const SellerAuth = () => {
   const phoneInputRef = useRef(null);
 
   const storeToken = useCallback((token) => {
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+      console.error('Invalid token received:', token); // Debug: Log invalid token
+      toast.error('Invalid token received from server');
+      return;
+    }
+    console.log('Storing sellerToken:', token.slice(0, 8) + '...'); // Debug: Log token
     localStorage.setItem('sellerToken', token);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`; // Add token to axios headers
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }, []);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('sellerToken');
+    console.log('Checking stored sellerToken on mount:', storedToken); // Debug: Log stored token
     if (storedToken && storedToken !== 'login') {
       storeToken(storedToken);
       navigate('/seller/dashboard');
@@ -149,8 +156,9 @@ const SellerAuth = () => {
     const loadingToast = toast.loading('Sending OTP...');
     try {
       const payload = { phoneNumber: `${formData.countryCode}${formData.phoneNumber}` };
-      console.log('Sending OTP Payload:', payload); // Debug
+      console.log('Sending OTP Payload:', payload); // Debug: Log payload
       const res = await axios.post('/api/seller/auth/send-otp', payload);
+      console.log('OTP Send Response:', res.data); // Debug: Log response
       toast.dismiss(loadingToast);
       toast.success(res.data.message, { duration: 4000 });
       setOtpSent(true);
@@ -159,7 +167,7 @@ const SellerAuth = () => {
     } catch (error) {
       toast.dismiss(loadingToast);
       const errorMessage = error.response?.data.message || error.message || 'Failed to send OTP';
-      console.error('OTP Send Error:', error.response?.data || error);
+      console.error('OTP Send Error:', error.response?.data || error); // Debug: Log error
       toast.error(errorMessage, { duration: 5000 });
     } finally {
       setLoading((prev) => ({ ...prev, sendOtp: false }));
@@ -191,11 +199,11 @@ const SellerAuth = () => {
         formDataToSend.append('shopName', formData.shopName);
         formDataToSend.append('address', formData.address);
         formDataToSend.append('password', formData.password);
-        if (image) formDataToSend.append('profilePicture', image); // Match server field name
+        if (image) formDataToSend.append('profilePicture', image);
         submitData = formDataToSend;
       } else {
         submitData = {
-          phoneNumber: `${formData.countryCode}${formData.phoneNumber}`, // Consistent with registration
+          phoneNumber: `${formData.countryCode}${formData.phoneNumber}`,
           password: formData.password,
         };
       }
@@ -204,12 +212,12 @@ const SellerAuth = () => {
       const loadingToast = toast.loading('Processing...');
       try {
         const config = isRegister ? { headers: { 'Content-Type': 'multipart/form-data' } } : {};
-        console.log('Submitting to:', endpoint, submitData); // Debug payload
+        console.log('Submitting to:', endpoint, submitData); // Debug: Log payload
         const res = await axios.post(endpoint, submitData, config);
-        console.log('Server Response:', res.data); // Debug response
+        console.log('Server Response:', res.data); // Debug: Log response
         toast.dismiss(loadingToast);
 
-        const token = res.data.data?.token; // Correctly extract token
+        const token = res.data.data?.token;
         if (token) {
           storeToken(token);
           toast.success(`Success! Token: ${token.slice(0, 8)}...`, { duration: 4000 });
@@ -232,7 +240,7 @@ const SellerAuth = () => {
       } catch (error) {
         toast.dismiss(loadingToast);
         const errorMessage = error.response?.data.message || error.message || 'Request failed';
-        console.error('Submission Error:', error.response?.data || error);
+        console.error('Submission Error:', error.response?.data || error); // Debug: Log error
         toast.error(errorMessage, { duration: 5000 });
       } finally {
         setLoading((prev) => ({ ...prev, submit: false }));
