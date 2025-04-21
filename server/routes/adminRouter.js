@@ -6,14 +6,14 @@ const Seller = require('../models/sellerModel');
 const Product = require('../models/productModel');
 const User = require('../models/userModel');
 const Order = require('../models/orderModel');
-const Category = require('../models/Category');
+const Category = require('../models/CategoryModel');
 const adminLoggedin = require('../middleware/adminLoggedin');
 const multer = require('multer');
 const { uploadToCloudinary } = require('../config/clowdnaryConfig');
 const mongoose = require('mongoose');
 const SponsoredProduct = require('../models/SponsoredProductModel'); // Adjust path
 require('dotenv').config();
-const ComboOffer = require('../models/ComboOffer');
+const ComboOffer = require('../models/ComboOfferModel');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
