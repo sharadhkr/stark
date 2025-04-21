@@ -9,7 +9,7 @@ const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
 app.use(cors({
-  origin: 'http://localhost:5173', // Your frontend URL
+  origin: 'process.env.CLIENT_URL', // Your frontend URL
   credentials: true
 }));
 app.use((err, req, res, next) => {
