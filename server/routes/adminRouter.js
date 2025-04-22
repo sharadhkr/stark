@@ -118,49 +118,31 @@ router.post('/login', async (req, res) => {
 // Verify Token Endpoint
 router.get('/verify-token', adminLoggedin, async (req, res) => {
   try {
+    // Fetch admin from database
     const admin = await Admin.findById(req.admin.id).select('-password');
     if (!admin) {
       return res.status(404).json({ success: false, message: 'Admin not found' });
     }
 
-    // Normalize image data
-    const normalizeImages = (images) => {
-      if (!Array.isArray(images)) return [];
-      return images
-        .map((img) => {
-          if (!img) return null;
-          if (typeof img === 'string') {
-            return { url: img.replace(/^http:/, 'https:'), disabled: false };
-          }
-          if (typeof img === 'object' && img.url) {
-            return { url: img.url.replace(/^http:/, 'https:'), disabled: !!img.disabled };
-          }
-          if (typeof img === 'object') {
-            const url = Object.keys(img)
-              .filter((key) => !['disabled', '_id'].includes(key))
-              .sort((a, b) => parseInt(a) - parseInt(b))
-              .map((key) => img[key])
-              .join('');
-            if (url) {
-              return { url: url.replace(/^http:/, 'https:'), disabled: !!img.disabled };
-            }
-          }
-          console.warn('Invalid image data in verify-token:', img);
-          return null;
-        })
-        .filter((img) => img && img.url);
+    // Verify admin role
+    if (!admin.role || admin.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    // Prepare response
+    const adminData = {
+      id: admin._id,
+      phoneNumber: admin.phoneNumber, // Adjust based on your Admin model fields
+      role: admin.role,
+      // Add other fields as needed (e.g., email, name)
     };
 
-    const normalizedAdmin = {
-      ...admin.toObject(),
-      singleadd: { images: normalizeImages(admin.singleadd?.images || []) },
-      doubleadd: { images: normalizeImages(admin.doubleadd?.images || []) },
-      tripleadd: { images: normalizeImages(admin.tripleadd?.images || []) },
-    };
-
-    res.status(200).json({ success: true, admin: normalizedAdmin });
+    res.status(200).json({ success: true, admin: adminData });
   } catch (error) {
-    console.error('Verify token error:', error);
+    console.error('Verify token error:', {
+      message: error.message,
+      stack: error.stack,
+    });
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
