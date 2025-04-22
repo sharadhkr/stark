@@ -10,22 +10,22 @@ const Product = require('../models/productModel');
 const Seller = require('../models/sellerModel');
 const Category = require('../models/CategoryModel');
 const Order = require('../models/orderModel');
+const TempOrder = require('../models/TempOrderModel'); // Updated TempOrder model
 const { sendOtp, verifyOtp } = require('../utils/otp');
 const userLoggedin = require('../middleware/userLoggedin');
 const { uploadSingle } = require('../config/multerConfig');
 const { uploadToCloudinary } = require('../config/clowdnaryConfig');
+const SponsoredProduct = require('../models/SponsoredProductModel');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'YOUR_RAZORPAY_KEY_ID';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KEY_SECRET';
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
   key_secret: RAZORPAY_KEY_SECRET,
 });
-
-const tempOrdersStore = new Map();
 
 // Optional Elasticsearch Client
 const elasticsearch = process.env.ELASTICSEARCH_URL
@@ -854,6 +854,7 @@ router.get('/recently-viewed', userLoggedin, async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch recently viewed products', error: error.message });
   }
 });
+
 router.post('/products-by-ids', async (req, res) => {
   try {
     const { productIds } = req.body;
@@ -939,7 +940,6 @@ router.post('/searches', userLoggedin, async (req, res) => {
   }
 });
 
-// Existing Search Routes (Updated for Consistency)
 router.get('/search/recent', userLoggedin, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -1160,7 +1160,7 @@ router.get('/order/:orderId', userLoggedin, async (req, res) => {
     res.status(200).json({ order });
   } catch (error) {
     console.error('Fetch Order Error:', error);
-    res.status(500).json({ message: 'Failed to fetch order', error: error.message });
+    res.status(500).json({ message: 'Fetch order failed', error: error.message });
   }
 });
 
@@ -1176,10 +1176,10 @@ router.get('/orders', userLoggedin, async (req, res) => {
 
 router.post('/create-order', userLoggedin, async (req, res) => {
   try {
-    const { items, totalAmount, onlineAmount, codAmount, shipping, addressId, paymentMethod, fromCart, userDetails } = req.body;
+    const { items, totalAmount, onlineAmount, codAmount, shipping, userDetails, addressId, paymentMethod, fromCart } = req.body;
 
-    if (!items || !Array.isArray(items) || items.length === 0 || !totalAmount || !addressId || !paymentMethod) {
-      return res.status(400).json({ message: 'Items, totalAmount, addressId, and paymentMethod are required' });
+    if (!items || !Array.isArray(items) || items.length === 0 || !totalAmount || !addressId || !paymentMethod || !userDetails) {
+      return res.status(400).json({ message: 'Items, totalAmount, addressId, paymentMethod, and userDetails are required' });
     }
 
     const user = await User.findById(req.user.id);
@@ -1188,13 +1188,18 @@ router.post('/create-order', userLoggedin, async (req, res) => {
     const address = user.addresses.id(addressId);
     if (!address) return res.status(400).json({ message: 'Invalid address ID' });
 
+    // Validate items and group by seller
     const itemsBySeller = {};
     for (const item of items) {
+      if (!mongoose.Types.ObjectId.isValid(item.productId)) {
+        return res.status(400).json({ message: `Invalid productId: ${item.productId}` });
+      }
       const product = await Product.findById(item.productId).populate('sellerId');
       if (!product) return res.status(404).json({ message: `Product not found: ${item.productId}` });
       if (product.quantity < item.quantity) {
         return res.status(400).json({ message: `Insufficient stock for ${product.name}` });
       }
+
       const sellerId = product.sellerId._id.toString();
       if (!itemsBySeller[sellerId]) itemsBySeller[sellerId] = { items: [], seller: product.sellerId };
       itemsBySeller[sellerId].items.push({
@@ -1204,37 +1209,53 @@ router.post('/create-order', userLoggedin, async (req, res) => {
         quantity: item.quantity,
         size: item.size,
         color: item.color,
+        material: item.material,
+        gender: item.gender,
+        brand: item.brand,
+        fit: item.fit,
+        careInstructions: item.careInstructions,
+        dimensions: item.dimensions,
+        weight: item.weight,
+        image: item.image,
+        isReturnable: item.isReturnable,
+        returnPeriod: item.returnPeriod,
         onlineAmount: item.onlineAmount || 0,
         codAmount: item.codAmount || 0,
       });
     }
 
+    // Create Razorpay order if needed
     let razorpayOrder = null;
-    if (paymentMethod === 'Razorpay' && onlineAmount > 0) {
+    if (paymentMethod === 'Razorpay' || paymentMethod === 'Split Payment') {
+      if (onlineAmount <= 0) {
+        return res.status(400).json({ message: 'Online amount must be greater than zero for Razorpay or Split Payment' });
+      }
       const razorpayOptions = {
-        amount: Math.round(onlineAmount * 100),
+        amount: Math.round(onlineAmount * 100), // Convert to paise
         currency: 'INR',
         receipt: `receipt_${Date.now()}`,
       };
       razorpayOrder = await razorpay.orders.create(razorpayOptions);
-    } else if (paymentMethod !== 'Cash on Delivery') {
-      return res.status(400).json({ message: 'Invalid payment method or zero online amount for Razorpay' });
     }
 
+    // Prepare customer details
     const customerDetails = {
-      name: userDetails?.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.phoneNumber,
-      email: userDetails?.email || user.email || 'N/A',
-      phoneNumber: userDetails?.phoneNumber || user.phoneNumber,
+      name: userDetails.name || user.firstName || user.phoneNumber,
+      email: userDetails.email || user.email || '',
+      phoneNumber: userDetails.phoneNumber || user.phoneNumber,
       address: `${address.street}, ${address.city}, ${address.state}, ${address.postalCode}, ${address.country}`,
     };
 
-    const tempOrders = Object.keys(itemsBySeller).map((sellerId) => {
-      const { items: sellerItems, seller } = itemsBySeller[sellerId];
+    // Create temporary orders
+    const tempOrders = [];
+    const numSellers = Object.keys(itemsBySeller).length;
+    for (const sellerId of Object.keys(itemsBySeller)) {
+      const { items: sellerItems } = itemsBySeller[sellerId];
       const sellerTotal = sellerItems.reduce((sum, item) => sum + (item.onlineAmount || 0) + (item.codAmount || 0), 0) +
-        (shipping || 0) / Object.keys(itemsBySeller).length;
+        (shipping || 0) / numSellers;
 
-      return {
-        orderId: razorpayOrder ? razorpayOrder.id : `ORD_${Date.now()}_${sellerId}`,
+      const tempOrder = new TempOrder({
+        razorpayOrderId: razorpayOrder ? razorpayOrder.id : `COD_${Date.now()}_${sellerId}`,
         userId: req.user.id,
         sellerId,
         customer: customerDetails,
@@ -1242,19 +1263,19 @@ router.post('/create-order', userLoggedin, async (req, res) => {
         total: sellerTotal,
         onlineAmount: sellerItems.reduce((sum, item) => sum + (item.onlineAmount || 0), 0),
         codAmount: sellerItems.reduce((sum, item) => sum + (item.codAmount || 0), 0),
-        shipping: shipping / Object.keys(itemsBySeller).length || 0,
+        shipping: shipping / numSellers || 0,
         paymentMethod,
-        paymentStatus: paymentMethod === 'Cash on Delivery' ? 'pending' : 'pending',
-        status: 'pending',
-      };
-    });
+      });
 
-    const tempOrderKey = razorpayOrder ? razorpayOrder.id : tempOrders[0].orderId;
-    tempOrdersStore.set(tempOrderKey, tempOrders);
+      await tempOrder.save();
+      tempOrders.push(tempOrder);
+    }
 
+    // Prepare response
     const response = {
+      success: true,
       message: 'Order(s) created, proceed to payment if applicable',
-      orders: tempOrders.map((o) => ({ orderId: o.orderId, sellerId: o.sellerId })),
+      orders: tempOrders.map((o) => ({ orderId: o._id, sellerId: o.sellerId })),
     };
     if (razorpayOrder) {
       response.razorpay = {
@@ -1266,8 +1287,12 @@ router.post('/create-order', userLoggedin, async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error('Create Order Error:', error);
-    res.status(500).json({ message: 'Failed to create order', error: error.message || error });
+    console.error('Create Order Error:', {
+      message: error.message,
+      stack: error.stack,
+      requestBody: req.body,
+    });
+    res.status(500).json({ message: 'Failed to create order', error: error.message });
   }
 });
 
@@ -1275,52 +1300,90 @@ router.post('/verify-payment', userLoggedin, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderData } = req.body;
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !orderData) {
-      return res.status(400).json({ message: 'Payment details and order data are required' });
+      return res.status(400).json({ success: false, message: 'Payment details and order data are required' });
     }
 
+    // Verify signature
     const generatedSignature = crypto
       .createHmac('sha256', RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 
-    if (generatedSignature !== razorpay_signature) {
+    let isSignatureValid = generatedSignature === razorpay_signature;
+
+    // Fallback: Verify payment status with Razorpay API if signature fails
+    if (!isSignatureValid) {
+      try {
+        const response = await axios.get(`https://api.razorpay.com/v1/payments/${razorpay_payment_id}`, {
+          auth: {
+            username: RAZORPAY_KEY_ID,
+            password: RAZORPAY_KEY_SECRET,
+          },
+        });
+        const payment = response.data;
+        if (payment.status === 'captured' && payment.order_id === razorpay_order_id) {
+          isSignatureValid = true;
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: 'Payment verification failed via Razorpay API',
+            details: payment.status,
+          });
+        }
+      } catch (apiError) {
+        console.error('Razorpay API Error:', apiError.response?.data || apiError.message);
+        return res.status(400).json({ success: false, message: 'Invalid payment signature and API verification failed' });
+      }
+    }
+
+    if (!isSignatureValid) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
+    // Fetch user
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
+    // Validate address
     const address = user.addresses.id(orderData.addressId);
-    if (!address) return res.status(400).json({ message: 'Invalid address' });
+    if (!address) return res.status(400).json({ success: false, message: 'Invalid address' });
 
-    const tempOrders = tempOrdersStore.get(razorpay_order_id);
+    // Fetch temporary orders
+    const tempOrders = await TempOrder.find({ razorpayOrderId: razorpay_order_id });
     if (!tempOrders || tempOrders.length === 0) {
-      return res.status(400).json({ message: 'No pending orders found' });
+      return res.status(400).json({ success: false, message: 'No pending orders found' });
     }
 
+    // Process orders
     const orders = [];
     for (const tempOrder of tempOrders) {
       const order = new Order({
-        ...tempOrder,
+        ...tempOrder.toObject(),
+        orderId: `ORD_${Date.now()}_${tempOrder.sellerId}_${Math.random().toString(36).substr(2, 5)}`,
         paymentId: razorpay_payment_id,
         paymentStatus: 'completed',
         status: 'order confirmed',
+        statusHistory: [{ status: 'order confirmed', timestamp: Date.now() }],
       });
       await order.save();
       orders.push(order);
 
+      // Update product quantities
       for (const item of order.items) {
         await Product.updateOne({ _id: item.productId }, { $inc: { quantity: -item.quantity } });
       }
+      // Update seller stats
       await Seller.updateOne({ _id: order.sellerId }, { $inc: { totalOrders: 1 } });
     }
 
+    // Clear cart if fromCart is true
     if (orderData.fromCart) {
       user.cart = [];
       await user.save();
     }
 
-    tempOrdersStore.delete(razorpay_order_id);
+    // Delete temporary orders
+    await TempOrder.deleteMany({ razorpayOrderId: razorpay_order_id });
 
     res.status(200).json({
       success: true,
@@ -1328,7 +1391,11 @@ router.post('/verify-payment', userLoggedin, async (req, res) => {
       orders: orders.map((o) => ({ orderId: o.orderId, sellerId: o.sellerId })),
     });
   } catch (error) {
-    console.error('Verify Payment Error:', error);
+    console.error('Verify Payment Error:', {
+      message: error.message,
+      stack: error.stack,
+      requestBody: req.body,
+    });
     res.status(500).json({ success: false, message: 'Failed to verify payment', error: error.message });
   }
 });
@@ -1370,6 +1437,16 @@ router.post('/place-order', userLoggedin, async (req, res) => {
         quantity: item.quantity,
         size: item.size,
         color: item.color,
+        material: item.material,
+        gender: item.gender,
+        brand: item.brand,
+        fit: item.fit,
+        careInstructions: item.careInstructions,
+        dimensions: item.dimensions,
+        weight: item.weight,
+        image: item.image,
+        isReturnable: item.isReturnable,
+        returnPeriod: item.returnPeriod,
         onlineAmount: item.onlineAmount || 0,
         codAmount: item.codAmount || 0,
       });
@@ -1382,7 +1459,7 @@ router.post('/place-order', userLoggedin, async (req, res) => {
         (shipping || 0) / Object.keys(itemsBySeller).length;
 
       const order = new Order({
-        orderId: `ORD_${Date.now()}_${sellerId}`,
+        orderId: `ORD_${Date.now()}_${sellerId}_${Math.random().toString(36).substr(2, 5)}`,
         userId: req.user.id,
         sellerId,
         customer: {
@@ -1391,7 +1468,7 @@ router.post('/place-order', userLoggedin, async (req, res) => {
           phoneNumber: userDetails.phoneNumber || user.phoneNumber,
           address: `${address.street}, ${address.city}, ${address.state}, ${address.postalCode}, ${address.country}`,
         },
-        items: sellerItems,
+0        items: sellerItems,
         total: sellerTotal,
         onlineAmount: sellerItems.reduce((sum, item) => sum + (item.onlineAmount || 0), 0),
         codAmount: sellerItems.reduce((sum, item) => sum + (item.codAmount || 0), 0),
@@ -1399,6 +1476,7 @@ router.post('/place-order', userLoggedin, async (req, res) => {
         paymentMethod,
         paymentStatus: 'pending',
         status: 'order confirmed',
+        statusHistory: [{ status: 'order confirmed', timestamp: Date.now() }],
       });
 
       await order.save();
@@ -1440,6 +1518,7 @@ router.put('/orders/:orderId/cancel', userLoggedin, async (req, res) => {
     }
 
     order.status = 'cancelled';
+    order.statusHistory.push({ status: 'cancelled', timestamp: Date.now() });
     await order.save();
 
     for (const item of order.items) {
@@ -1487,7 +1566,7 @@ router.post('/checkout', userLoggedin, async (req, res) => {
       const sellerTotal = sellerItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
       const order = new Order({
-        orderId: `ORD_${Date.now()}_${sellerId}`,
+        orderId: `ORD_${Date.now()}_${sellerId}_${Math.random().toString(36).substr(2, 5)}`,
         userId: req.user.id,
         sellerId,
         customer: {
@@ -1498,6 +1577,9 @@ router.post('/checkout', userLoggedin, async (req, res) => {
         items: sellerItems,
         total: sellerTotal,
         status: 'pending',
+        paymentMethod: 'pending',
+        paymentStatus: 'pending',
+        statusHistory: [{ status: 'pending', timestamp: Date.now() }],
       });
 
       await order.save();
@@ -1542,7 +1624,7 @@ router.post('/checkout/:productId', userLoggedin, async (req, res) => {
     const total = product.price * quantity;
 
     const order = new Order({
-      orderId: `ORD_${Date.now()}_${product.sellerId}`,
+      orderId: `ORD_${Date.now()}_${product.sellerId}_${Math.random().toString(36).substr(2, 5)}`,
       userId: req.user.id,
       sellerId: product.sellerId,
       customer: {
@@ -1553,6 +1635,9 @@ router.post('/checkout/:productId', userLoggedin, async (req, res) => {
       items: [{ productId: product._id, name: product.name, price: product.price, quantity, size, color }],
       total: total,
       status: 'pending',
+      paymentMethod: 'pending',
+      paymentStatus: 'pending',
+      statusHistory: [{ status: 'pending', timestamp: Date.now() }],
     });
 
     await order.save();
@@ -1632,7 +1717,6 @@ router.get('/category/:categoryId', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-const SponsoredProduct = require('../models/SponsoredProductModel'); // Adjust path
 
 router.get('/sponsored', async (req, res) => {
   try {
@@ -1641,10 +1725,10 @@ router.get('/sponsored', async (req, res) => {
         path: 'productId',
         select: '_id name price discountedPrice images category',
       })
-      .sort({ addedAt: -1 }); // Sort by most recently added
+      .sort({ addedAt: -1 });
 
     const products = sponsoredProducts
-      .filter((sp) => sp.productId) // Ensure populated product exists
+      .filter((sp) => sp.productId)
       .map((sp) => sp.productId);
 
     res.status(200).json({ success: true, products });
@@ -1665,10 +1749,10 @@ router.get('/trending', async (req, res) => {
     const trendingProducts = await Product.aggregate([
       {
         $match: {
-          updatedAt: { $gte: startOfDay, $lte: endOfDay }, // Products updated today
+          updatedAt: { $gte: startOfDay, $lte: endOfDay },
           $or: [
-            { orders: { $gt: 0 } }, // Has sales
-            { viewCount: { $gt: 0 } }, // Has views
+            { orders: { $gt: 0 } },
+            { viewCount: { $gt: 0 } },
           ],
         },
       },
@@ -1677,8 +1761,8 @@ router.get('/trending', async (req, res) => {
           trendScore: { $add: [{ $ifNull: ['$orders', 0] }, { $ifNull: ['$viewCount', 0] }] },
         },
       },
-      { $sort: { trendScore: -1, orders: -1, viewCount: -1 } }, // Sort by combined score, then orders, then views
-      { $limit: 10 }, // Limit to top 10 trending products
+      { $sort: { trendScore: -1, orders: -1, viewCount: -1 } },
+      { $limit: 10 },
       {
         $project: {
           _id: 1,
@@ -1699,4 +1783,5 @@ router.get('/trending', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch trending products', error: error.message });
   }
 });
+
 module.exports = router;

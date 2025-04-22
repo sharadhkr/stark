@@ -3,18 +3,26 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaArrowLeft, FaTruck, FaCreditCard, FaCheckCircle, FaMapMarkerAlt, FaMoneyBillWave, FaWallet } from 'react-icons/fa';
+import {
+  FaArrowLeft,
+  FaTruck,
+  FaCreditCard,
+  FaCheckCircle,
+  FaMapMarkerAlt,
+  FaMoneyBillWave,
+  FaWallet,
+} from 'react-icons/fa';
 import placeholderImage from '../assets/logo.png';
 
 // Load Razorpay script with cache busting and error handling
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     if (document.querySelector('script[src*="checkout.razorpay.com"]')) {
-      resolve(true); // Script already loaded
+      resolve(true);
       return;
     }
     const script = document.createElement('script');
-    script.src = `https://checkout.razorpay.com/v1/checkout.js?t=${Date.now()}`; // Cache busting
+    script.src = `https://checkout.razorpay.com/v1/checkout.js?t=${Date.now()}`;
     script.async = true;
     script.onload = () => resolve(true);
     script.onerror = () => {
@@ -51,6 +59,7 @@ const CheckoutPage = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -62,6 +71,7 @@ const CheckoutPage = () => {
 
     const fetchCheckoutData = async () => {
       try {
+        // Fetch user profile
         const userRes = await axios.get('/api/user/auth/profile', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -76,6 +86,7 @@ const CheckoutPage = () => {
         setSavedAddresses(user.addresses || []);
         if (user.addresses?.length > 0) setSelectedAddress(user.addresses[0]._id);
 
+        // Fetch cart items
         let items = [];
         if (state?.cart?.length) {
           items = await Promise.all(
@@ -110,7 +121,9 @@ const CheckoutPage = () => {
             name: item.productId.name,
             price: item.priceAtAdd || item.productId.price,
             quantity: item.quantity,
-            image: Array.isArray(item.productId.images) ? item.productId.images[0] : item.productId.images,
+            image: Array.isArray(item.productId.images)
+              ? item.productId.images[0]
+              : item.productId.images,
             size: item.size,
             color: item.color,
             isCashOnDeliveryAvailable: item.productId.isCashOnDeliveryAvailable ?? true,
@@ -132,7 +145,9 @@ const CheckoutPage = () => {
           toast.error('Session expired, please login again');
           navigate('/login');
         } else {
-          toast.error(error.response?.data?.message || error.message || 'Failed to load checkout details');
+          toast.error(
+            error.response?.data?.message || error.message || 'Failed to load checkout details'
+          );
         }
       } finally {
         setLoading(false);
@@ -142,7 +157,8 @@ const CheckoutPage = () => {
     fetchCheckoutData();
   }, [navigate, state?.cart]);
 
-  const handleUserDetailsChange = (e) => setUserDetails({ ...userDetails, [e.target.name]: e.target.value });
+  const handleUserDetailsChange = (e) =>
+    setUserDetails({ ...userDetails, [e.target.name]: e.target.value });
   const handleAddressChange = (e) => setAddress({ ...address, [e.target.name]: e.target.value });
 
   const handleAddNewAddress = async () => {
@@ -191,10 +207,16 @@ const CheckoutPage = () => {
 
   const paymentOptions = () => {
     const allCODAvailable = cartItems.every((item) => item.isCashOnDeliveryAvailable);
-    const anySplitPayment = cartItems.some((item) => item.onlinePaymentPercentage < 100 && item.isCashOnDeliveryAvailable);
+    const anySplitPayment = cartItems.some(
+      (item) => item.onlinePaymentPercentage < 100 && item.isCashOnDeliveryAvailable
+    );
 
     const options = [];
-    options.push({ method: 'Full Online Payment', desc: 'Pay 100% online via Razorpay', value: 'razorpay_full' });
+    options.push({
+      method: 'Full Online Payment',
+      desc: 'Pay 100% online via Razorpay',
+      value: 'razorpay_full',
+    });
 
     if (allCODAvailable) {
       if (anySplitPayment) {
@@ -204,7 +226,11 @@ const CheckoutPage = () => {
           value: 'razorpay_split',
         });
       }
-      options.push({ method: 'Full Cash on Delivery', desc: 'Pay 100% on delivery', value: 'cod_full' });
+      options.push({
+        method: 'Full Cash on Delivery',
+        desc: 'Pay 100% on delivery',
+        value: 'cod_full',
+      });
     }
 
     return options;
@@ -220,14 +246,15 @@ const CheckoutPage = () => {
       setCurrentStep(3);
       return;
     }
-  
+
     setIsProcessing(true);
+    setPaymentError(null);
     const token = localStorage.getItem('token');
     const itemsWithPayment = calculatePaymentSplit();
     const totalOnlineAmount = itemsWithPayment.reduce((sum, item) => sum + item.onlineAmount, 0);
     const totalCODAmount = itemsWithPayment.reduce((sum, item) => sum + item.codAmount, 0);
     const totalAmount = totalOnlineAmount + totalCODAmount + 50;
-  
+
     const orderData = {
       items: itemsWithPayment.map((item) => ({
         productId: item.productId,
@@ -243,38 +270,39 @@ const CheckoutPage = () => {
       totalAmount,
       onlineAmount: totalOnlineAmount,
       codAmount: totalCODAmount,
-      shipping: 0,
+      shipping: 50,
       userDetails,
       addressId: selectedAddress,
       paymentMethod: paymentMethod === 'cod_full' ? 'Cash on Delivery' : 'Razorpay',
       fromCart: true,
     };
-  
+
     try {
       if (paymentMethod === 'cod_full') {
         const res = await axios.post('/api/user/auth/place-order', orderData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         toast.success('Order placed successfully!');
-        navigate('/order-confirmation', { state: { orderIds: res.data.orders.map((o) => o.orderId) } });
+        navigate('/order-confirmation', {
+          state: { orderIds: res.data.orders.map((o) => o.orderId) },
+        });
       } else {
         const scriptLoaded = await loadRazorpayScript();
         if (!scriptLoaded) {
-          toast.error('Failed to load payment gateway. Please check your internet connection or try again later.');
-          setIsProcessing(false);
-          return;
+          throw new Error('Failed to load payment gateway. Please check your internet connection.');
         }
-  
+
+        // Create order
         const orderResponse = await axios.post('/api/user/auth/create-order', orderData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const { razorpay, orders } = orderResponse.data;
-  
+
         if (!razorpay || !razorpay.orderId) {
           throw new Error('Razorpay order creation failed');
         }
-  
-        const RAZORPAY_KEY = 'rzp_live_q3VDcaCSe5gBVo'; // Hardcoded for now; replace with env in production
+
+        const RAZORPAY_KEY = process.env.REACT_APP_RAZORPAY_KEY || 'rzp_live_q3VDcaCSe5gBVo';
         const options = {
           key: RAZORPAY_KEY,
           amount: razorpay.amount,
@@ -296,12 +324,22 @@ const CheckoutPage = () => {
               );
               if (verifyResponse.data.success) {
                 toast.success('Payment successful!');
-                navigate('/order-confirmation', { state: { orderIds: verifyResponse.data.orders.map((o) => o.orderId) } });
+                navigate('/order-confirmation', {
+                  state: { orderIds: verifyResponse.data.orders.map((o) => o.orderId) },
+                });
               } else {
-                toast.error('Payment verification failed');
+                setPaymentError(verifyResponse.data.message || 'Payment verification failed');
+                toast.error(verifyResponse.data.message || 'Payment verification failed');
               }
             } catch (error) {
-              toast.error(error.response?.data?.message || 'Payment verification error');
+              const message = error.response?.data?.message || 'Payment verification error';
+              console.error('Payment Verification Error:', {
+                message,
+                response: response,
+                error: error.response?.data,
+              });
+              setPaymentError(message);
+              toast.error(message);
             }
           },
           prefill: {
@@ -313,28 +351,63 @@ const CheckoutPage = () => {
           modal: {
             ondismiss: () => {
               setIsProcessing(false);
-              toast.error('Payment cancelled by user');
+              if (!paymentError) {
+                toast.error('Payment cancelled by user');
+              }
             },
           },
+          config: {
+            display: {
+              blocks: {
+                banks: {
+                  name: 'Pay using UPI',
+                  instruments: [{ method: 'upi' }],
+                },
+              },
+              sequence: ['block.banks'],
+              preferences: { show_default_blocks: true },
+            },
+          },
+          retry: {
+            enabled: true,
+            max_count: 3,
+          },
         };
-  
+
         const paymentObject = new window.Razorpay(options);
         paymentObject.on('payment.failed', (response) => {
           setIsProcessing(false);
-          toast.error(`Payment failed: ${response.error.description}`);
+          const message = response.error.description || 'Payment failed';
+          setPaymentError(message);
+          toast.error(message);
+          console.error('Payment Failed:', response.error);
+        });
+        paymentObject.on('payment.error', (error) => {
+          setIsProcessing(false);
+          const message = error.description || 'An error occurred during payment';
+          setPaymentError(message);
+          toast.error(message);
+          console.error('Payment Error:', error);
         });
         paymentObject.open();
       }
     } catch (error) {
       console.error('Order Error:', error);
-      toast.error(error.response?.data?.message || error.message || 'Failed to process order');
+      const message = error.response?.data?.message || error.message || 'Failed to process order';
+      setPaymentError(message);
+      toast.error(message);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const handleRetryPayment = () => {
+    setPaymentError(null);
+    handlePlaceOrder();
+  };
+
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 0; // Fixed shipping cost as per your code
+  const shipping = 50;
   const total = subtotal + shipping;
 
   if (loading) {
@@ -360,10 +433,10 @@ const CheckoutPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8 px-4">
+    <div className="min-h-screen bg-gray-100 py-6 px-4 sm:py-8 sm:px-6">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-8 relative">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6 sm:mb-8 relative">
           {[
             { step: 1, label: 'Address', icon: <FaTruck className="w-5 h-5" /> },
             { step: 2, label: 'Payment', icon: <FaCreditCard className="w-5 h-5" /> },
@@ -384,7 +457,7 @@ const CheckoutPage = () => {
                 {icon}
               </div>
               <p
-                className={`mt-2 text-sm font-semibold uppercase tracking-wide ${
+                className={`mt-2 text-xs sm:text-sm font-semibold uppercase tracking-wide ${
                   currentStep >= step ? 'text-teal-600' : 'text-gray-500'
                 }`}
               >
@@ -402,10 +475,10 @@ const CheckoutPage = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
           <motion.button
             onClick={() => navigate('/cart')}
-            className="mb-6 flex items-center gap-2 text-teal-600 hover:text-teal-700 transition-colors font-medium bg-teal-50 px-4 py-2 rounded-xl shadow-sm"
+            className="mb-4 sm:mb-6 flex items-center gap-2 text-teal-600 hover:text-teal-700 transition-colors font-medium bg-teal-50 px-4 py-2 rounded-xl shadow-sm"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -413,17 +486,44 @@ const CheckoutPage = () => {
             <span>Back to Cart</span>
           </motion.button>
 
+          {paymentError && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-4 p-4 bg-red-100 text-red-700 rounded-xl text-sm"
+            >
+              <p>{paymentError}</p>
+              <motion.button
+                onClick={handleRetryPayment}
+                className="mt-2 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                Retry Payment
+              </motion.button>
+            </motion.div>
+          )}
+
           <AnimatePresence mode="wait">
             {currentStep === 1 && (
-              <motion.div key="step1" variants={stepVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <h2 className="text-2xl font-bold text-gray-900">Delivery Address</h2>
+              <motion.div
+                key="step1"
+                variants={stepVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-4 sm:space-y-6"
+              >
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Delivery Address</h2>
                 {savedAddresses.length > 0 ? (
                   <div className="space-y-3">
                     {savedAddresses.map((addr) => (
                       <motion.div
                         key={addr._id}
                         className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                          selectedAddress === addr._id ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:bg-gray-50'
+                          selectedAddress === addr._id
+                            ? 'border-teal-500 bg-teal-50'
+                            : 'border-gray-200 hover:bg-gray-50'
                         }`}
                         whileHover={{ scale: 1.02 }}
                         onClick={() => setSelectedAddress(addr._id)}
@@ -438,7 +538,10 @@ const CheckoutPage = () => {
                             onChange={(e) => setSelectedAddress(e.target.value)}
                             className="text-teal-600 focus:ring-teal-500 w-5 h-5"
                           />
-                          <label htmlFor={addr._id} className="text-sm text-gray-700 leading-tight">
+                          <label
+                            htmlFor={addr._id}
+                            className="text-sm text-gray-700 leading-tight"
+                          >
                             {`${addr.street}, ${addr.city}, ${addr.state}, ${addr.postalCode}, ${addr.country}`}
                           </label>
                         </div>
@@ -446,7 +549,7 @@ const CheckoutPage = () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500">No saved addresses. Please add one below.</p>
+                  <p className="text-gray-500 text-sm">No saved addresses. Please add one below.</p>
                 )}
                 <motion.button
                   onClick={() => setShowNewAddressForm(!showNewAddressForm)}
@@ -485,7 +588,9 @@ const CheckoutPage = () => {
                       onClick={handleAddNewAddress}
                       disabled={isProcessing}
                       className={`w-full px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                        isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600 text-white'
+                        isProcessing
+                          ? 'bg-gray-400'
+                          : 'bg-teal-500 hover:bg-teal-600 text-white'
                       }`}
                       whileHover={!isProcessing ? { scale: 1.05 } : {}}
                       whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -499,7 +604,9 @@ const CheckoutPage = () => {
                     onClick={handleConfirmAddress}
                     disabled={isProcessing}
                     className={`w-full px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                      isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600 text-white'
+                      isProcessing
+                        ? 'bg-gray-400'
+                        : 'bg-teal-500 hover:bg-teal-600 text-white'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -511,14 +618,23 @@ const CheckoutPage = () => {
             )}
 
             {currentStep === 2 && (
-              <motion.div key="step2" variants={stepVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <h2 className="text-2xl font-bold text-gray-900">Payment Method</h2>
+              <motion.div
+                key="step2"
+                variants={stepVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-4 sm:space-y-6"
+              >
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Payment Method</h2>
                 <div className="space-y-3">
                   {paymentOptions().map(({ method, desc, value }) => (
                     <motion.div
                       key={value}
                       className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                        paymentMethod === value ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:bg-gray-50'
+                        paymentMethod === value
+                          ? 'border-teal-500 bg-teal-50'
+                          : 'border-gray-200 hover:bg-gray-50'
                       }`}
                       whileHover={{ scale: 1.02 }}
                       onClick={() => setPaymentMethod(value)}
@@ -534,7 +650,10 @@ const CheckoutPage = () => {
                           className="text-teal-600 focus:ring-teal-500 w-5 h-5"
                         />
                         <div>
-                          <label htmlFor={value} className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <label
+                            htmlFor={value}
+                            className="text-sm font-medium text-gray-700 flex items-center gap-2"
+                          >
                             {method === 'Full Online Payment' && <FaCreditCard />}
                             {method === 'Split Payment' && <FaWallet />}
                             {method === 'Full Cash on Delivery' && <FaMoneyBillWave />}
@@ -548,7 +667,9 @@ const CheckoutPage = () => {
                 </div>
                 {paymentMethod === 'razorpay_split' && (
                   <div className="bg-teal-50 p-4 rounded-xl text-sm text-gray-700">
-                    <p><strong>Payment Split Details:</strong></p>
+                    <p>
+                      <strong>Payment Split Details:</strong>
+                    </p>
                     {calculatePaymentSplit().map((item) => (
                       <p key={item.productId}>
                         {item.name}: ₹{item.onlineAmount} Online, ₹{item.codAmount} COD
@@ -561,7 +682,9 @@ const CheckoutPage = () => {
                     onClick={() => setCurrentStep(1)}
                     disabled={isProcessing}
                     className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium shadow-sm ${
-                      isProcessing ? 'bg-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      isProcessing
+                        ? 'bg-gray-400'
+                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -572,7 +695,9 @@ const CheckoutPage = () => {
                     onClick={() => setCurrentStep(3)}
                     disabled={!paymentMethod || isProcessing}
                     className={`flex-1 px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                      !paymentMethod || isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600 text-white'
+                      !paymentMethod || isProcessing
+                        ? 'bg-gray-400'
+                        : 'bg-teal-500 hover:bg-teal-600 text-white'
                     }`}
                     whileHover={paymentMethod && !isProcessing ? { scale: 1.05 } : {}}
                     whileTap={paymentMethod && !isProcessing ? { scale: 0.95 } : {}}
@@ -584,8 +709,15 @@ const CheckoutPage = () => {
             )}
 
             {currentStep === 3 && (
-              <motion.div key="step3" variants={stepVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <h2 className="text-2xl font-bold text-gray-900">Order Summary</h2>
+              <motion.div
+                key="step3"
+                variants={stepVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-4 sm:space-y-6"
+              >
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Order Summary</h2>
                 <div className="space-y-4 bg-teal-50 p-4 rounded-xl">
                   {cartItems.map((item) => (
                     <motion.div
@@ -603,11 +735,24 @@ const CheckoutPage = () => {
                       />
                       <div className="flex-1">
                         <h3 className="text-sm font-semibold text-gray-800">{item.name}</h3>
-                        <p className="text-xs text-gray-600">Qty: {item.quantity} | Size: {item.size} | Color: {item.color}</p>
-                        <p className="text-sm text-teal-600 font-medium">₹{(item.price * item.quantity).toFixed(2)}</p>
+                        <p className="text-xs text-gray-600">
+                          Qty: {item.quantity} | Size: {item.size} | Color: {item.color}
+                        </p>
+                        <p className="text-sm text-teal-600 font-medium">
+                          ₹{(item.price * item.quantity).toFixed(2)}
+                        </p>
                         {paymentMethod === 'razorpay_split' && (
                           <p className="text-xs text-gray-500">
-                            Online: ₹{calculatePaymentSplit().find((i) => i.productId === item.productId)?.onlineAmount} | COD: ₹{calculatePaymentSplit().find((i) => i.productId === item.productId)?.codAmount}
+                            Online: ₹
+                            {
+                              calculatePaymentSplit().find((i) => i.productId === item.productId)
+                                ?.onlineAmount
+                            }{' '}
+                            | COD: ₹
+                            {
+                              calculatePaymentSplit().find((i) => i.productId === item.productId)
+                                ?.codAmount
+                            }
                           </p>
                         )}
                       </div>
@@ -625,13 +770,23 @@ const CheckoutPage = () => {
                     {paymentMethod !== 'cod_full' && (
                       <p className="flex justify-between">
                         <span>Online Payment:</span>
-                        <span>₹{calculatePaymentSplit().reduce((sum, item) => sum + item.onlineAmount, 0).toFixed(2)}</span>
+                        <span>
+                          ₹
+                          {calculatePaymentSplit()
+                            .reduce((sum, item) => sum + item.onlineAmount, 0)
+                            .toFixed(2)}
+                        </span>
                       </p>
                     )}
                     {paymentMethod !== 'razorpay_full' && (
                       <p className="flex justify-between">
                         <span>COD Amount:</span>
-                        <span>₹{calculatePaymentSplit().reduce((sum, item) => sum + item.codAmount, 0).toFixed(2)}</span>
+                        <span>
+                          ₹
+                          {calculatePaymentSplit()
+                            .reduce((sum, item) => sum + item.codAmount, 0)
+                            .toFixed(2)}
+                        </span>
                       </p>
                     )}
                     <p className="flex justify-between font-semibold text-gray-800 pt-2">
@@ -676,7 +831,11 @@ const CheckoutPage = () => {
                   <p>
                     <strong>Address:</strong>{' '}
                     {savedAddresses.find((addr) => addr._id === selectedAddress)
-                      ? `${savedAddresses.find((addr) => addr._id === selectedAddress).street}, ${savedAddresses.find((addr) => addr._id === selectedAddress).city}, ${savedAddresses.find((addr) => addr._id === selectedAddress).state}, ${savedAddresses.find((addr) => addr._id === selectedAddress).postalCode}, ${savedAddresses.find((addr) => addr._id === selectedAddress).country}`
+                      ? `${savedAddresses.find((addr) => addr._id === selectedAddress).street}, ${
+                          savedAddresses.find((addr) => addr._id === selectedAddress).city
+                        }, ${savedAddresses.find((addr) => addr._id === selectedAddress).state}, ${
+                          savedAddresses.find((addr) => addr._id === selectedAddress).postalCode
+                        }, ${savedAddresses.find((addr) => addr._id === selectedAddress).country}`
                       : 'Not selected'}
                   </p>
                   <p>
@@ -693,7 +852,9 @@ const CheckoutPage = () => {
                     onClick={() => setCurrentStep(2)}
                     disabled={isProcessing}
                     className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium shadow-sm ${
-                      isProcessing ? 'bg-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      isProcessing
+                        ? 'bg-gray-400'
+                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -704,7 +865,9 @@ const CheckoutPage = () => {
                     onClick={handlePlaceOrder}
                     disabled={isProcessing}
                     className={`flex-1 px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                      isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600 text-white'
+                      isProcessing
+                        ? 'bg-gray-400'
+                        : 'bg-teal-500 hover:bg-teal-600 text-white'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}

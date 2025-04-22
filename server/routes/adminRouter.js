@@ -1125,7 +1125,7 @@ router.delete('/sponsored/:productId', adminLoggedin, async (req, res) => {
 });
 
 // List Sponsored Products
-router.get('/sponsored', adminLoggedin, async (req, res) => {
+router.get('/sponsored', async (req, res) => {
   try {
     const sponsoredProducts = await SponsoredProduct.find().populate('productId', 'name price images');
     res.status(200).json({ success: true, products: sponsoredProducts });
