@@ -1783,6 +1783,8 @@ router.get('/trending', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch trending products', error: error.message });
   }
 });
+const SponsoredProduct = require('../models/SponsoredProductModel');
+
 
 router.get('/sponsored', async (req, res) => {
   try {
