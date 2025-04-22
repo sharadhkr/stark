@@ -4,8 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
-import agroLogo from '../assets/logo.png';
-import slogo from '../assets/slogo.png';
+import agroLogo from '../../assets/slogo.png';
 
 // Animation variants
 const fadeIn = {
@@ -229,7 +228,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
           <div className="flex w-full items-center">
             <div className=" relative w-15 flex h-full rounded-full shadow-inner">
               <div className="-top-[14px] z-10 -left-8 w-32 absolute">
-                <img className="drop-shadow-lg w-full" src={slogo} alt="Logo" />
+                <img className="drop-shadow-lg w-full" src={agroLogo} alt="Logo" />
               </div>
             </div>
             <input
@@ -549,7 +548,7 @@ export default SearchBar;
 // import axios from '../useraxios';
 // import toast from 'react-hot-toast';
 // import agroLogo from '../assets/logo.png';
-// import sLogo from '../assets/slogo.png';
+// import agroLogo from '../assets/agroLogo.png';
 
 // // Animation variants
 // const fadeIn = {
@@ -772,7 +771,7 @@ export default SearchBar;
 //                 <div className="flex w-full items-center">
 //                     <div className="relative w-[10%] flex bg-blue-100 rounded-full shadow-[inset_0px_3px_15px_-10px] mr-10">
 //                         <div className='-top-2 z-10 -left-5 w-24 absolute'>
-//                             <img className=' drop-shadow-lg w-24' src={sLogo} alt="" />
+//                             <img className=' drop-shadow-lg w-24' src={agroLogo} alt="" />
 //                         </div>
 //                     </div>
 //                     <div className='bg-blue-200 h-14 w-[3px] mr-3 '></div>
