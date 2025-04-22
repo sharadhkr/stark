@@ -6,7 +6,7 @@ import axios from '../axios';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
-const AdminCategories = ({ categories, setCategories, loading }) => {
+const AdminCategories = ({ categories = [], setCategories, loading }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCategories, setFilteredCategories] = useState(categories);
   const [selectedCategories, setSelectedCategories] = useState([]);
@@ -63,14 +63,19 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
       formData.append('description', categoryForm.description);
       if (categoryForm.icon) formData.append('icon', categoryForm.icon);
 
+      const token = localStorage.getItem('adminToken');
       let response;
       if (editingCategory) {
-        response = await axios.put(`/api/categories/${editingCategory._id}`, formData);
+        response = await axios.put(`/api/admin/auth/categories/${editingCategory._id}`, formData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setCategories(categories.map((cat) => (cat._id === editingCategory._id ? response.data.category : cat)));
         setFilteredCategories(filteredCategories.map((cat) => (cat._id === editingCategory._id ? response.data.category : cat)));
         toast.success('Category updated successfully');
       } else {
-        response = await axios.post('/api/categories', formData);
+        response = await axios.post('/api/admin/auth/categories', formData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setCategories([...categories, response.data.category]);
         setFilteredCategories([...filteredCategories, response.data.category]);
         toast.success('Category added successfully');
@@ -80,7 +85,12 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
       setEditingCategory(null);
       setShowCategoryForm(false);
     } catch (error) {
-      toast.error(editingCategory ? 'Failed to update category' : 'Failed to add category');
+      console.error('Category submit error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(error.response?.data?.message || (editingCategory ? 'Failed to update category' : 'Failed to add category'));
     }
   };
 
@@ -94,13 +104,21 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
     try {
-      await axios.delete(`/api/categories/${id}`);
+      const token = localStorage.getItem('adminToken');
+      await axios.delete(`/api/admin/auth/categories/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setCategories(categories.filter((cat) => cat._id !== id));
       setFilteredCategories(filteredCategories.filter((cat) => cat._id !== id));
       setSelectedCategories(selectedCategories.filter((catId) => catId !== id));
       toast.success('Category deleted successfully');
     } catch (error) {
-      toast.error('Failed to delete category');
+      console.error('Delete category error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(error.response?.data?.message || 'Failed to delete category');
     }
   };
 
@@ -111,13 +129,22 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
     }
     if (!window.confirm(`Are you sure you want to delete ${selectedCategories.length} categories?`)) return;
     try {
-      await axios.delete('/api/categories/bulk', { data: { categoryIds: selectedCategories } });
+      const token = localStorage.getItem('adminToken');
+      await axios.delete('/api/admin/auth/categories/bulk', {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { categoryIds: selectedCategories },
+      });
       setCategories(categories.filter((cat) => !selectedCategories.includes(cat._id)));
       setFilteredCategories(filteredCategories.filter((cat) => !selectedCategories.includes(cat._id)));
       setSelectedCategories([]);
       toast.success('Categories deleted successfully');
     } catch (error) {
-      toast.error('Failed to delete categories');
+      console.error('Bulk delete categories error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(error.response?.data?.message || 'Failed to delete categories');
     }
   };
 
@@ -128,10 +155,18 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
       return;
     }
     try {
-      const response = await axios.get(`/api/categories/search?name=${searchQuery}`);
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(`/api/admin/auth/categories/search?name=${encodeURIComponent(searchQuery)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setFilteredCategories(response.data.categories || []);
     } catch (error) {
-      toast.error('Failed to search categories');
+      console.error('Search categories error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(error.response?.data?.message || 'Failed to search categories');
     }
   };
 
@@ -210,7 +245,15 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
                 {selectedCategories.includes(category._id) ? <FaCheckSquare /> : <FaSquare />}
               </motion.button>
               {category.icon && (
-                <img src={category.icon} alt={category.name} className="w-8 h-8 object-contain rounded-full" />
+                <img
+                  src={category.icon}
+                  alt={category.name}
+                  className="w-8 h-8 object-contain rounded-full"
+                  onError={(e) => {
+                    console.error(`Failed to load category icon: ${category.icon}`);
+                    e.target.src = 'https://via.placeholder.com/32?text=Icon';
+                  }}
+                />
               )}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800">{category.name}</h3>
@@ -299,6 +342,10 @@ const AdminCategories = ({ categories, setCategories, loading }) => {
                       src={categoryIconPreview}
                       alt="Category icon preview"
                       className="w-16 h-16 object-contain rounded-full border border-gray-200"
+                      onError={(e) => {
+                        console.error(`Failed to load icon preview: ${categoryIconPreview}`);
+                        e.target.src = 'https://via.placeholder.com/64?text=Icon';
+                      }}
                     />
                   </div>
                 )}

@@ -68,7 +68,10 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchDashboardData = async () => {
+      if (!isMounted) return;
       setLoading(true);
       try {
         const token = localStorage.getItem('adminToken');
@@ -76,11 +79,31 @@ const AdminDashboard = () => {
           throw new Error('No admin token found. Please log in.');
         }
 
-        // Verify token first
+        // Verify token
+        console.log('Verifying admin token:', token);
         const verifyRes = await axios.get('/api/admin/auth/verify-token');
-        if (verifyRes.data.admin?.role !== 'admin') {
+        console.log('Verify token response:', verifyRes.data);
+
+        // Flexible admin validation
+        const adminData = verifyRes.data.admin || {};
+        if (!verifyRes.data.success || adminData.role !== 'admin') {
           throw new Error('Admin access required');
         }
+
+        // Fetch dashboard data with error handling
+        const fetchWithErrorHandling = async (url, endpointName) => {
+          try {
+            const response = await axios.get(url);
+            return response;
+          } catch (error) {
+            console.error(`Error fetching ${endpointName}:`, {
+              message: error.message,
+              status: error.response?.status,
+              data: error.response?.data,
+            });
+            throw error;
+          }
+        };
 
         const [
           sellersRes,
@@ -91,13 +114,13 @@ const AdminDashboard = () => {
           comboOffersRes,
           adsRes,
         ] = await Promise.all([
-          axios.get('/api/admin/auth/sellers'),
-          axios.get('/api/admin/auth/products'),
-          axios.get('/api/admin/auth/orders'),
-          axios.get('/api/admin/auth/users'),
-          axios.get('/api/categories'),
-          axios.get('/api/admin/auth/combo-offers'),
-          axios.get('/api/admin/auth/ads'),
+          fetchWithErrorHandling('/api/admin/auth/sellers', 'sellers'),
+          fetchWithErrorHandling('/api/admin/auth/products', 'products'),
+          fetchWithErrorHandling('/api/admin/auth/orders', 'orders'),
+          fetchWithErrorHandling('/api/admin/auth/users', 'users'),
+          fetchWithErrorHandling('/api/categories', 'categories'),
+          fetchWithErrorHandling('/api/admin/auth/combo-offers', 'combo-offers'),
+          fetchWithErrorHandling('/api/admin/auth/ads', 'ads'),
         ]);
 
         // Normalize ads data
@@ -128,34 +151,45 @@ const AdminDashboard = () => {
             .filter((img) => img && img.url);
         };
 
-        setAds({
-          singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
-          doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
-          tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
-        });
-
-        setSellers(sellersRes.data.sellers || []);
-        setProducts(productsRes.data.products || []);
-        setOrders(ordersRes.data.orders || []);
-        setUsers(usersRes.data.users || []);
-        setCategories(categoriesRes.data.categories || []);
-        setComboOffers(comboOffersRes.data.comboOffers || []);
+        if (isMounted) {
+          setAds({
+            singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
+            doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
+            tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
+          });
+          setSellers(sellersRes.data.sellers || []);
+          setProducts(productsRes.data.products || []);
+          setOrders(ordersRes.data.orders || []);
+          setUsers(usersRes.data.users || []);
+          setCategories(categoriesRes.data.categories || []);
+          setComboOffers(comboOffersRes.data.comboOffers || []);
+          console.log('Products prop:', productsRes.data.products || []);
+          console.log('ComboOffers prop:', comboOffersRes.data.comboOffers || []);
+        }
       } catch (error) {
         console.error('Dashboard fetch error:', {
           message: error.message,
           status: error.response?.status,
           data: error.response?.data,
+          stack: error.stack,
         });
-        toast.error(error.message || 'Failed to load dashboard data');
-        if (error.response?.status === 401 || error.response?.status === 403) {
-          localStorage.removeItem('adminToken');
-          navigate('/admin/login');
+        if (isMounted) {
+          toast.error(error.response?.data?.message || error.message || 'Failed to load dashboard data');
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            localStorage.removeItem('adminToken');
+            navigate('/admin/login');
+          }
         }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
+
     fetchDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [navigate]);
 
   const handleLogout = () => {
