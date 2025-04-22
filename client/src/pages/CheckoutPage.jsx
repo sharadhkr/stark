@@ -243,7 +243,7 @@ const CheckoutPage = () => {
       totalAmount,
       onlineAmount: totalOnlineAmount,
       codAmount: totalCODAmount,
-      shipping: 50,
+      shipping: 0,
       userDetails,
       addressId: selectedAddress,
       paymentMethod: paymentMethod === 'cod_full' ? 'Cash on Delivery' : 'Razorpay',
@@ -334,7 +334,7 @@ const CheckoutPage = () => {
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 50; // Fixed shipping cost as per your code
+  const shipping = 0; // Fixed shipping cost as per your code
   const total = subtotal + shipping;
 
   if (loading) {
