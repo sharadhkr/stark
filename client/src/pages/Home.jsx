@@ -110,7 +110,7 @@ const Home = () => {
             error: err,
             data: { comboOffers: [] },
           })),
-          axios.get('/api/admin/auth/sponsored').catch((err) => ({
+          axios.get('/api/user/auth/sponsored').catch((err) => ({
             error: err,
             data: { products: [] },
           })),

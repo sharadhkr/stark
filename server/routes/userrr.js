@@ -1784,4 +1784,15 @@ router.get('/trending', async (req, res) => {
   }
 });
 
+router.get('/sponsored', async (req, res) => {
+  try {
+    const sponsoredProducts = await SponsoredProduct.find().populate('productId', 'name price images');
+    res.status(200).json({ success: true, products: sponsoredProducts });
+  } catch (error) {
+    console.error('List Sponsored Products Error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to fetch sponsored products', error: error.message });
+  }
+});
+
+
 module.exports = router;
