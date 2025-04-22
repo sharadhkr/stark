@@ -1468,7 +1468,7 @@ router.post('/place-order', userLoggedin, async (req, res) => {
           phoneNumber: userDetails.phoneNumber || user.phoneNumber,
           address: `${address.street}, ${address.city}, ${address.state}, ${address.postalCode}, ${address.country}`,
         },
-0        items: sellerItems,
+        items: sellerItems, // Fixed: Removed erroneous '0'
         total: sellerTotal,
         onlineAmount: sellerItems.reduce((sum, item) => sum + (item.onlineAmount || 0), 0),
         codAmount: sellerItems.reduce((sum, item) => sum + (item.codAmount || 0), 0),
