@@ -13,6 +13,7 @@ import AdminCategories from '../Components/admin/AdminCategories';
 import AdminAds from '../Components/admin/AdminAds';
 import AdminComboOffer from '../Components/admin/AdminComboOffer';
 import AdminSponsoredProducts from '../Components/admin/AdminSponsoredProducts';
+import AdminLayout from '../Components/admin/AdminLayout'; // New component
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -67,10 +68,7 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    let isMounted = true;
-
     const fetchDashboardData = async () => {
-      if (!isMounted) return;
       setLoading(true);
       try {
         const token = localStorage.getItem('adminToken');
@@ -78,11 +76,11 @@ const AdminDashboard = () => {
           throw new Error('No admin token found. Please log in.');
         }
 
-        // Verify token
-        console.log('Verifying admin token:', token);
+        // Verify token first
         const verifyRes = await axios.get('/api/admin/auth/verify-token');
-        console.log('Verify token response:', verifyRes.data);
-
+        if (verifyRes.data.admin?.role !== 'admin') {
+          throw new Error('Admin access required');
+        }
 
         const [
           sellersRes,
@@ -130,45 +128,34 @@ const AdminDashboard = () => {
             .filter((img) => img && img.url);
         };
 
-        if (isMounted) {
-          setAds({
-            singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
-            doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
-            tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
-          });
-          setSellers(sellersRes.data.sellers || []);
-          setProducts(productsRes.data.products || []);
-          setOrders(ordersRes.data.orders || []);
-          setUsers(usersRes.data.users || []);
-          setCategories(categoriesRes.data.categories || []);
-          setComboOffers(comboOffersRes.data.comboOffers || []);
-          console.log('Products prop:', productsRes.data.products || []);
-          console.log('ComboOffers prop:', comboOffersRes.data.comboOffers || []);
-        }
+        setAds({
+          singleadd: { images: normalizeImages(adsRes.data.singleadd?.images) },
+          doubleadd: { images: normalizeImages(adsRes.data.doubleadd?.images) },
+          tripleadd: { images: normalizeImages(adsRes.data.tripleadd?.images) },
+        });
+
+        setSellers(sellersRes.data.sellers || []);
+        setProducts(productsRes.data.products || []);
+        setOrders(ordersRes.data.orders || []);
+        setUsers(usersRes.data.users || []);
+        setCategories(categoriesRes.data.categories || []);
+        setComboOffers(comboOffersRes.data.comboOffers || []);
       } catch (error) {
         console.error('Dashboard fetch error:', {
           message: error.message,
           status: error.response?.status,
           data: error.response?.data,
-          stack: error.stack,
         });
-        if (isMounted) {
-          toast.error(error.response?.data?.message || error.message || 'Failed to load dashboard data');
-          if (error.response?.status === 401 || error.response?.status === 403) {
-            localStorage.removeItem('adminToken');
-            navigate('/admin/login');
-          }
+        toast.error(error.message || 'Failed to load dashboard data');
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          localStorage.removeItem('adminToken');
+          navigate('/admin/login');
         }
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
     };
-
     fetchDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
   }, [navigate]);
 
   const handleLogout = () => {
@@ -193,6 +180,8 @@ const AdminDashboard = () => {
               ? 'Combo Offers'
               : activeSection === 'sponsored-products'
               ? 'Sponsored Products'
+              : activeSection === 'layout'
+              ? 'Homepage Layout'
               : activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
           </h2>
         </motion.div>
@@ -242,6 +231,9 @@ const AdminDashboard = () => {
           )}
           {activeSection === 'sponsored-products' && (
             <AdminSponsoredProducts products={products} loading={loading} />
+          )}
+          {activeSection === 'layout' && (
+            <AdminLayout categories={categories} loading={loading} />
           )}
         </ErrorBoundary>
       </main>
