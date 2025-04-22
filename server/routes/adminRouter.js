@@ -7,13 +7,14 @@ const Product = require('../models/productModel');
 const User = require('../models/userModel');
 const Order = require('../models/orderModel');
 const Category = require('../models/CategoryModel');
+const SponsoredProduct = require('../models/SponsoredProductModel');
+const ComboOffer = require('../models/ComboOfferModel');
+const Layout = require('../models/layoutModel');
 const adminLoggedin = require('../middleware/adminLoggedin');
 const multer = require('multer');
 const { uploadToCloudinary } = require('../config/clowdnaryConfig');
 const mongoose = require('mongoose');
-const SponsoredProduct = require('../models/SponsoredProductModel'); // Adjust path
 require('dotenv').config();
-const ComboOffer = require('../models/ComboOfferModel');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -70,16 +71,16 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Admin already exists' });
     }
 
-    const admin = new Admin({ phoneNumber, email, name, password });
+    const admin = new Admin({ phoneNumber, email, name, password, role: 'admin' });
     await admin.save();
 
     res.status(201).json({
       success: true,
       message: 'Admin created successfully',
-      admin: { id: admin._id, phoneNumber, email, name },
+      admin: { id: admin._id, phoneNumber, email, name, role: 'admin' },
     });
   } catch (error) {
-    console.error('Admin creation failed:', error);
+    console.error('Admin creation failed:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
@@ -110,7 +111,7 @@ router.post('/login', async (req, res) => {
       token,
     });
   } catch (error) {
-    console.error('Admin login failed:', error);
+    console.error('Admin login failed:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
@@ -118,31 +119,17 @@ router.post('/login', async (req, res) => {
 // Verify Token Endpoint
 router.get('/verify-token', adminLoggedin, async (req, res) => {
   try {
-    // Fetch admin from database
-    const admin = await Admin.findById(req.admin.id).select('-password');
-    if (!admin) {
-      return res.status(404).json({ success: false, message: 'Admin not found' });
-    }
-
-    // Verify admin role
-    if (!admin.role || admin.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin access required' });
-    }
-
-    // Prepare response
-    const adminData = {
-      id: admin._id,
-      phoneNumber: admin.phoneNumber, // Adjust based on your Admin model fields
-      role: admin.role,
-      // Add other fields as needed (e.g., email, name)
-    };
-
-    res.status(200).json({ success: true, admin: adminData });
-  } catch (error) {
-    console.error('Verify token error:', {
-      message: error.message,
-      stack: error.stack,
+    res.status(200).json({
+      success: true,
+      admin: {
+        id: req.admin.id,
+        phoneNumber: req.admin.phoneNumber,
+        role: req.admin.role,
+        name: req.admin.name, // Include additional fields if needed
+      },
     });
+  } catch (error) {
+    console.error('Verify token error:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
@@ -155,8 +142,32 @@ router.get('/sellers', adminLoggedin, async (req, res) => {
       .populate({ path: 'orders', select: 'orderId total status' });
     res.status(200).json({ success: true, sellers });
   } catch (error) {
-    console.error('Failed to fetch sellers:', error);
+    console.error('Failed to fetch sellers:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch sellers', error: error.message });
+  }
+});
+
+// Search Sellers
+router.get('/sellers/search', adminLoggedin, async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) {
+      return res.status(400).json({ success: false, message: 'Search query is required' });
+    }
+
+    const sellers = await Seller.find({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { shopName: { $regex: query, $options: 'i' } },
+      ],
+    })
+      .populate({ path: 'products', select: 'name price status' })
+      .populate({ path: 'orders', select: 'orderId total status' });
+
+    res.status(200).json({ success: true, sellers });
+  } catch (error) {
+    console.error('Search sellers error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to search sellers', error: error.message });
   }
 });
 
@@ -183,7 +194,7 @@ router.put('/sellers/:id', adminLoggedin, async (req, res) => {
 
     res.status(200).json({ success: true, seller });
   } catch (error) {
-    console.error('Failed to update seller:', error);
+    console.error('Failed to update seller:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to update seller', error: error.message });
   }
 });
@@ -200,7 +211,7 @@ router.delete('/sellers/:id', adminLoggedin, async (req, res) => {
     await Seller.findByIdAndDelete(id);
     res.status(200).json({ success: true, message: 'Seller and associated data deleted successfully' });
   } catch (error) {
-    console.error('Failed to delete seller:', error);
+    console.error('Failed to delete seller:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to delete seller', error: error.message });
   }
 });
@@ -213,8 +224,29 @@ router.get('/products', adminLoggedin, async (req, res) => {
       .populate('category', 'name');
     res.status(200).json({ success: true, products });
   } catch (error) {
-    console.error('Failed to fetch products:', error);
+    console.error('Failed to fetch products:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch products', error: error.message });
+  }
+});
+
+// Search Products
+router.get('/products/search', adminLoggedin, async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) {
+      return res.status(400).json({ success: false, message: 'Search query is required' });
+    }
+
+    const products = await Product.find({
+      name: { $regex: query, $options: 'i' },
+    })
+      .populate('sellerId', 'name shopName')
+      .populate('category', 'name');
+
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    console.error('Search products error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to search products', error: error.message });
   }
 });
 
@@ -290,8 +322,8 @@ router.post(
       const parsedWeight = Number(weight) || 0;
       const parsedOnlinePaymentPercentage = Number(onlinePaymentPercentage) || 100;
       const parsedIsCashOnDeliveryAvailable = isCashOnDeliveryAvailable === 'true' || isCashOnDeliveryAvailable === true;
-      const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes);
-      const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors);
+      const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes || '[]');
+      const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors || '[]');
       let parsedDimensions = dimensions ? (typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions) : {};
 
       if (isNaN(parsedQuantity) || parsedQuantity < 0) {
@@ -386,7 +418,7 @@ router.post(
 
       res.status(201).json({ success: true, message: 'Product created successfully', product });
     } catch (error) {
-      console.error('Product creation error:', error);
+      console.error('Product creation error:', { message: error.message, stack: error.stack });
       res.status(500).json({ success: false, message: 'Server error creating product', error: error.message });
     }
   }
@@ -496,14 +528,14 @@ router.put(
         product.discountPercentage = parsedDiscountPercentage;
       }
       if (sizes) {
-        const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes);
+        const parsedSizes = Array.isArray(sizes) ? sizes : JSON.parse(sizes || '[]');
         if (parsedSizes.length === 0) {
           return res.status(400).json({ success: false, message: 'At least one size is required' });
         }
         product.sizes = parsedSizes;
       }
       if (colors) {
-        const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors);
+        const parsedColors = Array.isArray(colors) ? colors : JSON.parse(colors || '[]');
         if (parsedColors.length === 0) {
           return res.status(400).json({ success: false, message: 'At least one color is required' });
         }
@@ -573,7 +605,7 @@ router.put(
 
       res.status(200).json({ success: true, message: 'Product updated successfully', product });
     } catch (error) {
-      console.error('Product update error:', error);
+      console.error('Product update error:', { message: error.message, stack: error.stack });
       res.status(500).json({ success: false, message: 'Server error updating product', error: error.message });
     }
   }
@@ -592,7 +624,7 @@ router.delete('/products/:id', adminLoggedin, async (req, res) => {
     await Product.findByIdAndDelete(id);
     res.status(200).json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
-    console.error('Failed to delete product:', error);
+    console.error('Failed to delete product:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to delete product', error: error.message });
   }
 });
@@ -606,7 +638,7 @@ router.get('/orders', adminLoggedin, async (req, res) => {
       .populate('items.productId', 'name images');
     res.status(200).json({ success: true, orders });
   } catch (error) {
-    console.error('Failed to fetch orders:', error);
+    console.error('Failed to fetch orders:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch orders', error: error.message });
   }
 });
@@ -662,7 +694,7 @@ router.put('/orders/:id', adminLoggedin, async (req, res) => {
 
     res.status(200).json({ success: true, message: 'Order updated successfully', order });
   } catch (error) {
-    console.error('Order update error:', error);
+    console.error('Order update error:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error updating order', error: error.message });
   }
 });
@@ -675,8 +707,33 @@ router.get('/users', adminLoggedin, async (req, res) => {
       .populate({ path: 'savedForLater.productId', select: 'name price' });
     res.status(200).json({ success: true, users });
   } catch (error) {
-    console.error('Failed to fetch users:', error);
+    console.error('Failed to fetch users:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch users', error: error.message });
+  }
+});
+
+// Search Users
+router.get('/users/search', adminLoggedin, async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) {
+      return res.status(400).json({ success: false, message: 'Search query is required' });
+    }
+
+    const users = await User.find({
+      $or: [
+        { firstName: { $regex: query, $options: 'i' } },
+        { lastName: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } },
+      ],
+    })
+      .populate({ path: 'wishlist.productId', select: 'name price' })
+      .populate({ path: 'savedForLater.productId', select: 'name price' });
+
+    res.status(200).json({ success: true, users });
+  } catch (error) {
+    console.error('Search users error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to search users', error: error.message });
   }
 });
 
@@ -684,14 +741,18 @@ router.get('/users', adminLoggedin, async (req, res) => {
 router.put('/users/:id', adminLoggedin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { role, firstName, lastName, email, phoneNumber } = req.body;
+    const { role, firstName, lastName, email, phoneNumber, status } = req.body;
 
     if (role && !['user', 'seller', 'admin'].includes(role)) {
       return res.status(400).json({ success: false, message: 'Invalid role value' });
     }
+    if (status && !['approved', 'suspended'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status value' });
+    }
 
     const updateData = {};
     if (role) updateData.role = role;
+    if (status) updateData.status = status;
     if (firstName) updateData.firstName = firstName.trim();
     if (lastName) updateData.lastName = lastName.trim();
     if (email) updateData.email = email.trim();
@@ -702,7 +763,7 @@ router.put('/users/:id', adminLoggedin, async (req, res) => {
 
     res.status(200).json({ success: true, user });
   } catch (error) {
-    console.error('Failed to update user:', error);
+    console.error('Failed to update user:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to update user', error: error.message });
   }
 });
@@ -718,7 +779,7 @@ router.delete('/users/:id', adminLoggedin, async (req, res) => {
     await User.findByIdAndDelete(id);
     res.status(200).json({ success: true, message: 'User and associated data deleted successfully' });
   } catch (error) {
-    console.error('Failed to delete user:', error);
+    console.error('Failed to delete user:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to delete user', error: error.message });
   }
 });
@@ -772,7 +833,7 @@ router.get('/analytics', adminLoggedin, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Failed to fetch analytics:', error);
+    console.error('Failed to fetch analytics:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch analytics', error: error.message });
   }
 });
@@ -823,7 +884,7 @@ router.post(
         [field]: admin[field],
       });
     } catch (error) {
-      console.error(`Failed to add ${type} ad images:`, error);
+      console.error(`Failed to add ${type} ad images:`, { message: error.message, stack: error.stack });
       if (error.name === 'ValidationError') {
         const errors = Object.values(error.errors).map((err) => err.message);
         return res.status(400).json({
@@ -862,9 +923,7 @@ router.put(
       }
 
       const imageUploads = await Promise.all(
-        req.files.map((file) =>
-          uploadToCloudinary(file.buffer, { folder: 'ads', resource_type: 'image' })
-        )
+        req.files.map((file) => uploadToCloudinary(file.buffer, { folder: 'ads', resource_type: 'image' }))
       );
       const imageUrls = imageUploads.map((result) => result.url.replace(/^http:/, 'https:'));
 
@@ -879,7 +938,7 @@ router.put(
       }
 
       const field = `${type}add`;
-      admin[field] = { images: imageUrls };
+      admin[field] = { images: imageUrls.map((url) => ({ url, disabled: false })) };
       await admin.save();
 
       res.status(200).json({
@@ -888,7 +947,7 @@ router.put(
         [field]: admin[field],
       });
     } catch (error) {
-      console.error(`Failed to update ${type} ad images:`, error);
+      console.error(`Failed to update ${type} ad images:`, { message: error.message, stack: error.stack });
       if (error.name === 'ValidationError') {
         const errors = Object.values(error.errors).map((err) => err.message);
         return res.status(400).json({
@@ -934,7 +993,7 @@ router.patch('/ads/:type/image/:index/toggle', adminLoggedin, async (req, res) =
       [field]: admin[field],
     });
   } catch (error) {
-    console.error(`Failed to toggle ${type} ad image:`, error);
+    console.error(`Failed to toggle ${type} ad image:`, { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: `Server error toggling ${type} ad image`,
@@ -971,7 +1030,7 @@ router.delete('/ads/:type/image/:index', adminLoggedin, async (req, res) => {
       [field]: admin[field],
     });
   } catch (error) {
-    console.error(`Failed to remove ${type} ad image:`, error);
+    console.error(`Failed to remove ${type} ad image:`, { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: `Server error removing ${type} ad image`,
@@ -992,47 +1051,104 @@ router.get('/ads', async (req, res) => {
     }, []);
     res.status(200).json({ success: true, ads });
   } catch (error) {
-    console.error('Failed to fetch ad images:', error);
+    console.error('Failed to fetch ad images:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error fetching ad images', error: error.message });
   }
 });
+
+// Toggle Sponsored Status for Product
 router.patch('/products/:id/sponsored', adminLoggedin, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
+      return res.status(404).json({ success: false, message: 'Product not found' });
     }
     product.isSponsored = !product.isSponsored;
     await product.save();
     res.json({ success: true, product });
   } catch (error) {
-    console.error('Error toggling sponsored status:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error toggling sponsored status:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
+// Add Sponsored Product
+router.post('/sponsored', adminLoggedin, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    if (!productId) {
+      return res.status(400).json({ success: false, message: 'Product ID is required' });
+    }
 
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ success: false, message: 'Invalid product ID' });
+    }
 
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
 
+    const existing = await SponsoredProduct.findOne({ productId });
+    if (existing) {
+      return res.status(400).json({ success: false, message: 'Product is already sponsored' });
+    }
 
+    const sponsoredProduct = new SponsoredProduct({ productId });
+    await sponsoredProduct.save();
 
+    res.status(201).json({ success: true, message: 'Product added to sponsored list' });
+  } catch (error) {
+    console.error('Add Sponsored Product Error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to add sponsored product', error: error.message });
+  }
+});
 
+// Remove Sponsored Product
+router.delete('/sponsored/:productId', adminLoggedin, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ success: false, message: 'Invalid product ID' });
+    }
 
+    const result = await SponsoredProduct.findOneAndDelete({ productId });
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Sponsored product not found' });
+    }
 
+    res.status(200).json({ success: true, message: 'Product removed from sponsored list' });
+  } catch (error) {
+    console.error('Remove Sponsored Product Error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to remove sponsored product', error: error.message });
+  }
+});
 
+// List Sponsored Products
+router.get('/sponsored', adminLoggedin, async (req, res) => {
+  try {
+    const sponsoredProducts = await SponsoredProduct.find().populate('productId', 'name price images');
+    res.status(200).json({ success: true, products: sponsoredProducts });
+  } catch (error) {
+    console.error('List Sponsored Products Error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to fetch sponsored products', error: error.message });
+  }
+});
 
-
-// Create a combo offer (Admin only)
+// Create Combo Offer
 router.post('/combo-offers', adminLoggedin, async (req, res) => {
   try {
     const { name, productIds, price, discount, isActive } = req.body;
 
-    // Validate inputs
     if (!name || !productIds || !Array.isArray(productIds) || productIds.length < 1 || !price) {
       return res.status(400).json({ success: false, message: 'Name, at least one product ID, and price are required' });
     }
 
-    // Check if products exist
+    const invalidIds = productIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ success: false, message: 'Invalid product IDs provided' });
+    }
+
     const products = await Product.find({ _id: { $in: productIds } });
     if (products.length !== productIds.length) {
       return res.status(404).json({ success: false, message: 'One or more products not found' });
@@ -1041,23 +1157,27 @@ router.post('/combo-offers', adminLoggedin, async (req, res) => {
     const comboOffer = new ComboOffer({
       name,
       products: productIds,
-      price,
-      discount: discount || 0,
+      price: Number(price),
+      discount: Number(discount) || 0,
       isActive: isActive || false,
     });
 
     await comboOffer.save();
     res.status(201).json({ success: true, message: 'Combo offer created', comboOffer });
   } catch (error) {
-    console.error('Error creating combo offer:', error);
+    console.error('Error creating combo offer:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Upload images for a combo offer (Admin only)
+// Upload Images for Combo Offer
 router.post('/combo-offers/:id/images', adminLoggedin, upload.array('images', 5), handleMulterError, async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid combo offer ID' });
+    }
+
     const comboOffer = await ComboOffer.findById(id);
     if (!comboOffer) {
       return res.status(404).json({ success: false, message: 'Combo offer not found' });
@@ -1076,15 +1196,19 @@ router.post('/combo-offers/:id/images', adminLoggedin, upload.array('images', 5)
 
     res.status(200).json({ success: true, message: 'Images uploaded', comboOffer });
   } catch (error) {
-    console.error('Error uploading images:', error);
+    console.error('Error uploading images:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Delete an image from a combo offer (Admin only)
+// Delete Image from Combo Offer
 router.delete('/combo-offers/:id/image/:index', adminLoggedin, async (req, res) => {
   try {
     const { id, index } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid combo offer ID' });
+    }
+
     const comboOffer = await ComboOffer.findById(id);
     if (!comboOffer) {
       return res.status(404).json({ success: false, message: 'Combo offer not found' });
@@ -1099,15 +1223,19 @@ router.delete('/combo-offers/:id/image/:index', adminLoggedin, async (req, res) 
 
     res.status(200).json({ success: true, message: 'Image deleted', comboOffer });
   } catch (error) {
-    console.error('Error deleting image:', error);
+    console.error('Error deleting image:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Toggle image disabled status (Admin only)
+// Toggle Image Disabled Status for Combo Offer
 router.patch('/combo-offers/:id/image/:index/toggle', adminLoggedin, async (req, res) => {
   try {
     const { id, index } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid combo offer ID' });
+    }
+
     const comboOffer = await ComboOffer.findById(id);
     if (!comboOffer) {
       return res.status(404).json({ success: false, message: 'Combo offer not found' });
@@ -1122,85 +1250,98 @@ router.patch('/combo-offers/:id/image/:index/toggle', adminLoggedin, async (req,
 
     res.status(200).json({ success: true, message: 'Image status toggled', comboOffer });
   } catch (error) {
-    console.error('Error toggling image:', error);
+    console.error('Error toggling image:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Get all combo offers (Admin only)
+// Get All Combo Offers
 router.get('/combo-offers', adminLoggedin, async (req, res) => {
   try {
     const comboOffers = await ComboOffer.find().populate('products', 'name price images');
     res.status(200).json({ success: true, comboOffers });
   } catch (error) {
-    console.error('Error fetching combo offers:', error);
+    console.error('Error fetching combo offers:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Get active combo offers (for homepage)
+// Get Active Combo Offers
 router.get('/combo-offers/active', async (req, res) => {
   try {
     const comboOffers = await ComboOffer.find({ isActive: true }).populate('products', 'name price images');
     res.status(200).json({ success: true, comboOffers });
   } catch (error) {
-    console.error('Error fetching active combo offers:', error);
+    console.error('Error fetching active combo offers:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Update a combo offer (Admin only)
+// Update Combo Offer
 router.put('/combo-offers/:id', adminLoggedin, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, productIds, price, discount, isActive } = req.body;
 
-    // Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid combo offer ID' });
+    }
+
     if (productIds && (!Array.isArray(productIds) || productIds.length < 1)) {
       return res.status(400).json({ success: false, message: 'At least one product ID is required' });
     }
 
-    // Check if products exist
     if (productIds) {
+      const invalidIds = productIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+      if (invalidIds.length > 0) {
+        return res.status(400).json({ success: false, message: 'Invalid product IDs provided' });
+      }
+
       const products = await Product.find({ _id: { $in: productIds } });
       if (products.length !== productIds.length) {
         return res.status(404).json({ success: false, message: 'One or more products not found' });
       }
     }
 
-    const comboOffer = await ComboOffer.findByIdAndUpdate(
-      id,
-      { name, products: productIds, price, discount, isActive },
-      { new: true, runValidators: true }
-    );
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (productIds) updateData.products = productIds;
+    if (price !== undefined) updateData.price = Number(price);
+    if (discount !== undefined) updateData.discount = Number(discount);
+    if (isActive !== undefined) updateData.isActive = isActive;
 
+    const comboOffer = await ComboOffer.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
     if (!comboOffer) {
       return res.status(404).json({ success: false, message: 'Combo offer not found' });
     }
 
     res.status(200).json({ success: true, message: 'Combo offer updated', comboOffer });
   } catch (error) {
-    console.error('Error updating combo offer:', error);
+    console.error('Error updating combo offer:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Get a single combo offer by ID
+// Get Single Combo Offer
 router.get('/combo-offers/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid combo offer ID' });
+    }
+
     const comboOffer = await ComboOffer.findById(id).populate('products', 'name price images');
     if (!comboOffer) {
       return res.status(404).json({ success: false, message: 'Combo offer not found' });
     }
     res.status(200).json({ success: true, comboOffer });
   } catch (error) {
-    console.error('Error fetching combo offer:', error);
+    console.error('Error fetching combo offer:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Search combo offers by name (Admin only)
+// Search Combo Offers
 router.get('/combo-offers/search', adminLoggedin, async (req, res) => {
   try {
     const { name } = req.query;
@@ -1212,103 +1353,54 @@ router.get('/combo-offers/search', adminLoggedin, async (req, res) => {
     }).populate('products', 'name price images');
     res.status(200).json({ success: true, comboOffers });
   } catch (error) {
-    console.error('Error searching combo offers:', error);
+    console.error('Error searching combo offers:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Bulk delete combo offers (Admin only)
-router.delete('combo-offers/bulk', adminLoggedin, async (req, res) => {
+// Bulk Delete Combo Offers
+router.delete('/combo-offers/bulk', adminLoggedin, async (req, res) => {
   try {
     const { comboOfferIds } = req.body;
     if (!comboOfferIds || !Array.isArray(comboOfferIds) || comboOfferIds.length === 0) {
       return res.status(400).json({ success: false, message: 'comboOfferIds array is required' });
     }
+
+    const invalidIds = comboOfferIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ success: false, message: 'Invalid combo offer IDs provided' });
+    }
+
     await ComboOffer.deleteMany({ _id: { $in: comboOfferIds } });
     res.status(200).json({ success: true, message: 'Combo offers deleted successfully' });
   } catch (error) {
-    console.error('Error deleting combo offers:', error);
+    console.error('Error deleting combo offers:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-
-
-
-router.post('/sponsored', adminLoggedin, async (req, res) => {
-  try {
-    const { productId } = req.body;
-    if (!productId) {
-      return res.status(400).json({ message: 'Product ID is required' });
-    }
-
-    // Verify product exists
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
-    // Check if already sponsored
-    const existing = await SponsoredProduct.findOne({ productId });
-    if (existing) {
-      return res.status(400).json({ message: 'Product is already sponsored' });
-    }
-
-    const sponsoredProduct = new SponsoredProduct({ productId });
-    await sponsoredProduct.save();
-
-    res.status(201).json({ success: true, message: 'Product added to sponsored list' });
-  } catch (error) {
-    console.error('Add Sponsored Product Error:', error);
-    res.status(500).json({ message: 'Failed to add sponsored product', error: error.message });
-  }
-});
-
-// Remove a product from sponsored list
-router.delete('/sponsored/:productId', adminLoggedin, async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const result = await SponsoredProduct.findOneAndDelete({ productId });
-    if (!result) {
-      return res.status(404).json({ message: 'Sponsored product not found' });
-    }
-
-    res.status(200).json({ success: true, message: 'Product removed from sponsored list' });
-  } catch (error) {
-    console.error('Remove Sponsored Product Error:', error);
-    res.status(500).json({ message: 'Failed to remove sponsored product', error: error.message });
-  }
-});
-
-// List all sponsored products (for admin panel)
-router.get('/sponsored', adminLoggedin, async (req, res) => {
-  try {
-    const sponsoredProducts = await SponsoredProduct.find().populate('productId', 'name price images');
-    res.status(200).json({ success: true, products: sponsoredProducts });
-  } catch (error) {
-    console.error('List Sponsored Products Error:', error);
-    res.status(500).json({ message: 'Failed to fetch sponsored products', error: error.message });
-  }
-});
-
-
-const Layout = require('../models/layoutModel'); // Assuming you have a Layout model
+// Get Homepage Layout
 router.get('/layout', async (req, res) => {
   try {
     const layout = await Layout.findOne();
     if (!layout) {
-      return res.status(200).json({ components: [] });
+      return res.status(200).json({ success: true, components: [] });
     }
-    res.status(200).json(layout);
+    res.status(200).json({ success: true, layout });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching layout', error: error.message });
+    console.error('Error fetching layout:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Error fetching layout', error: error.message });
   }
 });
 
 // Save Homepage Layout
-router.post('/layout', async (req, res) => {
+router.post('/layout', adminLoggedin, async (req, res) => {
   try {
     const { components } = req.body;
+    if (!components || !Array.isArray(components)) {
+      return res.status(400).json({ success: false, message: 'Components array is required' });
+    }
+
     let layout = await Layout.findOne();
     if (layout) {
       layout.components = components;
@@ -1317,9 +1409,11 @@ router.post('/layout', async (req, res) => {
       layout = new Layout({ components });
       await layout.save();
     }
-    res.status(200).json({ message: 'Layout saved successfully', layout });
+    res.status(200).json({ success: true, message: 'Layout saved successfully', layout });
   } catch (error) {
-    res.status(500).json({ message: 'Error saving layout', error: error.message });
+    console.error('Error saving layout:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Error saving layout', error: error.message });
   }
 });
+
 module.exports = router;
