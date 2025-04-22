@@ -29,6 +29,7 @@
     "js-cookie": "^3.0.5",
     "jwt-decode": "^4.0.0",
     "lodash": "^4.17.21",
+    "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.482.0",
     "postcss": "^8.4.31",
     "react": "^18.2.0",
