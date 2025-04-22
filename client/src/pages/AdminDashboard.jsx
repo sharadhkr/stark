@@ -83,11 +83,6 @@ const AdminDashboard = () => {
         const verifyRes = await axios.get('/api/admin/auth/verify-token');
         console.log('Verify token response:', verifyRes.data);
 
-        // Check if the user is an admin
-        const adminData = verifyRes.data.admin;
-        if (!adminData || (adminData.role !== 'admin' && !verifyRes.data.success)) {
-          throw new Error('Admin access required');
-        }
 
         const [
           sellersRes,
