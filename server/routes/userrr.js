@@ -1004,7 +1004,7 @@ router.post('/search/recent', userLoggedin, async (req, res) => {
   }
 });
 
-router.get('/search/trending', userLoggedin, async (req, res) => {
+router.get('/search/trending', async (req, res) => {
   try {
     const trendingSearches = ['phones', 'laptops', 'clothes', 'shoes', 'accessories'];
     const topSellers = await Seller.find()

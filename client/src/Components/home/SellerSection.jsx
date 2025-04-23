@@ -19,7 +19,7 @@ const SellerSection = ({ sellers, loading }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="mb-5 top z-10 bg-white/85 rounded-2xl py-3 shadow-[0px_0px_20px_-10px_rgba(255,0,150,1),0px_0px_40px_-20px_rgba(0,200,255,1)] overflow-hidden"
+        className="mb-5 top z-10 bg-white/85 rounded-2xl py-2 shadow-xl overflow-hidden"
       >
         <h2 className="text-2xl font-bold text-gray-500 ml-3 mb-3 flex items-center gap-4">
           <div className="flex p-2 bg-purple-100 rounded-full shadow-[inset_0px_3px_15px_-10px]">
@@ -36,7 +36,7 @@ const SellerSection = ({ sellers, loading }) => {
             <p className="text-gray-600">No sellers available.</p>
           ) : (
             sellers.map((seller) => (
-              <div key={seller._id} className="px-4 snap-start ">
+              <div key={seller._id} className="px-3 snap-start  ">
                 <SellerCard seller={seller} />
               </div>
             ))
@@ -44,6 +44,7 @@ const SellerSection = ({ sellers, loading }) => {
         </div>
       </motion.section>
     </div>
+    
   );
 };
 

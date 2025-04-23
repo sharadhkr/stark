@@ -30,7 +30,7 @@ const SellerCard = ({ seller }) => {
       <img
         src={seller?.profilePicture || 'https://placehold.co/80x80'}
         alt={seller?.name || 'Seller'}
-        className="w-18 h-18 rounded-full object-cover border-2 border-teal-500"
+        className="w-16 h-16 rounded-full object-cover border-2 border-teal-500"
       />
       <p className="text-sm text-gray-600 text-center">
         @{seller?.shopName || 'No Shop Name'}
