@@ -331,12 +331,12 @@ const Home = () => {
               loop
               muted
               playsInline
-              className="w-full m-auto object-cover mix-blend-multiply "
+              className="w-full m-auto object-cover mix-blend-multiply"
               src={Loding}
             ></video>
           </div>
-          <img className="drop-shadow-xl w-1/2 opacity-0 relative -z-100" src={logo} alt="Logo" />
-          <p className="text-gray-500 text-xl z-10">serving clothes</p>
+          <img className="drop-shadow-xl w-1/2 opacity-0 relative -z-10" src={logo} alt="Logo" />
+          <p className="text-gray-500 text-lg z-10">  Stark strips</p>
         </div>
 
       );
