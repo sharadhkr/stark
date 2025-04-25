@@ -15,7 +15,8 @@ import TrendingSection from '../Components/home/TrendingSection';
 import SponsoredSection from '../Components/home/SponsoredSection';
 import RecentlyViewedSection from '../Components/home/RecentlyViewedSection';
 import axios from '../useraxios';
-
+import logo from '../assets/slogooo.png';
+import Loding from '../assets/loadingg.mp4'
 // Map component names to React components
 const componentMap = {
   SearchBar,
@@ -323,9 +324,21 @@ const Home = () => {
   const renderedLayout = useMemo(() => {
     if (loading.layout) {
       return (
-        <div className="text-center py-8">
-          <p className="text-gray-500">Loading layout...</p>
+        <div className="text-center flex flex-col min-h-screen relative justify-center items-center">
+          <div className='absolute w-full top-[45%] left-1/2 mix-blend-multiply -translate-x-1/2 -translate-y-1/2'>
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full m-auto object-cover mix-blend-multiply "
+              src={Loding}
+            ></video>
+          </div>
+          <img className="drop-shadow-xl w-1/2 opacity-0 relative -z-100" src={logo} alt="Logo" />
+          <p className="text-gray-500 text-xl z-10">serving clothes</p>
         </div>
+
       );
     }
 
@@ -349,9 +362,9 @@ const Home = () => {
   }, [layout, loading.layout, errors.layout, renderComponent]);
 
   return (
-    <div className="min-h-screen bg-gray-100/50">
+    <div className="min-h-screen bg-gray-100/80">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-      <main className="container mx-auto px-4">{renderedLayout}</main>
+      <main className="container mx-auto px-1">{renderedLayout}</main>
     </div>
   );
 };

@@ -25,14 +25,14 @@ const SellerCard = ({ seller }) => {
       whileHover="hover"
       whileTap="tap"
       onClick={handleClick}
-      className="flex flex-col items-center rounded-lg drop-shadow-lg cursor-pointer hover:dargo p-shadow-lg transition-drop-shadow duration-300"
+      className="flex flex-col items-center rounded-lg drop-shadow-lg cursor-pointer hover:dargo gap-1 transition-drop-shadow duration-300"
     >
       <img
         src={seller?.profilePicture || 'https://placehold.co/80x80'}
         alt={seller?.name || 'Seller'}
-        className="w-16 h-16 rounded-full object-cover border-2 border-teal-500"
+        className="w-14 h-14 rounded-full object-cover border-2 border-violet-500"
       />
-      <p className="text-sm text-gray-600 text-center">
+      <p className="text-sm text-gray-500 text-center">
         @{seller?.shopName || 'No Shop Name'}
       </p>
     </motion.div>

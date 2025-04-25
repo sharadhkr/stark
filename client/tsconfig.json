@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+      "target": "ESNext",
+      "module": "ESNext",
+      "jsx": "react-jsx",
+      "moduleResolution": "node",
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "strict": false,
+      "baseUrl": ".",
+      "paths": {
+        "~/components/*": ["components/*"],
+        "~/lib/*": ["lib/*"]
+      }
+    },
+    "include": ["src", "components"],
+    "exclude": ["node_modules"]
+  }

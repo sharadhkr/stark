@@ -14,14 +14,14 @@ const SellerSection = ({ sellers, loading }) => {
   );
 
   return (
-    <div className="w-full px-2">
+    <div className="w-full px-2 relative">
       <motion.section
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="mb-5 top z-10 bg-white/85 rounded-2xl py-2 shadow-xl overflow-hidden"
+        className="mb-5 top z-10 bg-white/85 rounded-2xl py-2 shadow-[0px_0px_20px_-12px_rgba(0,0,0,0.8)] overflow-hidden"
       >
-        <h2 className="text-2xl font-bold text-gray-500 ml-3 mb-3 flex items-center gap-4">
+        <h2 className="text-2xl font-bold text-gray-500 ml-2 py-2 flex items-center gap-4">
           <div className="flex p-2 bg-purple-100 rounded-full shadow-[inset_0px_3px_15px_-10px]">
             <FaStore />
           </div>
@@ -43,8 +43,13 @@ const SellerSection = ({ sellers, loading }) => {
           )}
         </div>
       </motion.section>
+      <div className="absolute w-full -z-10 opacity-100 top-0 left-0 flex items-center justify-center blur-2xl">
+        <div className='w-[30%] h-36 bg-purple-400'></div>
+        <div className='w-[30%] h-36 bg-pink-400'></div>
+        <div className='w-[30%] h-36 bg-orange-400'></div>
+        <div className='w-[30%] h-36 bg-green-400'></div>
+      </div>
     </div>
-    
   );
 };
 

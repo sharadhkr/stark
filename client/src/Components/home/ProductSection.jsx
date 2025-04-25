@@ -1,47 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import ProductCard from '../ProductCard';
 import GenderFilterBar from './GenderFilterBar';
 
-const ProductSection = ({ products, filteredProducts: initialFilteredProducts, setFilteredProducts, loading }) => {
-  useEffect(() => {
-    setFilteredProducts(initialFilteredProducts || products || []);
-  }, [initialFilteredProducts, products, setFilteredProducts]);
-
+const ProductSection = ({ products = [], filteredProducts = [], setFilteredProducts, loading = false }) => {
   const ProductSkeleton = () => (
     <div className="w-full h-64 bg-gray-200 rounded-lg animate-pulse"></div>
   );
 
+  console.log('ProductSection rendering:', { products, filteredProducts, loading }); // Debug
+
   return (
-    <div className="w-full px-2">
+    <div className="w-full px-2 bg-white">
       <motion.section
-        initial="hidden"
-        animate="visible"
-        variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="py-4"
       >
-        <GenderFilterBar products={products} setFilteredProducts={setFilteredProducts} />
-        <div className="flex items-center justify-between px-3 mt-16 mb-6"> {/* Adjusted for fixed bar */}
+        <GenderFilterBar
+          products={Array.isArray(products) ? products : []}
+          setFilteredProducts={setFilteredProducts}
+        />
+        <div className="flex items-center justify-between px-3 mt-6 mb-4">
           <h2 className="text-xl font-bold text-gray-800">Popular Products</h2>
         </div>
 
-        <div className="grid gap-4 px-2 lg:grid-cols-5 grid-cols-2 overflow-x-auto pb-2 scrollbar-hidden">
+        <div className="grid gap-4 px-2 grid-cols-2 lg:grid-cols-5 overflow-x-auto pb-2 min-h-[200px]">
           {loading ? (
-            Array(4)
+            Array(6)
               .fill()
-              .map((_, i) => <ProductSkeleton key={i} />)
-          ) : initialFilteredProducts && initialFilteredProducts.length === 0 ? (
-            <p className="text-gray-600">No products available.</p>
+              .map((_, i) => <ProductSkeleton key={`skeleton-${i}`} />)
+          ) : !Array.isArray(filteredProducts) || filteredProducts.length === 0 ? (
+            <p className="text-gray-600 col-span-full text-center">No products available.</p>
           ) : (
-            (initialFilteredProducts || []).map((product) => (
-              <motion.div
-                key={product._id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4 }}
-              >
-                <ProductCard product={product} />
-              </motion.div>
-            ))
+            filteredProducts.map((product, index) => {
+              if (!product || !product._id) {
+                console.warn('Invalid product at index:', index, product); // Debug
+                return null;
+              }
+              console.log('Rendering ProductCard for:', product); // Debug
+              return (
+                <motion.div
+                  key={product._id || `product-${index}`}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  className="min-h-[200px]"
+                >
+                  <ProductCard product={product} />
+                </motion.div>
+              );
+            })
           )}
         </div>
       </motion.section>

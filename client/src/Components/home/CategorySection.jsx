@@ -18,7 +18,7 @@ const CategorySection = ({ categories, loading }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="w-full bg-white/85 rounded-2xl shadow-lg mb-5 px-2 overflow-x-auto scrollbar-hide items-center scroll-smooth flex snap-x"
+        className="w-full bg-white/85 rounded-2xl shadow-[0px_0px_20px_-12px_rgba(0,0,0,0.8)] mb-4 gap-2 pl-2 overflow-x-auto scrollbar-hide items-center scroll-smooth flex snap-x"
         role="region"
         aria-label="Category list"
       >
@@ -34,7 +34,7 @@ const CategorySection = ({ categories, loading }) => {
             <p className="text-gray-600">No categories available.</p>
           ) : (
             categories.map((category) => (
-              <div key={category._id} className="snap-start min-w-fit flex-shrink-0 opacity-70 mr-4">
+              <div key={category._id} className="snap-start min-w-fit flex-shrink-0 opacity-70 px-4">
                 <CategoryCard category={category} />
               </div>
             ))
@@ -45,7 +45,7 @@ const CategorySection = ({ categories, loading }) => {
         <div className='w-[30%] h-10 bg-red-400'></div>
         <div className='w-[30%] h-10 bg-purple-400'></div>
         <div className='w-[30%] h-10 bg-pink-400'></div>
-        <div className='w-[30%] h-10 bg-yellow-400'></div>
+        <div className='w-[30%] h-10 bg-green-400'></div>
       </div>
     </div>
   );

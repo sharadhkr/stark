@@ -11,11 +11,11 @@ const BottomNavbar = () => {
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const tabs = [
-    { path: '/', icon: <Home className="w-6 h-6" />, label: 'Home' },
-    { path: '/cart', icon: <ShoppingCart className="w-6 h-6" />, label: 'Cart' },
-    { path: '/categories', icon: <TbCategory className="w-6 h-6" />, label: 'Category', isModal: true },
-    { path: '/wishlist', icon: <Heart className="w-6 h-6" />, label: 'Wishlist' },
-    { path: '/dashboard', icon: <User className="w-6 h-6" />, label: 'Profile' },
+    { path: '/', icon: <Home className="w-6 h-6" /> },
+    { path: '/cart', icon: <ShoppingCart className="w-6 h-6" /> },
+    { path: '/categories', icon: <TbCategory className="w-6 h-6" />, isModal: true },
+    { path: '/wishlist', icon: <Heart className="w-6 h-6" />},
+    { path: '/dashboard', icon: <User className="w-6 h-6" /> },
   ];
 
   // Update active index based on current path or modal state
@@ -51,7 +51,7 @@ const BottomNavbar = () => {
   return (
     <>
       <div className="fixed bottom-4 left-0 w-full flex justify-center z-50 px-4">
-        <div className="relative w-[380px] max-w-md h-20 bg-violet-50/80 backdrop-blur-md rounded-3xl shadow-2xl px-4 flex justify-between items-center overflow-visible border border-violet-300">
+        <div className="relative w-[380px] max-w-md h-[67px] bg-violet-50/80 backdrop-blur-md rounded-3xl shadow-[0px_0px_20px_-15px_rgba(0,0,0,1)] px-4 flex justify-between items-center overflow-visible border border-violet-300">
           {tabs.map((tab, index) => {
             const isActive = index === activeIndex;
 
@@ -68,8 +68,8 @@ const BottomNavbar = () => {
                 <div
                   className={`relative z-10 p-2 rounded-full transition-all duration-300 transform ${
                     isActive
-                      ? 'bg-violet-200 text-violet-700 scale-110 translate-y-[-8px] shadow-md'
-                      : 'text-gray-500 hover:text-violet-700 hover:bg-violet-100'
+                      ? 'bg-violet-200 text-violet-700 scale-110 translate-y-[-8px] shadow-md '
+                      : 'text-gray-500 hover:text-violet-700 hover:bg-violet-100 mb-2'
                   }`}
                 >
                   {tab.icon}

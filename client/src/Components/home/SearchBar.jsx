@@ -769,15 +769,15 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
           variants={fadeIn}
           className="flex w-full items-center bg-gray-50/85 rounded-2xl shadow-md px-8 py-3 border border-gray-200"
         >
-          <div className="flex w-full items-center">
-            <div className="relative w-15 flex h-full rounded-full shadow-inner">
-              <div className="-top-[14px] z-10 -left-8 w-32 absolute">
-                <img className="drop-shadow-lg w-full" src={agroLogo} alt="Logo" />
+          <div className="flex z-30 w-full items-center">
+            <div className="relative w-15 z-30 flex h-full rounded-full shadow-inner">
+              <div className="-top-[14px] z-30 -left-10 w-32 absolute">
+                <img className="drop-shadow-lg w-full z-30" src={agroLogo} alt="Logo" />
               </div>
             </div>
             <input
               ref={inputRef}
-              className="flex-1 w-[60%] ml-16 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
+              className="flex-1 w-[60%] ml-12 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
               placeholder={placeholder}
               type="text"
               value={searchQuery}
@@ -802,7 +802,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
               initial="hidden"
               animate="visible"
               variants={expandVariants}
-              className="absolute left-0 right-0 mt-2 bg-white/90 backdrop-blur-md rounded-xl shadow-lg mx-2 z-20 p-6 max-h-[450px] overflow-y-auto border border-gray-100"
+              className="absolute left-0 right-0 mt-2 bg-gray-50 backdrop-blur-md rounded-xl shadow-lg mx-2 pt-20 z-5 p-6 max-h-[460px] overflow-y-auto border border-gray-100"
             >
               {loading && searchQuery.trim() ? (
                 <p className="text-gray-500 text-center py-4">Searching...</p>
