@@ -7,13 +7,19 @@
   width: 0;
   height: 0;
 }
-
 .scrollbar-hidden {
   display: none;
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: 0px;
 }
-
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 0.5rem;
+}
 @layer base {
   :root {
     --background: 0 0% 100%;

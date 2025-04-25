@@ -109,8 +109,8 @@ function TripleAdd() {
   // Handle loading state
   if (loading) {
     return (
-      <div className="w-full px-2 mb-5">
-        <div className="w-full h-64 bg-background rounded-2xl shadow-lg flex items-center justify-center">
+      <div className="w-full px-2 mb-5 h-20 ">
+        <div className="w-full h-18 bg-background rounded-2xl shadow-lg flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
       </div>

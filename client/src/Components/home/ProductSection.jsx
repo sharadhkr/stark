@@ -11,21 +11,17 @@ const ProductSection = ({ products = [], filteredProducts = [], setFilteredProdu
   console.log('ProductSection rendering:', { products, filteredProducts, loading }); // Debug
 
   return (
-    <div className="w-full px-2 bg-white">
+    <div className="w-full px-1 ">
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="py-4"
+        className="py-4 gap-5 flex flex-col"
       >
         <GenderFilterBar
           products={Array.isArray(products) ? products : []}
           setFilteredProducts={setFilteredProducts}
         />
-        <div className="flex items-center justify-between px-3 mt-6 mb-4">
-          <h2 className="text-xl font-bold text-gray-800">Popular Products</h2>
-        </div>
-
         <div className="grid gap-4 px-2 grid-cols-2 lg:grid-cols-5 overflow-x-auto pb-2 min-h-[200px]">
           {loading ? (
             Array(6)

@@ -761,7 +761,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
 
   return (
     <div className="relative w-full">
-      <div ref={searchRef} className="relative mt-4 mb-5 px-2 mx-auto z-20">
+      <div ref={searchRef} className="relative px-1 py-4 mx-auto z-20">
         <motion.form
           onSubmit={handleSearch}
           initial="hidden"
@@ -771,13 +771,13 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
         >
           <div className="flex z-30 w-full items-center">
             <div className="relative w-15 z-30 flex h-full rounded-full shadow-inner">
-              <div className="-top-[14px] z-30 -left-10 w-32 absolute">
+              <div className="-top-[14px] z-30 -left-8 w-32 absolute">
                 <img className="drop-shadow-lg w-full z-30" src={agroLogo} alt="Logo" />
               </div>
             </div>
             <input
               ref={inputRef}
-              className="flex-1 w-[60%] ml-12 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
+              className="flex-1 w-[60%] ml-14 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
               placeholder={placeholder}
               type="text"
               value={searchQuery}

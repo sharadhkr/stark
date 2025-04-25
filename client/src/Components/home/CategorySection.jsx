@@ -18,7 +18,7 @@ const CategorySection = ({ categories, loading }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="w-full bg-white/85 rounded-2xl shadow-[0px_0px_20px_-12px_rgba(0,0,0,0.8)] mb-4 gap-2 pl-2 overflow-x-auto scrollbar-hide items-center scroll-smooth flex snap-x"
+        className="w-full bg-white/85 rounded-2xl shadow-[0px_0px_20px_-12px_rgba(0,0,0,0.8)] mb-4 gap-2 pl-2 overflow-x-auto items-center scroll-smooth flex snap-x"
         role="region"
         aria-label="Category list"
       >

@@ -224,7 +224,7 @@ const Home = () => {
               }}
               searchQuery={searchQuery}
               setSearchQuery={handleSearchChange}
-              placeholder={props.placeholder || 'Search for products...'}
+              placeholder={props.placeholder || 'Search on strak for strips...'}
             />
           );
 
