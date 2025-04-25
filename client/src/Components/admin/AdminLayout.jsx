@@ -40,11 +40,14 @@ const availableComponents = [
 
 // Sortable item component
 const SortableItem = ({ id, name, displayName, index, isMainBox, onRemove, onEditProps }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: transition || 'transform 0.2s ease',
-    touchAction: 'none', // Improves touch dragging
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    touchAction: 'none',
+    zIndex: isDragging ? 10 : 1,
   };
 
   return (
@@ -53,22 +56,31 @@ const SortableItem = ({ id, name, displayName, index, isMainBox, onRemove, onEdi
       style={style}
       {...attributes}
       initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: isDragging ? 1.05 : 1,
+        boxShadow: isDragging ? '0 8px 16px rgba(0,0,0,0.2)' : 'none',
+      }}
       exit={{ opacity: 0, y: -10 }}
-      className={`p-4 my-2 rounded-lg shadow-sm flex items-center gap-3 touch-none ${
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className={`p-3 my-2 rounded-xl flex items-center gap-3 touch-none ${
         isMainBox ? 'bg-green-100 text-green-900' : 'bg-blue-100 text-blue-900'
       } ${isMainBox ? 'justify-between' : 'cursor-move'}`}
       role="button"
       aria-label={`Drag ${displayName} component`}
+      onTouchStart={() => {
+        if ('vibrate' in navigator) navigator.vibrate(50); // Haptic feedback
+      }}
     >
       <FaGripVertical
         className="text-gray-600 text-lg cursor-move touch-none"
         {...listeners}
         aria-hidden="true"
       />
-      <span className="flex-1 text-sm font-medium">{displayName}</span>
+      <span className="flex-1 text-sm font-medium select-none">{displayName}</span>
       {isMainBox && (
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {name === 'CategorySectionn' && (
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -77,7 +89,7 @@ const SortableItem = ({ id, name, displayName, index, isMainBox, onRemove, onEdi
               aria-label={`Edit properties for ${displayName}`}
               title="Edit Properties"
             >
-              <FaEdit size={16} />
+              <FaEdit size={14} />
             </motion.button>
           )}
           <motion.button
@@ -87,7 +99,7 @@ const SortableItem = ({ id, name, displayName, index, isMainBox, onRemove, onEdi
             aria-label={`Remove ${displayName} from layout`}
             title="Remove Component"
           >
-            <FaTrash size={16} />
+            <FaTrash size={14} />
           </motion.button>
         </div>
       )}
@@ -101,9 +113,9 @@ const DroppableMainBox = ({ children, id }) => {
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[200px] bg-white rounded-lg p-4 border-2 ${
+      className={`min-h-[200px] bg-white rounded-xl p-3 border-2 ${
         isOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200'
-      } overflow-y-auto max-h-[calc(100vh-200px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100`}
+      } overflow-y-auto max-h-[calc(100vh-250px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 touch-none`}
       role="region"
       aria-label="Homepage layout droppable area"
     >
@@ -120,9 +132,9 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
   const [layoutError, setLayoutError] = useState(null);
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
+      activationConstraint: { delay: 250, tolerance: 10 },
     })
   );
 
@@ -192,6 +204,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
         if (over.id === 'main-droppable') {
           setMainBoxComponents((prev) => [...prev, newComponent]);
           toast.success(`${component.displayName} added to layout`);
+          if ('vibrate' in navigator) navigator.vibrate(50); // Haptic feedback
         } else if (mainBoxComponents.some((comp) => comp.id === over.id)) {
           const overIndex = mainBoxComponents.findIndex((comp) => comp.id === over.id);
           setMainBoxComponents((prev) => [
@@ -200,6 +213,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
             ...prev.slice(overIndex),
           ]);
           toast.success(`${component.displayName} added to layout`);
+          if ('vibrate' in navigator) navigator.vibrate(50);
         }
       } else if (isActiveInMain && mainBoxComponents.some((comp) => comp.id === over.id)) {
         const oldIndex = mainBoxComponents.findIndex((comp) => comp.id === active.id);
@@ -207,6 +221,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
         if (oldIndex !== newIndex) {
           setMainBoxComponents((prev) => arrayMove(prev, oldIndex, newIndex));
           toast.success('Component reordered');
+          if ('vibrate' in navigator) navigator.vibrate(50);
         }
       }
     },
@@ -283,6 +298,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
       };
       const response = await axios.post('/api/admin/auth/layout', layout, {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000, // Add timeout for mobile networks
       });
       toast.success('Layout saved successfully');
       return response.data;
@@ -305,9 +321,9 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="p-6 bg-red-50 rounded-2xl shadow-md text-center"
+        className="p-4 bg-red-50 rounded-xl shadow-md text-center"
       >
-        <p className="text-red-600 font-medium">Error: Invalid categories data. Please refresh the page.</p>
+        <p className="text-red-600 font-medium text-sm">Error: Invalid categories data. Please refresh the page.</p>
       </motion.div>
     );
   }
@@ -321,7 +337,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
         variants={fadeIn}
         className="flex justify-center items-center h-64"
       >
-        <FaSpinner className="animate-spin text-blue-600 text-5xl" aria-label="Loading" />
+        <FaSpinner className="animate-spin text-blue-600 text-4xl" aria-label="Loading" />
       </motion.div>
     );
   }
@@ -333,14 +349,14 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="p-6 bg-red-50 rounded-2xl shadow-md text-center"
+        className="p-4 bg-red-50 rounded-xl shadow-md text-center"
       >
-        <h3 className="text-lg font-semibold text-red-700">Access Denied</h3>
-        <p className="text-sm text-red-600 mb-4">{error || 'Please try again later.'}</p>
+        <h3 className="text-base font-semibold text-red-700">Access Denied</h3>
+        <p className="text-xs text-red-600 mb-3">{error || 'Please try again later.'}</p>
         <motion.button
           onClick={checkAdmin}
           whileTap={{ scale: 0.95 }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm"
           aria-label="Retry authentication"
         >
           Retry
@@ -354,24 +370,24 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="p-4 sm:p-6 bg-gray-50 rounded-2xl shadow-lg max-w-4xl mx-auto"
+      className="p-3 sm:p-4 bg-gray-50 rounded-xl shadow-lg max-w-full mx-auto"
     >
-      <h3 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Manage Homepage Layout</h3>
+      <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3">Manage Homepage Layout</h3>
       {layoutError && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-red-600 bg-red-100 p-3 rounded-lg mb-4 text-sm"
+          className="text-red-600 bg-red-100 p-2 rounded-lg mb-3 text-xs"
         >
           {layoutError}
         </motion.p>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {/* Available Components */}
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <h4 className="text-md font-medium text-gray-700 mb-3">Available Components</h4>
-            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          <div className="bg-white p-3 rounded-xl shadow-sm">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Available Components</h4>
+            <div className="bg-gray-50 rounded-lg p-2 border border-gray-200 max-h-[250px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
               <SortableContext
                 items={availableComponents.map((comp) => comp.id)}
                 strategy={verticalListSortingStrategy}
@@ -393,9 +409,9 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
           </div>
 
           {/* Main Layout Box */}
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-              <h4 className="text-md font-medium text-gray-700">Homepage Layout</h4>
+          <div className="bg-white p-3 rounded-xl shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-3 gap-3">
+              <h4 className="text-sm font-medium text-gray-700">Homepage Layout</h4>
               <motion.button
                 onClick={saveLayout}
                 whileTap={{ scale: 0.95 }}
@@ -426,7 +442,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="text-center text-gray-500 py-6 text-sm"
+                      className="text-center text-gray-500 py-6 text-xs"
                     >
                       Drag components here to build the layout
                     </motion.p>
@@ -461,7 +477,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3"
             aria-modal="true"
             role="dialog"
           >
@@ -469,15 +485,15 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+              className="bg-white p-4 rounded-xl shadow-xl w-full max-w-sm max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
             >
-              <h4 className="text-lg font-semibold text-gray-800 mb-4">
+              <h4 className="text-base font-semibold text-gray-800 mb-3">
                 Edit CategorySectionn Properties
               </h4>
-              <div className="mb-4">
+              <div className="mb-3">
                 <label
                   htmlFor="categoryId"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-xs font-medium text-gray-700 mb-1"
                 >
                   Select Category <span className="text-red-500">*</span>
                 </label>
@@ -485,8 +501,10 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
                   id="categoryId"
                   name="categoryId"
                   value={editingProps.props.categoryId || ''}
-                  onChange={updateProps}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none transition-colors text-sm"
+                  on
+
+Change={updateProps}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none transition-colors text-sm"
                   required
                   aria-required="true"
                   aria-label="Select category"
@@ -502,11 +520,11 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
                   <p className="text-red-500 text-xs mt-1">Category is required</p>
                 )}
               </div>
-              <div className="flex justify-end gap-3">
+              <div className="flex justify-end gap-2">
                 <motion.button
                   onClick={() => setEditingProps(null)}
                   whileTap={{ scale: 0.95 }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors text-sm"
+                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors text-sm"
                   aria-label="Cancel editing properties"
                 >
                   Cancel
@@ -515,7 +533,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
                   onClick={saveProps}
                   whileTap={{ scale: 0.95 }}
                   disabled={!editingProps.props.categoryId}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                  className={`px-3 py-2 rounded-xl text-sm font-medium ${
                     !editingProps.props.categoryId
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-blue-600 text-white hover:bg-blue-700'
