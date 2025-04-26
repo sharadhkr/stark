@@ -62,13 +62,13 @@ const fadeIn = {
 };
 
 const rippleEffect = {
-  initial: { scale: 0, opacity: 0.4 },
-  animate: { scale: 4, opacity: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+  initial: { scale: 0, opacity: 0.3 },
+  animate: { scale: 3, opacity: 0, transition: { duration: 0.2, ease: 'easeOut' } },
 };
 
 const dropPulse = {
-  initial: { scale: 1, opacity: 0.3 },
-  animate: { scale: 1.1, opacity: 0, transition: { duration: 0.2, ease: 'easeOut' } },
+  initial: { scale: 1, opacity: 0.2 },
+  animate: { scale: 1.05, opacity: 0, transition: { duration: 0.15, ease: 'easeOut' } },
 };
 
 // Sortable item component
@@ -78,7 +78,7 @@ const SortableItem = React.memo(
     const style = useMemo(
       () => ({
         transform: CSS.Transform.toString(transform),
-        transition: transition || 'transform 0.1s ease, margin 0.1s ease',
+        transition: transition || 'transform 0.08s ease, margin 0.08s ease',
         marginBottom: isOverId === id ? '28px' : '8px',
       }),
       [transform, transition, isOverId, id]
@@ -92,40 +92,36 @@ const SortableItem = React.memo(
         {...listeners}
         initial={{ opacity: 0, y: 10 }}
         animate={{
-          opacity: isDragging ? 0.3 : 1,
+          opacity: isDragging ? 0.2 : 1,
           y: 0,
           scale: isDragging ? 0.9 : 1,
-          boxShadow: isDragging
-            ? '0 10px 20px rgba(0,0,0,0.2)'
-            : '0 6px 12px rgba(0,0,0,0.1)',
-          rotate: isDragging ? 4 : 0,
-          filter: isDragging ? 'drop-shadow(0 0 6px rgba(79,70,229,0.4))' : 'none',
+          boxShadow: isDragging ? '0 4px 8px rgba(0,0,0,0.15)' : '0 2px 4px rgba(0,0,0,0.1)',
         }}
-        whileHover={{ scale: 1.05 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-        className={`relative p-5 m-2 rounded-xl flex items-center justify-between touch-none bg-gradient-to-r ${
+        whileHover={{ scale: 1.03 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+        className={`relative p-6 m-2 rounded-xl flex items-center justify-between touch-none bg-gradient-to-r ${
           isMainBox
-            ? 'from-emerald-200 to-emerald-300 text-emerald-900'
-            : 'from-indigo-200 to-indigo-300 text-indigo-900'
-        } hover:shadow-md transition-shadow duration-200 cursor-grab active:cursor-grabbing`}
+            ? 'from-emerald-100 to-emerald-200 text-emerald-900'
+            : 'from-indigo-100 to-indigo-200 text-indigo-900'
+        } hover:shadow-sm transition-shadow duration-150 cursor-grab active:cursor-grabbing min-h-[60px] bg-indigo-200/50 active:bg-indigo-200/80`}
         role="button"
         aria-label={`Drag ${displayName} component`}
         title={displayName}
         onTouchStart={() => {
-          if ('vibrate' in navigator) navigator.vibrate(50);
+          if ('vibrate' in navigator) navigator.vibrate(30);
         }}
       >
         {isDragging && (
           <motion.div
-            className="absolute inset-0 bg-indigo-400 opacity-15 rounded-xl"
+            className="absolute inset-0 bg-indigo-300 opacity-10 rounded-xl"
             variants={rippleEffect}
             initial="initial"
             animate="animate"
           />
         )}
-        <span className="text-sm font-semibold select-none">{displayName}</span>
+        <span className="text-base font-semibold select-none">{displayName}</span>
         {isMainBox && (
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             {name === 'CategorySectionn' && (
               <Button
                 variant="ghost"
@@ -134,11 +130,11 @@ const SortableItem = React.memo(
                   e.stopPropagation();
                   onEditProps(index);
                 }}
-                className="p-2 bg-yellow-400 text-white rounded-full hover:bg-yellow-500 hover:scale-105 transition-transform duration-200"
+                className="p-3 bg-yellow-400 text-white rounded-full hover:bg-yellow-500 hover:scale-105 transition-transform duration-150"
                 aria-label="Edit category properties"
                 title="Edit category properties"
               >
-                <Edit size={16} />
+                <Edit size={18} />
               </Button>
             )}
             <Button
@@ -148,17 +144,17 @@ const SortableItem = React.memo(
                 e.stopPropagation();
                 onRemove(index);
               }}
-              className="p-2 bg-red-400 text-white rounded-full hover:bg-red-500 hover:scale-105 transition-transform duration-200"
+              className="p-3 bg-red-400 text-white rounded-full hover:bg-red-500 hover:scale-105 transition-transform duration-150"
               aria-label="Remove component"
               title="Remove component"
             >
-              <Trash2 size={16} />
+              <Trash2 size={18} />
             </Button>
           </div>
         )}
         {isOverId === id && (
           <motion.div
-            className="absolute inset-0 border-2 border-indigo-600 bg-gradient-to-r from-indigo-100 to-indigo-200 opacity-50 rounded-xl"
+            className="absolute inset-0 border-2 border-indigo-600 bg-gradient-to-r from-indigo-100 to-indigo-200 opacity-40 rounded-xl"
             variants={dropPulse}
             initial="initial"
             animate="animate"
@@ -188,12 +184,12 @@ const DroppableBox = ({ id, children, title, isMainBox }) => {
   return (
     <Card
       ref={setNodeRef}
-      className={`flex-1 p-4 bg-white rounded-2xl shadow-lg border-2 ${
+      className={`flex-1 p-4 bg-white rounded-2xl shadow-md border-2 ${
         isOver ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100'
-      } min-h-[calc(100vh-200px)] max-h-[calc(100vh-200px)] overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 touch-none`}
+      } min-h-[calc(100vh-250px)] max-h-[calc(100vh-250px)] overflow-y-auto overflow-x-hidden overscroll-y-none overscroll-x-none scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 touch-none`}
     >
       <CardContent className="p-0">
-        <h4 className="text-sm font-semibold text-gray-800 mb-3 sticky top-0 bg-white z-10 p-2 rounded-t-2xl">
+        <h4 className="text-base font-semibold text-gray-800 mb-3 sticky top-0 bg-white z-10 p-2 rounded-t-2xl">
           {title}
         </h4>
         {children}
@@ -208,18 +204,16 @@ const DragOverlayItem = ({ id, name, displayName, isMainBox }) => (
     initial={{ scale: 1 }}
     animate={{
       scale: 0.9,
-      boxShadow: '0 10px 20px rgba(0,0,0,0.2)',
-      rotate: 4,
-      filter: 'drop-shadow(0 0 6px rgba(79,70,229,0.4))',
+      boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
     }}
-    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-    className={`p-5 m-2 rounded-xl flex items-center justify-between touch-none bg-gradient-to-r ${
+    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+    className={`p-6 m-2 rounded-xl flex items-center justify-between touch-none bg-gradient-to-r ${
       isMainBox
-        ? 'from-emerald-200 to-emerald-300 text-emerald-900'
-        : 'from-indigo-200 to-indigo-300 text-indigo-900'
-    } shadow-md z-50`}
+        ? 'from-emerald-100 to-emerald-200 text-emerald-900'
+        : 'from-indigo-100 to-indigo-200 text-indigo-900'
+    } shadow-md z-50 min-h-[60px]`}
   >
-    <span className="text-sm font-semibold select-none">{displayName}</span>
+    <span className="text-base font-semibold select-none">{displayName}</span>
   </motion.div>
 );
 
@@ -235,7 +229,7 @@ const AdminLayout = ({ categories = [] }) => {
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 50, tolerance: 5 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 30, tolerance: 3 } })
   );
 
   // Generate unique ID
@@ -287,7 +281,8 @@ const AdminLayout = ({ categories = [] }) => {
   // Handle drag start
   const handleDragStart = useCallback((event) => {
     setActiveId(event.active.id);
-    if ('vibrate' in navigator) navigator.vibrate(50);
+    if ('vibrate' in navigator) navigator.vibrate(30);
+    document.body.style.touchAction = 'none'; // Prevent scrolling
   }, []);
 
   // Handle drag over
@@ -295,7 +290,7 @@ const AdminLayout = ({ categories = [] }) => {
     debounce((event) => {
       const { over } = event;
       setOverId(over?.id || null);
-    }, 100),
+    }, 150),
     [debounce]
   );
 
@@ -305,6 +300,7 @@ const AdminLayout = ({ categories = [] }) => {
       const { active, over } = event;
       setActiveId(null);
       setOverId(null);
+      document.body.style.touchAction = ''; // Restore scrolling
 
       if (!over) return;
 
@@ -320,7 +316,7 @@ const AdminLayout = ({ categories = [] }) => {
         };
         setMainBoxComponents((prev) => [...prev, newComponent]);
         toast.success(`${component.displayName} added to layout`);
-        if ('vibrate' in navigator) navigator.vibrate(50);
+        if ('vibrate' in navigator) navigator.vibrate(30);
       } else if (isActiveInAvailable && mainBoxComponents.some((comp) => comp.id === over.id)) {
         const component = availableComponents.find((comp) => comp.id === active.id);
         const newComponent = {
@@ -335,14 +331,14 @@ const AdminLayout = ({ categories = [] }) => {
           ...prev.slice(overIndex),
         ]);
         toast.success(`${component.displayName} added to layout`);
-        if ('vibrate' in navigator) navigator.vibrate(50);
+        if ('vibrate' in navigator) navigator.vibrate(30);
       } else if (isActiveInMain && mainBoxComponents.some((comp) => comp.id === over.id)) {
         const oldIndex = mainBoxComponents.findIndex((comp) => comp.id === active.id);
         const newIndex = mainBoxComponents.findIndex((comp) => comp.id === over.id);
         if (oldIndex !== newIndex) {
           setMainBoxComponents((prev) => arrayMove(prev, oldIndex, newIndex));
           toast.success('Component reordered');
-          if ('vibrate' in navigator) navigator.vibrate(50);
+          if ('vibrate' in navigator) navigator.vibrate(30);
         }
       }
     },
@@ -440,9 +436,9 @@ const AdminLayout = ({ categories = [] }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="p-6 bg-red-50 rounded-2xl shadow-lg text-center border border-red-300"
+        className="p-6 bg-red-50 rounded-2xl shadow-md text-center border border-red-300"
       >
-        <p className="text-red-700 font-medium text-sm">Error: Invalid categories data</p>
+        <p className="text-red-700 font-medium text-base">Error: Invalid categories data</p>
       </motion.div>
     );
   }
@@ -468,13 +464,13 @@ const AdminLayout = ({ categories = [] }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="p-6 bg-red-50 rounded-2xl shadow-lg text-center border border-red-300"
+        className="p-6 bg-red-50 rounded-2xl shadow-md text-center border border-red-300"
       >
         <h3 className="text-lg font-semibold text-red-800">Access Denied</h3>
-        <p className="text-sm text-red-700 mb-4">{error || 'Please try again'}</p>
+        <p className="text-base text-red-700 mb-4">{error || 'Please try again'}</p>
         <Button
           onClick={checkAdmin}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white hover:scale-105 transition-transform duration-200"
+          className="bg-indigo-500 hover:bg-indigo-600 text-white text-base py-3 px-6 hover:scale-105 transition-transform duration-150"
           aria-label="Retry authentication"
           title="Retry authentication"
         >
@@ -489,21 +485,21 @@ const AdminLayout = ({ categories = [] }) => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="p-6 bg-gradient-to-b from-gray-100 to-gray-300 rounded-2xl shadow-2xl max-w-full mx-auto"
+      className="p-4 bg-gradient-to-b from-gray-100 to-gray-200 rounded-2xl shadow-xl max-w-full mx-auto"
     >
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h3 className="text-xl font-bold text-gray-800">Manage Homepage Layout</h3>
+      <div className="flex flex-col items-center mb-6 gap-4">
+        <h3 className="text-lg font-bold text-gray-800">Manage Homepage Layout</h3>
         <Button
           onClick={saveLayout}
           disabled={isLoading}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white flex items-center gap-2 hover:scale-105 transition-transform duration-200"
+          className="bg-indigo-500 hover:bg-indigo-600 text-white text-base py-3 px-6 flex items-center gap-2 hover:scale-105 transition-transform duration-150 sticky bottom-4 z-20 md:static"
           aria-label="Save homepage layout"
           title="Save homepage layout"
         >
           {isLoading ? (
-            <Loader2 className="animate-spin" size={16} />
+            <Loader2 className="animate-spin" size={18} />
           ) : (
-            <Save size={16} />
+            <Save size={18} />
           )}
           Save Layout
         </Button>
@@ -512,7 +508,7 @@ const AdminLayout = ({ categories = [] }) => {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-red-700 bg-red-50 p-4 rounded-lg mb-6 text-sm border border-red-300"
+          className="text-red-700 bg-red-50 p-4 rounded-lg mb-6 text-base border border-red-300"
         >
           {layoutError}
         </motion.p>
@@ -524,7 +520,7 @@ const AdminLayout = ({ categories = [] }) => {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col md:flex-row gap-4">
           {/* Available Components */}
           <DroppableBox
             id="available-droppable"
@@ -535,20 +531,18 @@ const AdminLayout = ({ categories = [] }) => {
               items={availableComponents.map((comp) => comp.id)}
               strategy={verticalListSortingStrategy}
             >
-              <AnimatePresence>
-                {availableComponents.map((comp) => (
-                  <SortableItem
-                    key={comp.id}
-                    id={comp.id}
-                    name={comp.name}
-                    displayName={comp.displayName}
-                    index={comp.id}
-                    isMainBox={false}
-                    isDragging={activeId === comp.id}
-                    isOverId={deferredOverId}
-                  />
-                ))}
-              </AnimatePresence>
+              {availableComponents.map((comp) => (
+                <SortableItem
+                  key={comp.id}
+                  id={comp.id}
+                  name={comp.name}
+                  displayName={comp.displayName}
+                  index={comp.id}
+                  isMainBox={false}
+                  isDragging={activeId === comp.id}
+                  isOverId={deferredOverId}
+                />
+              ))}
             </SortableContext>
           </DroppableBox>
 
@@ -562,36 +556,33 @@ const AdminLayout = ({ categories = [] }) => {
               items={mainBoxComponents.map((comp) => comp.id)}
               strategy={verticalListSortingStrategy}
             >
-              <AnimatePresence>
-                {mainBoxComponents.length === 0 ? (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="text-center text-gray-500 py-8 text-sm"
-                  >
-                    Drag components here to build the layout
-                  </motion.p>
-                ) : (
-                  mainBoxComponents.map((comp, index) => (
-                    <SortableItem
-                      key={comp.id}
-                      id={comp.id}
-                      name={comp.name}
-                      displayName={
-                        availableComponents.find((c) => c.name === comp.name)?.displayName ||
-                        comp.name
-                      }
-                      index={index}
-                      isMainBox={true}
-                      onRemove={removeComponent}
-                      onEditProps={editProps}
-                      isDragging={activeId === comp.id}
-                      isOverId={deferredOverId}
-                    />
-                  ))
-                )}
-              </AnimatePresence>
+              {mainBoxComponents.length === 0 ? (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center text-gray-500 py-8 text-base"
+                >
+                  Drag components here to build the layout
+                </motion.p>
+              ) : (
+                mainBoxComponents.map((comp, index) => (
+                  <SortableItem
+                    key={comp.id}
+                    id={comp.id}
+                    name={comp.name}
+                    displayName={
+                      availableComponents.find((c) => c.name === comp.name)?.displayName ||
+                      comp.name
+                    }
+                    index={index}
+                    isMainBox={true}
+                    onRemove={removeComponent}
+                    onEditProps={editProps}
+                    isDragging={activeId === comp.id}
+                    isOverId={deferredOverId}
+                  />
+                ))
+              )}
             </SortableContext>
           </DroppableBox>
         </div>
@@ -613,17 +604,17 @@ const AdminLayout = ({ categories = [] }) => {
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 600, damping: 30 }}
+          transition={{ type: 'spring', stiffness: 600, damping: 25 }}
         >
-          <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogContent className="sm:max-w-[90vw] rounded-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Specific Category Properties</DialogTitle>
+              <DialogTitle className="text-lg">Edit Specific Category Properties</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
                 <label
                   htmlFor="categoryId"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+                  className="block text-base font-medium text-gray-700 mb-2"
                 >
                   Select Category <span className="text-red-500">*</span>
                 </label>
@@ -634,21 +625,21 @@ const AdminLayout = ({ categories = [] }) => {
                 >
                   <SelectTrigger
                     id="categoryId"
-                    className="w-full rounded-lg"
+                    className="w-full rounded-lg text-base py-3"
                     aria-label="Select category"
                   >
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
                   <SelectContent>
                     {memoizedCategories.map((cat) => (
-                      <SelectItem key={cat._id} value={cat._id}>
+                      <SelectItem key={cat._id} value={cat._id} className="text-base py-2">
                         {cat.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {!editingProps?.props.categoryId && (
-                  <p className="text-red-500 text-xs mt-1">Category is required</p>
+                  <p className="text-red-500 text-sm mt-1">Category is required</p>
                 )}
               </div>
             </div>
@@ -656,7 +647,7 @@ const AdminLayout = ({ categories = [] }) => {
               <Button
                 variant="outline"
                 onClick={() => setEditingProps(null)}
-                className="rounded-lg hover:scale-105 transition-transform duration-200"
+                className="rounded-lg text-base py-3 px-6 hover:scale-105 transition-transform duration-150"
                 title="Cancel editing"
               >
                 Cancel
@@ -664,7 +655,7 @@ const AdminLayout = ({ categories = [] }) => {
               <Button
                 onClick={saveProps}
                 disabled={!editingProps?.props.categoryId}
-                className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg hover:scale-105 transition-transform duration-200"
+                className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-base py-3 px-6 hover:scale-105 transition-transform duration-150"
                 title="Save category properties"
               >
                 Save
