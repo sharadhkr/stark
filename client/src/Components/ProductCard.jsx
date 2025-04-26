@@ -218,10 +218,10 @@ const ProductCard = ({ product = {} }) => {
         variants={cardVariants}
         whileHover="hover"
         whileTap="tap"
-        className="w-40 bg-white rounded-3xl shadow-md overflow-hidden border border-gray-200 flex flex-col cursor-pointer"
+        className="w-40 bg-slate-100 rounded-xl shadow-md overflow-hidden border border-gray-200 flex flex-col cursor-pointer"
         aria-label={`Product: ${name}`}
       >
-        <div className="relative w-full h-40 bg-gray-100 flex-shrink-0">
+        <div className="relative w-full h-36 bg-gray-100 flex-shrink-0">
           {imageLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
               <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -230,7 +230,7 @@ const ProductCard = ({ product = {} }) => {
           <img
             src={displayImage}
             alt={name}
-            className={`w-full h-full object-contain transition-transform duration-300 hover:scale-110 ${
+            className={`w-full h-full object-cover transition-transform duration-300 hover:scale-110 ${
               imageLoading ? 'opacity-0' : 'opacity-100'
             }`}
             onLoad={() => setImageLoading(false)}

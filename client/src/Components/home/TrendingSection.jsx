@@ -1,30 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
 import { motion } from 'framer-motion';
 import { FaFire } from 'react-icons/fa';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import ProductCard from '../ProductCard';
-import { IoChevronForward } from 'react-icons/io5';
-import { Link } from 'react-router-dom';
+import { DataContext } from '../../App';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
-const TrendingSection = () => {
-  const [products, setProducts] = useState([]);
+const TrendingSection = React.memo(() => {
+  const { cache, updateCache, isDataStale } = useContext(DataContext);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
 
+  const products = useMemo(() => cache.trendingProducts?.data || [], [cache.trendingProducts]);
+
   const fetchTrendingProducts = async () => {
+    if (!isDataStale(cache.trendingProducts?.timestamp) && products.length > 0) {
+      return; // Use cached data if fresh
+    }
+
     setLoading(true);
     setError(null);
     try {
       const response = await axios.get('/api/user/auth/trending');
-      setProducts(response.data.products || []);
+      const fetchedProducts = response.data.products || [];
+      updateCache('trendingProducts', fetchedProducts);
     } catch (error) {
       console.error('Error fetching trending products:', error);
-      setError(error.response?.data?.message || 'Failed to load trending products');
-      toast.error(error.response?.data?.message || 'Failed to load trending products');
+      const errorMsg = error.response?.data?.message || 'Failed to load trending products';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -32,18 +39,18 @@ const TrendingSection = () => {
 
   useEffect(() => {
     fetchTrendingProducts();
-  }, []);
+  }, [cache.trendingProducts?.timestamp, isDataStale, updateCache]);
 
   const addToCart = async (productId) => {
     try {
-      const userToken = localStorage.getItem('token'); // Updated to match Home.jsx
+      const userToken = localStorage.getItem('token');
       if (!userToken) {
         toast.error('Please log in to add items to cart');
         return;
       }
       await axios.post(
         '/api/user/auth/cart',
-        { productId, quantity: 1, size: 'N/A', color: 'N/A' }, // Added size/color for compatibility
+        { productId, quantity: 1, size: 'N/A', color: 'N/A' },
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
       toast.success('Added to cart');
@@ -51,6 +58,33 @@ const TrendingSection = () => {
       toast.error(error.response?.data?.message || 'Failed to add to cart');
     }
   };
+
+  const scrollLeft = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: -224, behavior: 'smooth' }); // Adjust based on card width
+    }
+  };
+
+  const scrollRight = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: 224, behavior: 'smooth' });
+    }
+  };
+
+  if (!loading && products.length === 0 && !error) {
+    return (
+      <motion.section
+        initial="hidden"
+        animate="visible"
+        variants={fadeIn}
+        className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50"
+      >
+        <div className="max-w-7xl mx-auto text-center">
+          <p className="text-gray-500">No trending products available</p>
+        </div>
+      </motion.section>
+    );
+  }
 
   return (
     <motion.section
@@ -64,6 +98,50 @@ const TrendingSection = () => {
           <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
             <FaFire className="text-red-500" /> Trending Products
           </h2>
+          {products.length > 1 && (
+            <div className="flex gap-2">
+              <button
+                onClick={scrollLeft}
+                className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                aria-label="Scroll left"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={scrollRight}
+                className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                aria-label="Scroll right"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M9 5l-7 7 7-7"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -71,9 +149,15 @@ const TrendingSection = () => {
             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : error ? (
-          <p className="text-gray-500 text-center py-8">{error}</p>
-        ) : products.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No trending products available.</p>
+          <div className="text-center py-8">
+            <p className="text-red-500">{error}</p>
+            <button
+              onClick={fetchTrendingProducts}
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
         ) : (
           <motion.div
             ref={scrollRef}
@@ -82,7 +166,7 @@ const TrendingSection = () => {
           >
             {products.map((product) => (
               <div key={product._id} className="flex-shrink-0">
-                <ProductCard product={product} />
+                <ProductCard product={product} onAddToCart={() => addToCart(product._id)} />
               </div>
             ))}
           </motion.div>
@@ -90,6 +174,6 @@ const TrendingSection = () => {
       </div>
     </motion.section>
   );
-};
+});
 
 export default TrendingSection;

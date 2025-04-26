@@ -1,93 +1,180 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
+import { DataContext } from '../../App';
 
 // ComboOfferCard Component
-const ComboOfferCard = ({ offer }) => {
+const ComboOfferCard = React.memo(({ offer }) => {
   return (
-    <motion.div
-      whileHover={{ scale: 1.05 }}
-      className="relative flex flex-col items-center flex-shrink-0 w-56 bg-gray-200 overflow-hidden rounded-2xl shadow-xl mb-2 transform transition duration-300 ease-in-out"
-    >
-      <div className="flex justify-center space-x-1 my-2">
-        {offer.products.slice(0, 2).map((product, idx) => (
-          <img
-            key={idx}
-            src={product.images[0] || 'https://via.placeholder.com/150'}
-            alt={product.name}
-            className={`w-24 h-40 object-cover rounded-xl shadow-xl transform ${idx === 0 ? '-rotate-6' : 'rotate-6'
+    <Link to={`/combo/${offer._id}`}>
+      <motion.div
+        className="relative flex flex-col items-center flex-shrink-0 w-52 bg-slate-200 rounded-2xl transform transition duration-300 ease-in-out hover:scale-105"
+        whileHover={{ scale: 1.05 }}
+      >
+        <div className="flex justify-center -space-x-2 mt-2 mb-1">
+          {offer.products.slice(0, 2).map((product, idx) => (
+            <img
+              key={idx}
+              src={product.images[0] || 'https://via.placeholder.com/150'}
+              alt={product.name}
+              className={`w-24 h-40 object-cover rounded-xl drop-shadow-lg border-purple-100 border transform ${
+                idx === 0 ? '-rotate-6' : 'rotate-6'
               }`}
-          />
-        ))}
-      </div>
-      <div className="absolute bottom-0 bg-[#8168ff] text-white rounded-b-2xl h-14 text-center w-full">
-        <h3 className="text-base font-semibold capitalize">{offer.name}</h3>
-        <div className="mt-1 text-sm">
-          <span>{offer.discount}% off </span>
-          <span className="line-through mx-1 opacity-70">₹{offer.originalPrice}</span>
-          <span className="font-bold">₹{offer.price}</span>
+              loading="lazy"
+            />
+          ))}
         </div>
-      </div>
-    </motion.div>
+        <div className="absolute bottom-0 bg-gradient-to-br from-violet-400 to-violet-500 text-white rounded-b-2xl h-12 text-center w-full">
+          <h3 className="text-base font-semibold capitalize">{offer.name}</h3>
+          <div className="text-sm">
+            <span>{offer.discount}% off </span>
+            <span className="line-through mx-1 opacity-70">₹{offer.originalPrice}</span>
+            <span className="font-bold">₹{offer.price}</span>
+          </div>
+        </div>
+      </motion.div>
+    </Link>
   );
-};
+});
 
 // Main ComboOfferSection Component
-const ComboOfferSection = () => {
-  const [comboOffers, setComboOffers] = useState([]);
+const ComboOfferSection = React.memo(() => {
+  const { cache, updateCache, isDataStale } = useContext(DataContext);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
 
+  // Normalize combo offers
+  const normalizedOffers = useMemo(() => {
+    const offers = cache.comboOffers?.data || [];
+    return offers
+      .filter((offer) => offer && offer._id && !offer.disabled)
+      .map((offer) => ({
+        ...offer,
+        products: offer.products.filter((p) => p && p.images?.length > 0),
+      }))
+      .filter((offer) => offer.products.length > 0);
+  }, [cache.comboOffers]);
+
+  // Fetch combo offers if cache is stale or empty
   useEffect(() => {
     const fetchComboOffers = async () => {
+      if (!isDataStale(cache.comboOffers?.timestamp) && normalizedOffers.length > 0) {
+        return; // Use cached data if fresh
+      }
+
       setLoading(true);
       setError(null);
       try {
         const response = await axios.get('/api/admin/auth/combo-offers/active');
-        setComboOffers(response.data.comboOffers || []);
+        const comboOffers = response.data.comboOffers || [];
+        updateCache('comboOffers', comboOffers);
       } catch (error) {
         console.error('Error fetching combo offers:', error);
-        setError(error.response?.data?.message || 'Failed to load combo offers');
-        toast.error(error.response?.data?.message || 'Failed to load combo offers');
+        const errorMsg = error.response?.data?.message || 'Failed to load combo offers';
+        setError(errorMsg);
+        toast.error(errorMsg);
       } finally {
         setLoading(false);
       }
     };
+
     fetchComboOffers();
-  }, []);
+  }, [cache.comboOffers?.timestamp, isDataStale, updateCache]);
+
+  // Scroll navigation
+  const scrollLeft = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: -224, behavior: 'smooth' }); // 208px (w-52) + 16px (gap-4)
+    }
+  };
+
+  const scrollRight = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: 224, behavior: 'smooth' });
+    }
+  };
+
+  // Handle no offers
+  if (!loading && normalizedOffers.length === 0 && !error) {
+    return (
+      <div className="w-full px-2 mb-5 text-center">
+        <p className="text-gray-500">No combo offers available</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="my-4 px-2 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-700">Special Combo Offers</h2>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center h-48">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    <div className="w-full px-2 mb-5">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-bold text-gray-700">Special Combo Offers</h2>
+        {normalizedOffers.length > 1 && (
+          <div className="flex gap-2">
+            <button
+              onClick={scrollLeft}
+              className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+              aria-label="Scroll left"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+            </button>
+            <button
+              onClick={scrollRight}
+              className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+              aria-label="Scroll right"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </button>
           </div>
-        ) : error ? (
-          <p className="text-gray-500 text-center py-8">{error}</p>
-        ) : comboOffers.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No combo offers available.</p>
-        ) : (
-          <motion.div
-            ref={scrollRef}
-            className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide cursor-grab active:cursor-grabbing"
-            style={{ scrollBehavior: 'smooth' }}
-          >
-            {comboOffers.map((offer) => (
-              <ComboOfferCard key={offer._id} offer={offer} />
-            ))}
-          </motion.div>
         )}
       </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center h-36">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      ) : error ? (
+        <p className="text-gray-500 text-center py-8">{error}</p>
+      ) : (
+        <motion.div
+          ref={scrollRef}
+          className="flex gap-4 mt-2 overflow-x-auto overflow-y-hidden scrollbar-hide"
+          style={{ scrollBehavior: 'smooth' }}
+        >
+          {normalizedOffers.map((offer) => (
+            <ComboOfferCard key={offer._id} offer={offer} />
+          ))}
+        </motion.div>
+      )}
     </div>
   );
-};
+});
 
 export default ComboOfferSection;

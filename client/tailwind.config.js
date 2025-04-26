@@ -8,6 +8,7 @@ export default {
 	],
 	theme: {
 	  extend: {
+		scrollbar: ['rounded'],
 		colors: {
 		  background: 'hsl(var(--background))',
 		  foreground: 'hsl(var(--foreground))',
@@ -40,6 +41,6 @@ export default {
 	  },
 	},
 	plugins: [
-	  require('tailwindcss-animate'),
+	  require('tailwindcss-animate','tailwind-scrollbar'),
 	],
   };

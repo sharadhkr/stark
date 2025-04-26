@@ -1,125 +1,29 @@
-// import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
-// import BottomNavbar from "./Components/Navbar";
-// import Bottom from "./Components/botttommm";
-
-// import Home from "./pages/Home";
-// import Cart from "./pages/Cart"; // Changed from Chat
-// import LoginRegister from "./pages/LoginRegister";
-// import SellerAuth from "./pages/SellerAuth";
-// import SellerDashboard from "./pages/SellerDashboard";
-// import UserDashboard from "./pages/UserDashboard";
-// import AdminAuth from "./pages/AdminAuth";
-// import AdminDashboard from "./pages/AdminDashboard";
-// import WishlistPage from "./pages/WishlistPage";
-// import CategoryPage from "./pages/CategoryPage";
-// import OwnerProfilePage from "./pages/OwnerProfilePage";
-// import ProductPage from "./pages/ProductPage";
-// import CheckoutPage from "./pages/CheckoutPage";
-// import OrderConfirmation from "./pages/OrderConfirmation";
-// import OrderDetails from "./pages/OrderDetails";
-// import SellerProducts from "./pages/SellerProducts";
-// import SellerOrders from "./pages/sd"; // Consider renaming to SellerOrders.jsx
-// import SearchResults from "./pages/SearchResults";
-
-// const Layout = ({ children }) => {
-//   const location = useLocation();
-
-
-//   const userRoutes = [
-//     "/",
-//     "/cart",
-//     "/wishlist",
-//     "/dashboard",
-//     "/category/:categoryName",
-//     "/seller/:sellerId",
-//     "/product/:productId",
-//     "/seller/products",
-//     "/seller/orders",
-//     "/order/:orderId"
-//   ];
-
-//   const matchesRoutePattern = (path, pattern) => {
-//     const pathSegments = path.split("/").filter(Boolean);
-//     const patternSegments = pattern.split("/").filter(Boolean);
-
-//     if (pathSegments.length !== patternSegments.length) return false;
-
-//     return patternSegments.every((segment, index) => {
-//       if (segment.startsWith(":")) return pathSegments[index] !== undefined;
-//       return segment === pathSegments[index];
-//     });
-//   };
-
-//   const showNavbar = userRoutes.some((route) =>
-//     matchesRoutePattern(location.pathname, route)
-//   );
-
-//   return (
-//     <>
-//       {children}
-//       {showNavbar && <BottomNavbar />}
-//       {showNavbar && <Bottom />}
-//     </>
-//   );
-// };
-
-// function App() {
-//   return (
-//     <Router>
-//       <Routes>
-//         {/* Routes with Layout (BottomNavbar & Footer) */}
-//         <Route path="/" element={<Layout><Home /></Layout>} />
-//         <Route path="/cart" element={<Layout><Cart /></Layout>} />
-//         <Route path="/wishlist" element={<Layout><WishlistPage /></Layout>} />
-//         <Route path="/dashboard" element={<Layout><UserDashboard /></Layout>} />
-//         <Route path="/seller/products" element={<Layout><SellerProducts /></Layout>} />
-//         <Route path="/seller/orders" element={<Layout><SellerOrders /></Layout>} />
-//         <Route path="/order/:orderId" element={<Layout><OrderDetails /></Layout>} />
-//         <Route path="/category/:categoryName" element={<Layout><CategoryPage /></Layout>} />
-//         <Route path="/seller/:sellerId" element={<Layout><OwnerProfilePage /></Layout>} />
-//         <Route path="/order/:orderId" element={<Layout><OrderDetails/></Layout>} />
-//         <Route path="/product/:productId" element={<Layout><ProductPage /></Layout>} />
-//         <Route path="/search" element={<Layout><SearchResults/></Layout>} />
-
-//         {/* Routes without Layout */}
-//         <Route path="/checkout" element={<CheckoutPage />} />
-//         <Route path="/checkout/:productId" element={<CheckoutPage />} />
-//         <Route path="/order-confirmation" element={<OrderConfirmation />} />
-//         <Route path="/login" element={<LoginRegister />} />
-//         <Route path="/seller/login" element={<SellerAuth />} /> {/* Fixed typo */}
-//         <Route path="/seller/dashboard" element={<SellerDashboard />} /> {/* Fixed typo */}
-//         <Route path="/admin/login" element={<AdminAuth />} />
-//         <Route path="/admin/dashboard" element={<AdminDashboard />} />
-//       </Routes>
-//     </Router>
-//   );
-// }
-
-// export default App;
-
-import React, { useMemo, createContext, useState, useEffect } from 'react';
+import React, { useMemo, createContext, useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { matchPath } from 'react-router-dom';
 import BottomNavbar from './Components/Navbar';
 import Bottom from './Components/botttommm';
-import Home from './pages/Home';
-import Cart from './pages/Cart';
-import LoginRegister from './pages/LoginRegister';
-import SellerAuth from './pages/SellerAuth';
-import SellerDashboard from './pages/SellerDashboard';
-import UserDashboard from './pages/UserDashboard';
-import AdminAuth from './pages/AdminAuth';
-import AdminDashboard from './pages/AdminDashboard';
-import WishlistPage from './pages/WishlistPage';
-import CategoryPage from './pages/CategoryPage';
-import OwnerProfilePage from './pages/OwnerProfilePage';
-import ProductPage from './pages/ProductPage';
-import CheckoutPage from './pages/CheckoutPage';
-import OrderConfirmation from './pages/OrderConfirmation';
-import OrderDetails from './pages/OrderDetails';
-import SellerProducts from './pages/SellerProducts';
-import SellerOrders from './pages/sd';
-import SearchResults from './pages/SearchResults';
+
+// Lazy-loaded page components
+const Home = lazy(() => import('./pages/Home'));
+const Cart = lazy(() => import('./pages/Cart'));
+const LoginRegister = lazy(() => import('./pages/LoginRegister'));
+const SellerAuth = lazy(() => import('./pages/SellerAuth'));
+const SellerDashboard = lazy(() => import('./pages/SellerDashboard'));
+const UserDashboard = lazy(() => import('./pages/UserDashboard'));
+const AdminAuth = lazy(() => import('./pages/AdminAuth'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const WishlistPage = lazy(() => import('./pages/WishlistPage'));
+const CategoryPage = lazy(() => import('./pages/CategoryPage'));
+const OwnerProfilePage = lazy(() => import('./pages/OwnerProfilePage'));
+const ProductPage = lazy(() => import('./pages/ProductPage'));
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
+const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation'));
+const OrderDetails = lazy(() => import('./pages/OrderDetails'));
+const SellerProducts = lazy(() => import('./pages/SellerProducts'));
+const SellerOrders = lazy(() => import('./pages/SellerOrders'));
+const SearchResults = lazy(() => import('./pages/SearchResults'));
+const ComboOfferPage = lazy(() => import('./pages/ComboOfferPage'));
 
 // Data Context
 export const DataContext = createContext();
@@ -134,6 +38,10 @@ const DataProvider = ({ children }) => {
     sponsoredProducts: { data: [], timestamp: 0 },
     ads: { data: [], timestamp: 0 },
     recentlyViewed: { data: [], timestamp: 0 },
+    trendingProducts: { data: [], timestamp: 0 },
+    searchSuggestions: { data: { recentSearches: [], categories: [], sellers: [], products: [] }, timestamp: 0 },
+    trendingSearches: { data: { trendingSearches: [], topSellers: [], topCategories: [], topProducts: [] }, timestamp: 0 },
+    // Note: category_<id> keys are dynamic
   });
 
   const isDataStale = (timestamp) => Date.now() - timestamp > 300_000; // 5 minutes
@@ -200,6 +108,7 @@ const userRoutes = [
   { path: '/seller/orders', exact: true },
   { path: '/order/:orderId', exact: false },
   { path: '/search', exact: true },
+  { path: '/combo/:id', exact: false },
 ];
 
 const Layout = React.memo(({ children }) => {
@@ -232,7 +141,7 @@ const routes = [
   { path: '/wishlist', element: <WishlistPage />, layout: true },
   { path: '/dashboard', element: <UserDashboard />, layout: true },
   { path: '/seller/products', element: <SellerProducts />, layout: true },
-  { path: '/seller/orders', element: <SellerOrders />, layout: true },
+  { path: '/seller/orders', element: <SellerProducts />, layout: true },
   { path: '/order/:orderId', element: <OrderDetails />, layout: true },
   { path: '/category/:categoryName', element: <CategoryPage />, layout: true },
   { path: '/seller/:sellerId', element: <OwnerProfilePage />, layout: true },
@@ -246,6 +155,7 @@ const routes = [
   { path: '/seller/dashboard', element: <SellerDashboard />, layout: false },
   { path: '/admin/login', element: <AdminAuth />, layout: false },
   { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
+  { path: '/combo/:id', element: <ComboOfferPage />, layout: true },
 ];
 
 function App() {
@@ -253,15 +163,23 @@ function App() {
     <Router>
       <ErrorBoundary location={window.location.pathname}>
         <DataProvider>
-          <Routes>
-            {routes.map(({ path, element, layout }) => (
-              <Route
-                key={path}
-                path={path}
-                element={layout ? <Layout>{element}</Layout> : element}
-              />
-            ))}
-          </Routes>
+          <Suspense
+            fallback={
+              <div className="flex justify-center items-center h-screen">
+                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }
+          >
+            <Routes>
+              {routes.map(({ path, element, layout }) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={layout ? <Layout>{element}</Layout> : element}
+                />
+              ))}
+            </Routes>
+          </Suspense>
         </DataProvider>
       </ErrorBoundary>
     </Router>
