@@ -96,12 +96,12 @@
 // }
 
 // export default App;
+
 import React, { useMemo, createContext, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import pathToRegexp from 'path-to-regexp';
+import { matchPath } from 'react-router-dom';
 import BottomNavbar from './Components/Navbar';
 import Bottom from './Components/botttommm';
-
 import Home from './pages/Home';
 import Cart from './pages/Cart';
 import LoginRegister from './pages/LoginRegister';
@@ -133,10 +133,10 @@ const DataProvider = ({ children }) => {
     comboOffers: { data: [], timestamp: 0 },
     sponsoredProducts: { data: [], timestamp: 0 },
     ads: { data: [], timestamp: 0 },
-    recentlyViewed: { data: [], timestamp: 0 }, // Added
+    recentlyViewed: { data: [], timestamp: 0 },
   });
 
-  const isDataStale = (timestamp) => Date.now() - timestamp > 5 * 60 * 1000; // 5 minutes
+  const isDataStale = (timestamp) => Date.now() - timestamp > 300_000; // 5 minutes
 
   const updateCache = (key, data) => {
     setCache((prev) => ({ ...prev, [key]: { data, timestamp: Date.now() } }));
@@ -145,7 +145,7 @@ const DataProvider = ({ children }) => {
   const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache]);
 
   useEffect(() => {
-    console.log('DataProvider cache updated:', cache);
+    console.debug('DataProvider cache updated:', Object.keys(cache));
   }, [cache]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -153,14 +153,20 @@ const DataProvider = ({ children }) => {
 
 // Error Boundary
 class ErrorBoundary extends React.Component {
-  state = { hasError: false };
+  state = { hasError: false, error: null };
 
   static getDerivedStateFromError(error) {
-    return { hasError: true };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.location !== this.props.location && this.state.hasError) {
+      this.setState({ hasError: false, error: null });
+    }
   }
 
   render() {
@@ -181,89 +187,78 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Memoized Layout component
-const Layout = React.memo(({ children }) => {
-  const location = useLocation();
-  console.log('Layout rendered, pathname:', location.pathname);
+// Memoized Layout Component
+const userRoutes = [
+  { path: '/', exact: true },
+  { path: '/cart', exact: true },
+  { path: '/wishlist', exact: true },
+  { path: '/dashboard', exact: true },
+  { path: '/category/:categoryName', exact: false },
+  { path: '/seller/:sellerId', exact: false },
+  { path: '/product/:productId', exact: false },
+  { path: '/seller/products', exact: true },
+  { path: '/seller/orders', exact: true },
+  { path: '/order/:orderId', exact: false },
+  { path: '/search', exact: true },
+];
 
-  const userRoutes = [
-    '/',
-    '/cart',
-    '/wishlist',
-    '/dashboard',
-    '/category/:categoryName',
-    '/seller/:sellerId',
-    '/product/:productId',
-    '/seller/products',
-    '/seller/orders',
-    '/order/:orderId',
-    '/search',
-  ];
+const Layout = React.memo(({ children }) => {
+  const { pathname } = useLocation();
 
   const showNavbar = useMemo(() => {
-    const pathRegexes = userRoutes.map((route) => ({
-      regex: pathToRegexp(route),
-      route,
-    }));
-
-    return pathRegexes.some(({ regex }) => regex.test(location.pathname));
-  }, [location.pathname]);
+    if (typeof pathname !== 'string') return false;
+    return userRoutes.some(({ path, exact }) =>
+      matchPath({ path, end: exact }, pathname)
+    );
+  }, [pathname]);
 
   return (
     <>
       {children}
-      {showNavbar && <BottomNavbar />}
-      {showNavbar && <Bottom />}
+      {showNavbar && (
+        <>
+          <BottomNavbar />
+          <Bottom />
+        </>
+      )}
     </>
   );
 });
 
-// Route configuration
+// Route Configuration
 const routes = [
-  { path: '/', element: <Home /> },
-  { path: '/cart', element: <Cart /> },
-  { path: '/wishlist', element: <WishlistPage /> },
-  { path: '/dashboard', element: <UserDashboard /> },
-  { path: '/seller/products', element: <SellerProducts /> },
-  { path: '/seller/orders', element: <SellerOrders /> },
-  { path: '/order/:orderId', element: <OrderDetails /> },
-  { path: '/category/:categoryName', element: <CategoryPage /> },
-  { path: '/seller/:sellerId', element: <OwnerProfilePage /> },
-  { path: '/product/:productId', element: <ProductPage /> },
-  { path: '/search', element: <SearchResults /> },
-  { path: '/checkout', element: <CheckoutPage /> },
-  { path: '/checkout/:productId', element: <CheckoutPage /> },
-  { path: '/order-confirmation', element: <OrderConfirmation /> },
-  { path: '/login', element: <LoginRegister /> },
-  { path: '/seller/login', element: <SellerAuth /> },
-  { path: '/seller/dashboard', element: <SellerDashboard /> },
-  { path: '/admin/login', element: <AdminAuth /> },
-  { path: '/admin/dashboard', element: <AdminDashboard /> },
+  { path: '/', element: <Home />, layout: true },
+  { path: '/cart', element: <Cart />, layout: true },
+  { path: '/wishlist', element: <WishlistPage />, layout: true },
+  { path: '/dashboard', element: <UserDashboard />, layout: true },
+  { path: '/seller/products', element: <SellerProducts />, layout: true },
+  { path: '/seller/orders', element: <SellerOrders />, layout: true },
+  { path: '/order/:orderId', element: <OrderDetails />, layout: true },
+  { path: '/category/:categoryName', element: <CategoryPage />, layout: true },
+  { path: '/seller/:sellerId', element: <OwnerProfilePage />, layout: true },
+  { path: '/product/:productId', element: <ProductPage />, layout: true },
+  { path: '/search', element: <SearchResults />, layout: true },
+  { path: '/checkout', element: <CheckoutPage />, layout: false },
+  { path: '/checkout/:productId', element: <CheckoutPage />, layout: false },
+  { path: '/order-confirmation', element: <OrderConfirmation />, layout: false },
+  { path: '/login', element: <LoginRegister />, layout: false },
+  { path: '/seller/login', element: <SellerAuth />, layout: false },
+  { path: '/seller/dashboard', element: <SellerDashboard />, layout: false },
+  { path: '/admin/login', element: <AdminAuth />, layout: false },
+  { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
 ];
 
 function App() {
-  console.log('App rendered');
-
   return (
     <Router>
-      <ErrorBoundary>
+      <ErrorBoundary location={window.location.pathname}>
         <DataProvider>
           <Routes>
-            {routes.map(({ path, element }) => (
+            {routes.map(({ path, element, layout }) => (
               <Route
                 key={path}
                 path={path}
-                element={
-                  path.includes('/checkout') ||
-                    path.includes('/order-confirmation') ||
-                    path.includes('/login') ||
-                    path.includes('/seller/dashboard') ||
-                    path.includes('/admin/dashboard') ? (
-                    element
-                  ) : (
-                    <Layout>{element}</Layout>
-                  )
-                }
+                element={layout ? <Layout>{element}</Layout> : element}
               />
             ))}
           </Routes>

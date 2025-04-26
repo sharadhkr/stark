@@ -9,23 +9,20 @@ const ComboOfferCard = ({ offer }) => {
   return (
     <motion.div
       whileHover={{ scale: 1.05 }}
-      className="flex flex-col items-center flex-shrink-0 w-64 bg-white rounded-2xl shadow-xl p-4 transform transition duration-300 ease-in-out"
+      className="relative flex flex-col items-center flex-shrink-0 w-56 bg-gray-200 overflow-hidden rounded-2xl shadow-xl mb-2 transform transition duration-300 ease-in-out"
     >
-      {/* Images Section */}
-      <div className="flex justify-center space-x-2 mb-4">
+      <div className="flex justify-center space-x-1 my-2">
         {offer.products.slice(0, 2).map((product, idx) => (
           <img
             key={idx}
             src={product.images[0] || 'https://via.placeholder.com/150'}
             alt={product.name}
-            className={`w-28 h-40 object-cover rounded-xl shadow-lg transform ${
-              idx === 0 ? '-rotate-6' : 'rotate-6'
-            }`}
+            className={`w-24 h-40 object-cover rounded-xl shadow-xl transform ${idx === 0 ? '-rotate-6' : 'rotate-6'
+              }`}
           />
         ))}
       </div>
-      {/* Offer Details */}
-      <div className="bg-[#8C7AE6] text-white rounded-xl px-4 py-3 text-center w-full">
+      <div className="absolute bottom-0 bg-[#8168ff] text-white rounded-b-2xl h-14 text-center w-full">
         <h3 className="text-base font-semibold capitalize">{offer.name}</h3>
         <div className="mt-1 text-sm">
           <span>{offer.discount}% off </span>
@@ -63,7 +60,7 @@ const ComboOfferSection = () => {
   }, []);
 
   return (
-    <div className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50">
+    <div className="my-4 px-2 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-gray-700">Special Combo Offers</h2>
