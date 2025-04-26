@@ -3,15 +3,47 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
-import { IoChevronForward } from 'react-icons/io5';
 
+// ComboOfferCard Component
+const ComboOfferCard = ({ offer }) => {
+  return (
+    <motion.div
+      whileHover={{ scale: 1.05 }}
+      className="flex flex-col items-center flex-shrink-0 w-64 bg-white rounded-2xl shadow-xl p-4 transform transition duration-300 ease-in-out"
+    >
+      {/* Images Section */}
+      <div className="flex justify-center space-x-2 mb-4">
+        {offer.products.slice(0, 2).map((product, idx) => (
+          <img
+            key={idx}
+            src={product.images[0] || 'https://via.placeholder.com/150'}
+            alt={product.name}
+            className={`w-28 h-40 object-cover rounded-xl shadow-lg transform ${
+              idx === 0 ? '-rotate-6' : 'rotate-6'
+            }`}
+          />
+        ))}
+      </div>
+      {/* Offer Details */}
+      <div className="bg-[#8C7AE6] text-white rounded-xl px-4 py-3 text-center w-full">
+        <h3 className="text-base font-semibold capitalize">{offer.name}</h3>
+        <div className="mt-1 text-sm">
+          <span>{offer.discount}% off </span>
+          <span className="line-through mx-1 opacity-70">₹{offer.originalPrice}</span>
+          <span className="font-bold">₹{offer.price}</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+// Main ComboOfferSection Component
 const ComboOfferSection = () => {
   const [comboOffers, setComboOffers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
 
-  // Fetch active combo offers
   useEffect(() => {
     const fetchComboOffers = async () => {
       setLoading(true);
@@ -34,14 +66,7 @@ const ComboOfferSection = () => {
     <div className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">Special Combo Offers</h2>
-          <Link
-            to="/combo-offers"
-            className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors duration-200"
-            aria-label="View All Combo Offers"
-          >
-            <IoChevronForward size={20} className="text-gray-600" />
-          </Link>
+          <h2 className="text-xl font-bold text-gray-700">Special Combo Offers</h2>
         </div>
 
         {loading ? (
@@ -55,35 +80,11 @@ const ComboOfferSection = () => {
         ) : (
           <motion.div
             ref={scrollRef}
-            className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
+            className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide cursor-grab active:cursor-grabbing"
             style={{ scrollBehavior: 'smooth' }}
           >
             {comboOffers.map((offer) => (
-              <div key={offer._id} className="flex-shrink-0 w-64 bg-white rounded-lg shadow-md p-4">
-                <h3 className="text-lg font-semibold text-gray-800">{offer.name}</h3>
-                <div className="flex gap-2 mt-2">
-                  {offer.products.map((product) => (
-                    <img
-                      key={product._id}
-                      src={product.images[0] || 'https://via.placeholder.com/100'}
-                      alt={product.name}
-                      className="w-20 h-20 object-cover rounded-md"
-                    />
-                  ))}
-                </div>
-                <p className="text-gray-600 mt-2">
-                  Price: ${offer.price}{' '}
-                  {offer.discount > 0 && (
-                    <span className="text-green-500">({offer.discount}% off)</span>
-                  )}
-                </p>
-                <Link
-                  to={`/combo/${offer._id}`}
-                  className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
-                >
-                  View Offer
-                </Link>
-              </div>
+              <ComboOfferCard key={offer._id} offer={offer} />
             ))}
           </motion.div>
         )}

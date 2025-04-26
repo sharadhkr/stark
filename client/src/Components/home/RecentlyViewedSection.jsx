@@ -110,20 +110,13 @@ const RecentlyViewedSection = () => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50"
+      className="py-4 px-2 sm:px-6 lg:px-8 bg-gray-50"
     >
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <FaEye className="text-blue-500" /> Recently Viewed Products
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
+            Checkout again
           </h2>
-          <Link
-            to="/recently-viewed"
-            className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors duration-200"
-            aria-label="View All Recently Viewed Products"
-          >
-            <IoChevronForward size={20} className="text-gray-600" />
-          </Link>
         </div>
 
         {loading ? (

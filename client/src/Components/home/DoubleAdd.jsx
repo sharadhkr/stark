@@ -1,74 +1,50 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from '../axios';
 import { useSwipeable } from 'react-swipeable';
 
-function DoubleAdd() {
-  const [images, setImages] = useState([]);
+// Memoize to prevent unnecessary re-renders
+const DoubleAdd = React.memo(({ images = [] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Fetch doubleadd images
-  useEffect(() => {
-    const fetchImages = async () => {
-      try {
-        const response = await axios.get('/api/admin/auth/ads');
-        console.log('DoubleAdd fetch response:', response.data); // Debug
-
-        const doubleaddImages = response.data.ads
-          ?.find((ad) => ad.type === 'Double Ad')?.images || [];
-        const validImages = doubleaddImages
-          .filter((img) => img && img.url && !img.disabled)
-          .map((img) => ({
-            url: img.url.replace(/^http:/, 'https:'),
-            alt: `Double Ad ${img._id || img.url.split('/').pop()}`,
-          }));
-
-        console.log('Normalized images:', validImages); // Debug
-        setImages(validImages);
-      } catch (err) {
-        console.error('Error fetching doubleadd images:', err);
-        setError(err.message || 'Failed to load images');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchImages();
-  }, []);
-
-  // Infinite sliding effect: Group images into pairs
-  const pairs = useMemo(() => {
-    if (images.length === 0) return [];
-    const groups = [];
-    for (let i = 0; i < images.length; i += 2) {
-      groups.push(images.slice(i, i + 2));
-    }
-    // Duplicate last and first pairs for infinite effect
-    return [groups[groups.length - 1] || groups[0], ...groups, groups[0]];
+  // Normalize images
+  const normalizedImages = useMemo(() => {
+    return images
+      .filter((img) => img && img.url && !img.disabled)
+      .map((img) => ({
+        url: img.url.replace(/^http:/, 'https:'),
+        alt: `Double Ad ${img._id || img.url.split('/').pop()}`,
+      }));
   }, [images]);
 
-  const displayIndex = currentIndex + 1; // Adjust for extended pairs
+  // Group images into pairs
+  const pairs = useMemo(() => {
+    if (normalizedImages.length === 0) return [];
+    const groups = [];
+    for (let i = 0; i < normalizedImages.length; i += 2) {
+      groups.push(normalizedImages.slice(i, i + 2));
+    }
+    return [groups[groups.length - 1] || groups[0], ...groups, groups[0]];
+  }, [normalizedImages]);
+
+  const displayIndex = currentIndex + 1;
 
   // Automatic sliding
   useEffect(() => {
-    if (images.length <= 2) return; // No auto-slide for 0–2 images
+    if (normalizedImages.length <= 2) return;
 
     const timer = setInterval(() => {
       setCurrentIndex((prev) => {
         if (prev === pairs.length - 2) {
-          // Jump to first real pair (index 1) without animation
           setTimeout(() => setCurrentIndex(1), 0);
           return prev + 1;
         }
         return prev + 1;
       });
-    }, 6000); // Slide every 6 seconds
+    }, 6000);
 
-    return () => clearInterval(timer); // Cleanup on unmount
-  }, [pairs.length, images.length]);
+    return () => clearInterval(timer);
+  }, [pairs.length, normalizedImages.length]);
 
-  // Reset index when reaching duplicate pairs
+  // Reset index
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(pairs.length - 2), 0);
@@ -97,43 +73,18 @@ function DoubleAdd() {
         return prev - 1;
       });
     },
-    trackMouse: true, // Allow mouse dragging for desktop
-    delta: 10, // Minimum swipe distance
+    trackMouse: true,
+    delta: 10,
+    preventDefaultTouchmoveEvent: true,
   });
 
   // Jump to specific pair
   const goToPair = (index) => {
-    setCurrentIndex(index + 1); // Adjust for extended pairs
+    setCurrentIndex(index + 1);
   };
 
-  // Handle loading state
-  if (loading) {
-    return (
-      <div className="w-full px-2 mb-5 h-20">
-        <div className="w-full h-18 bg-background rounded-2xl shadow-lg flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // Handle error state
-  if (error) {
-    return (
-      <div className="w-full px-2 mb-5 text-center">
-        <p className="text-destructive font-medium">Error: {error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   // Handle no images
-  if (images.length === 0) {
+  if (normalizedImages.length === 0) {
     return (
       <div className="w-full px-2 mb-5 text-center">
         <p className="text-muted-foreground">No double ad images available</p>
@@ -143,9 +94,9 @@ function DoubleAdd() {
 
   return (
     <div className="w-full mb-5">
-      <div className="relative w-full bg-transparent overflow-hidden drop-shadow-lg ">
+      <div className="relative w-full bg-transparent overflow-hidden drop-shadow-lg">
         <div
-          className="flex h-full transition-transform duration-500 ease-in-out"
+          className="flex h-full transition-transform duration-500 ease-in-out will-change-transform"
           style={{
             transform: `translateX(-${currentIndex * 100}%)`,
           }}
@@ -162,14 +113,14 @@ function DoubleAdd() {
                   className="w-1/2 h-full flex items-center justify-center"
                 >
                   <img
-                    className="w-full h-full object-cover shadow-[0px_0px_20px_-12px_rgba(0,0,0,0.9)] rounded-lg scale-100 transition-transform duration-500 group-hover:scale-105"
+                    className="w-full h-full object-cover shadow-[0px_0px_20px_-12px_rgba(0,0,0,0.9)] rounded-lg scale-100 transition-transform duration-500 hover:scale-105"
                     src={image.url}
                     alt={image.alt}
                     loading="lazy"
+                    fetchpriority={pairIndex === currentIndex + 1 ? 'high' : 'auto'}
                   />
                 </div>
               ))}
-              {/* Fill empty slot if pair has only one image */}
               {pair.length < 2 && (
                 <div className="w-1/2 h-full flex items-center justify-center bg-background rounded-lg" />
               )}
@@ -177,10 +128,9 @@ function DoubleAdd() {
           ))}
         </div>
       </div>
-      {/* Dots Navigation (Below Slider) */}
-      {images.length > 2 && (
+      {normalizedImages.length > 2 && (
         <div className="flex justify-center gap-2 mt-2">
-          {Array.from({ length: Math.ceil(images.length / 2) }).map((_, index) => (
+          {Array.from({ length: Math.ceil(normalizedImages.length / 2) }).map((_, index) => (
             <button
               key={index}
               onClick={() => goToPair(index)}
@@ -196,6 +146,6 @@ function DoubleAdd() {
       )}
     </div>
   );
-}
+});
 
 export default DoubleAdd;

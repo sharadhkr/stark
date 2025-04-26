@@ -174,7 +174,7 @@ const ProductCard = ({ product = {} }) => {
         size: selectedSize,
         color: selectedColor,
       };
-      await axios.post('/api/user/auth/cart', payload, {
+      await axios.post('/api/user/auth/cart/add', payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setIsInCart(true);

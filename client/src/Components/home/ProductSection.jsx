@@ -8,7 +8,7 @@ const ProductSection = ({ products = [], filteredProducts = [], setFilteredProdu
     <div className="w-full h-64 bg-gray-200 rounded-lg animate-pulse"></div>
   );
 
-  console.log('ProductSection rendering:', { products, filteredProducts, loading }); // Debug
+  // console.log('ProductSection rendering:', { products, filteredProducts, loading }); // Debug
 
   return (
     <div className="w-full px-1 ">

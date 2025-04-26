@@ -61,16 +61,9 @@ const TrendingSection = () => {
     >
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <FaFire className="text-red-500" /> Trending Products (Today)
+          <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
+            <FaFire className="text-red-500" /> Trending Products
           </h2>
-          <Link
-            to="/trending"
-            className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors duration-200"
-            aria-label="View All Trending Products"
-          >
-            <IoChevronForward size={20} className="text-gray-600" />
-          </Link>
         </div>
 
         {loading ? (

@@ -4,6 +4,7 @@
 // import { useNavigate } from 'react-router-dom';
 // import axios from '../useraxios';
 // import toast from 'react-hot-toast';
+// import PropTypes from 'prop-types';
 // import agroLogo from '../../assets/slogo.png';
 
 // // Animation variants
@@ -36,18 +37,29 @@
 //   const navigate = useNavigate();
 //   const searchRef = useRef(null);
 //   const inputRef = useRef(null);
+//   const token = localStorage.getItem('token');
+
+//   // Validate search arrays to ensure they contain strings
+//   const validateSearches = (searches) => {
+//     if (!Array.isArray(searches)) return [];
+//     return searches
+//       .map((item) => {
+//         if (typeof item === 'string') return item;
+//         if (item && typeof item === 'object' && 'query' in item) return item.query;
+//         return null;
+//       })
+//       .filter((item) => typeof item === 'string');
+//   };
 
 //   // Fetch trending data on mount
 //   useEffect(() => {
 //     const fetchTrending = async () => {
-//       const token = localStorage.getItem('token');
-//       if (!token) return;
 //       try {
-//         const res = await axios.get('/api/user/auth/search/trending', {
-//           headers: { Authorization: `Bearer ${token}` },
-//         });
+//         const endpoint = token ? '/api/user/auth/search/trending' : '/api/user/auth/search/trending';
+//         const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+//         const res = await axios.get(endpoint, config);
 //         setTrending({
-//           trendingSearches: res.data.trendingSearches || [],
+//           trendingSearches: validateSearches(res.data.trendingSearches),
 //           topSellers: res.data.topSellers || [],
 //           topCategories: res.data.topCategories || [],
 //           topProducts: res.data.topProducts || [],
@@ -58,25 +70,24 @@
 //       }
 //     };
 //     fetchTrending();
-//   }, []);
+//   }, [token]);
 
 //   // Fetch suggestions with debounce
 //   useEffect(() => {
 //     const debounce = setTimeout(() => {
 //       const fetchSuggestions = async () => {
-//         const token = localStorage.getItem('token');
-//         if (!token) return;
 //         setLoading(true);
 //         try {
 //           const endpoint = searchQuery.trim()
-//             ? '/api/user/auth/search/suggestions'
-//             : '/api/user/auth/search/recent';
-//           const res = await axios.get(endpoint, {
+//             ? (token ? '/api/user/auth/search/suggestions' : '/api/search/suggestions')
+//             : (token ? '/api/user/auth/search/recent' : '/api/user/auth/search/trending');
+//           const config = {
 //             params: searchQuery.trim() ? { q: searchQuery } : {},
-//             headers: { Authorization: `Bearer ${token}` },
-//           });
+//             ...(token && { headers: { Authorization: `Bearer ${token}` } }),
+//           };
+//           const res = await axios.get(endpoint, config);
 //           setSuggestions({
-//             recentSearches: res.data.recentSearches || [],
+//             recentSearches: token ? validateSearches(res.data.recentSearches) : [],
 //             categories: res.data.categories || [],
 //             sellers: res.data.sellers || [],
 //             products: res.data.products || [],
@@ -93,7 +104,7 @@
 //     }, 300);
 
 //     return () => clearTimeout(debounce);
-//   }, [searchQuery]);
+//   }, [searchQuery, token]);
 
 //   // Handle outside clicks and keyboard
 //   useEffect(() => {
@@ -116,16 +127,17 @@
 //   const handleSearch = (e) => {
 //     e.preventDefault();
 //     if (!searchQuery.trim()) return;
-//     saveSearch();
+//     if (token) saveSearch();
 //     navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
 //     setIsExpanded(false);
 //   };
 
 //   const saveSearch = () => {
+//     if (!token) return;
 //     axios.post(
 //       '/api/user/auth/search/recent',
 //       { query: searchQuery },
-//       { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+//       { headers: { Authorization: `Bearer ${token}` } }
 //     ).catch((err) => console.error('Save Search Error:', err));
 //   };
 
@@ -150,7 +162,7 @@
 //       default:
 //         break;
 //     }
-//     if (query) saveSearch();
+//     if (query && token) saveSearch();
 //     setIsExpanded(false);
 //   };
 
@@ -160,10 +172,11 @@
 //   };
 
 //   const clearAllRecent = () => {
+//     if (!token) return;
 //     axios.post(
 //       '/api/user/auth/search/recent',
 //       { query: '' },
-//       { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+//       { headers: { Authorization: `Bearer ${token}` } }
 //     ).then(() => {
 //       setSuggestions((prev) => ({ ...prev, recentSearches: [] }));
 //       toast.success('Recent searches cleared');
@@ -171,32 +184,46 @@
 //   };
 
 //   const removeRecentSearch = (search) => {
+//     if (!token) return;
 //     const updatedSearches = suggestions.recentSearches.filter((item) => item !== search);
 //     setSuggestions((prev) => ({ ...prev, recentSearches: updatedSearches }));
 //     axios.post(
 //       '/api/user/auth/search/recent',
 //       { query: search },
-//       { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+//       { headers: { Authorization: `Bearer ${token}` } }
 //     ).catch((err) => console.error('Remove Recent Error:', err));
 //   };
 
-//   const TagItem = ({ text, onRemove, onClick }) => (
-//     <div
-//       className="inline-flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2 mb-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
-//       onClick={onClick}
-//     >
-//       <span>{text}</span>
-//       {onRemove && (
-//         <FaTimes
-//           className="ml-2 text-gray-500 cursor-pointer hover:text-gray-700 transition-colors"
-//           onClick={(e) => {
-//             e.stopPropagation();
-//             onRemove();
-//           }}
-//         />
-//       )}
-//     </div>
-//   );
+//   const TagItem = ({ text, onRemove, onClick }) => {
+//     if (typeof text !== 'string') {
+//       console.warn('TagItem received non-string text:', text);
+//       return null;
+//     }
+
+//     return (
+//       <div
+//         className="inline-flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2 mb-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+//         onClick={onClick}
+//       >
+//         <span>{text}</span>
+//         {onRemove && (
+//           <FaTimes
+//             className="ml-2 text-gray-500 cursor-pointer hover:text-gray-700 transition-colors"
+//             onClick={(e) => {
+//               e.stopPropagation();
+//               onRemove();
+//             }}
+//           />
+//         )}
+//       </div>
+//     );
+//   };
+
+//   TagItem.propTypes = {
+//     text: PropTypes.string.isRequired,
+//     onRemove: PropTypes.func,
+//     onClick: PropTypes.func,
+//   };
 
 //   const BlockItem = ({ icon, text, onClick }) => (
 //     <div
@@ -209,6 +236,12 @@
 //       <span className="text-sm text-gray-700 truncate">{text}</span>
 //     </div>
 //   );
+
+//   BlockItem.propTypes = {
+//     icon: PropTypes.element.isRequired,
+//     text: PropTypes.string.isRequired,
+//     onClick: PropTypes.func.isRequired,
+//   };
 
 //   const hasResults = () =>
 //     (Array.isArray(suggestions.products) && suggestions.products.length > 0) ||
@@ -312,7 +345,7 @@
 //                         <BlockItem
 //                           key={seller._id}
 //                           icon={<FaUser className="text-yellow-500" />}
-//                           text={`${seller.name} ${seller.shopName ? `(` + seller.shopName + `)` : ''}`}
+//                           text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
 //                           onClick={() => handleQuickSearch('seller', seller)}
 //                         />
 //                       ))}
@@ -325,7 +358,7 @@
 
 //                   {hasResults() && (
 //                     <>
-//                       {Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
+//                       {token && Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
 //                         <div className="mb-6">
 //                           <div className="flex justify-between items-center mb-3">
 //                             <h3 className="text-sm font-semibold text-gray-700 flex items-center">
@@ -393,7 +426,7 @@
 //                             <BlockItem
 //                               key={seller._id}
 //                               icon={<FaUser className="text-yellow-500" />}
-//                               text={`${seller.name} ${seller.shopName ? `(` + seller.shopName + `)` : ''}`}
+//                               text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
 //                               onClick={() => handleQuickSearch('seller', seller)}
 //                             />
 //                           ))}
@@ -427,7 +460,7 @@
 //                 </>
 //               ) : (
 //                 <>
-//                   {Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
+//                   {token && Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
 //                     <div className="mb-6">
 //                       <div className="flex justify-between items-center mb-3">
 //                         <h3 className="text-sm font-semibold text-gray-700 flex items-center">
@@ -495,7 +528,7 @@
 //                         <BlockItem
 //                           key={seller._id}
 //                           icon={<FaUser className="text-yellow-500" />}
-//                           text={`${seller.name} ${seller.shopName ? `(` + seller.shopName + `)` : ''}`}
+//                           text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
 //                           onClick={() => handleQuickSearch('seller', seller)}
 //                         />
 //                       ))}
@@ -539,14 +572,18 @@
 //   );
 // };
 
-// export default SearchBar;
+// SearchBar.propTypes = {
+//   placeholder: PropTypes.string,
+// };
 
-import React, { useState, useEffect, useRef } from 'react';
+// export default SearchBar;
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FaArrowRight, FaSearch, FaTimes, FaFire, FaStar, FaTag, FaShoppingBag, FaTrash, FaUser } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
+import PropTypes from 'prop-types';
 import agroLogo from '../../assets/slogo.png';
 
 // Animation variants
@@ -581,18 +618,33 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
   const inputRef = useRef(null);
   const token = localStorage.getItem('token');
 
-  // Fetch trending data on mount
+  // Validate search arrays to ensure they contain strings
+  const validateSearches = (searches) => {
+    if (!Array.isArray(searches)) return [];
+    return searches
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'query' in item) return item.query;
+        return null;
+      })
+      .filter((item) => typeof item === 'string');
+  };
+
+  // Fetch trending data on mount with no caching to ensure fresh data
   useEffect(() => {
     const fetchTrending = async () => {
       try {
         const endpoint = token ? '/api/user/auth/search/trending' : '/api/user/auth/search/trending';
-        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+        const config = {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          params: { limit: 10 }, // Limit results for performance
+        };
         const res = await axios.get(endpoint, config);
         setTrending({
-          trendingSearches: res.data.trendingSearches || [],
-          topSellers: res.data.topSellers || [],
-          topCategories: res.data.topCategories || [],
-          topProducts: res.data.topProducts || [],
+          trendingSearches: validateSearches(res.data.trendingSearches),
+          topSellers: res.data.topSellers?.slice(0, 5) || [], // Limit to 5
+          topCategories: res.data.topCategories?.slice(0, 5) || [],
+          topProducts: res.data.topProducts?.slice(0, 5) || [],
         });
       } catch (error) {
         console.error('Fetch Trending Error:', error);
@@ -600,7 +652,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
       }
     };
     fetchTrending();
-  }, [token]);
+  }, [token]); // Refetch on mount or token change
 
   // Fetch suggestions with debounce
   useEffect(() => {
@@ -612,15 +664,15 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
             ? (token ? '/api/user/auth/search/suggestions' : '/api/search/suggestions')
             : (token ? '/api/user/auth/search/recent' : '/api/user/auth/search/trending');
           const config = {
-            params: searchQuery.trim() ? { q: searchQuery } : {},
+            params: searchQuery.trim() ? { q: searchQuery, limit: 10 } : { limit: 10 },
             ...(token && { headers: { Authorization: `Bearer ${token}` } }),
           };
           const res = await axios.get(endpoint, config);
           setSuggestions({
-            recentSearches: token ? (res.data.recentSearches || []) : [],
-            categories: res.data.categories || [],
-            sellers: res.data.sellers || [],
-            products: res.data.products || [],
+            recentSearches: token ? validateSearches(res.data.recentSearches) : [],
+            categories: res.data.categories?.slice(0, 5) || [],
+            sellers: res.data.sellers?.slice(0, 5) || [],
+            products: res.data.products?.slice(0, 5) || [],
           });
         } catch (error) {
           console.error('Fetch Suggestions Error:', error);
@@ -631,7 +683,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
         }
       };
       fetchSuggestions();
-    }, 300);
+    }, 500); // Increased debounce for performance
 
     return () => clearTimeout(debounce);
   }, [searchQuery, token]);
@@ -724,23 +776,36 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
     ).catch((err) => console.error('Remove Recent Error:', err));
   };
 
-  const TagItem = ({ text, onRemove, onClick }) => (
-    <div
-      className="inline-flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2 mb-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
-      onClick={onClick}
-    >
-      <span>{text}</span>
-      {onRemove && (
-        <FaTimes
-          className="ml-2 text-gray-500 cursor-pointer hover:text-gray-700 transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        />
-      )}
-    </div>
-  );
+  const TagItem = ({ text, onRemove, onClick }) => {
+    if (typeof text !== 'string') {
+      console.warn('TagItem received non-string text:', text);
+      return null;
+    }
+
+    return (
+      <div
+        className="inline-flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2 mb-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+        onClick={onClick}
+      >
+        <span>{text}</span>
+        {onRemove && (
+          <FaTimes
+            className="ml-2 text-gray-500 cursor-pointer hover:text-gray-700 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          />
+        )}
+      </div>
+    );
+  };
+
+  TagItem.propTypes = {
+    text: PropTypes.string.isRequired,
+    onRemove: PropTypes.func,
+    onClick: PropTypes.func,
+  };
 
   const BlockItem = ({ icon, text, onClick }) => (
     <div
@@ -754,14 +819,23 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
     </div>
   );
 
-  const hasResults = () =>
-    (Array.isArray(suggestions.products) && suggestions.products.length > 0) ||
-    (Array.isArray(suggestions.categories) && suggestions.categories.length > 0) ||
-    (Array.isArray(suggestions.sellers) && suggestions.sellers.length > 0);
+  BlockItem.propTypes = {
+    icon: PropTypes.element.isRequired,
+    text: PropTypes.string.isRequired,
+    onClick: PropTypes.func.isRequired,
+  };
+
+  const hasResults = useMemo(
+    () =>
+      (Array.isArray(suggestions.products) && suggestions.products.length > 0) ||
+      (Array.isArray(suggestions.categories) && suggestions.categories.length > 0) ||
+      (Array.isArray(suggestions.sellers) && suggestions.sellers.length > 0),
+    [suggestions]
+  );
 
   return (
     <div className="relative w-full">
-      <div ref={searchRef} className="relative px-1 py-4 mx-auto z-20">
+      <div ref={searchRef} className="relative mt-4 mb-5 px-2 mx-auto z-20">
         <motion.form
           onSubmit={handleSearch}
           initial="hidden"
@@ -769,15 +843,15 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
           variants={fadeIn}
           className="flex w-full items-center bg-gray-50/85 rounded-2xl shadow-md px-8 py-3 border border-gray-200"
         >
-          <div className="flex z-30 w-full items-center">
-            <div className="relative w-15 z-30 flex h-full rounded-full shadow-inner">
-              <div className="-top-[14px] z-30 -left-8 w-32 absolute">
-                <img className="drop-shadow-lg w-full z-30" src={agroLogo} alt="Logo" />
+          <div className="flex w-full items-center">
+            <div className=" relative w-15 flex h-full rounded-full shadow-inner">
+              <div className="-top-[14px] z-10 -left-8 w-32 absolute">
+                <img className="drop-shadow-lg w-full" src={agroLogo} alt="Logo" />
               </div>
             </div>
             <input
               ref={inputRef}
-              className="flex-1 w-[60%] ml-14 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
+              className="flex-1 w-[60%] ml-16 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
               placeholder={placeholder}
               type="text"
               value={searchQuery}
@@ -802,7 +876,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
               initial="hidden"
               animate="visible"
               variants={expandVariants}
-              className="absolute left-0 right-0 mt-2 bg-gray-50 backdrop-blur-md rounded-xl shadow-lg mx-2 pt-20 z-5 p-6 max-h-[460px] overflow-y-auto border border-gray-100"
+              className="absolute left-0 right-0 mt-2 bg-white/90 backdrop-blur-md rounded-xl shadow-lg mx-2 z-20 p-6 max-h-[450px] overflow-y-auto border border-gray-100"
             >
               {loading && searchQuery.trim() ? (
                 <p className="text-gray-500 text-center py-4">Searching...</p>
@@ -1081,6 +1155,10 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
       </div>
     </div>
   );
+};
+
+SearchBar.propTypes = {
+  placeholder: PropTypes.string,
 };
 
 export default SearchBar;

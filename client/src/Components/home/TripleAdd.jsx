@@ -1,74 +1,51 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from '../axios';
 import { useSwipeable } from 'react-swipeable';
 
-function TripleAdd() {
-  const [images, setImages] = useState([]);
+// Memoize to prevent unnecessary re-renders
+const TripleAdd = React.memo(({ images = [] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Fetch tripleadd images
-  useEffect(() => {
-    const fetchImages = async () => {
-      try {
-        const response = await axios.get('/api/admin/auth/ads');
-        console.log('TripleAdd fetch response:', response.data); // Debug
-
-        const tripleaddImages = response.data.ads
-          ?.find((ad) => ad.type === 'Triple Ad')?.images || [];
-        const validImages = tripleaddImages
-          .filter((img) => img && img.url && !img.disabled)
-          .map((img) => ({
-            url: img.url.replace(/^http:/, 'https:'),
-            alt: `Triple Ad ${img._id || img.url.split('/').pop()}`,
-          }));
-
-        console.log('Normalized images:', validImages); // Debug
-        setImages(validImages);
-      } catch (err) {
-        console.error('Error fetching tripleadd images:', err);
-        setError(err.message || 'Failed to load images');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchImages();
-  }, []);
-
-  // Infinite sliding effect: Group images into triplets
-  const triplets = useMemo(() => {
-    if (images.length === 0) return [];
-    const groups = [];
-    for (let i = 0; i < images.length; i += 3) {
-      groups.push(images.slice(i, i + 3));
-    }
-    // Duplicate last and first triplets for infinite effect
-    return [groups[groups.length - 1] || groups[0], ...groups, groups[0]];
+  // Normalize images (already done in Home.jsx, but ensure format)
+  const normalizedImages = useMemo(() => {
+    return images
+      .filter((img) => img && img.url && !img.disabled)
+      .map((img) => ({
+        url: img.url.replace(/^http:/, 'https:'),
+        alt: `Triple Ad ${img._id || img.url.split('/').pop()}`,
+      }));
   }, [images]);
 
-  const displayIndex = currentIndex + 1; // Adjust for extended triplets
+  // Group images into triplets for sliding
+  const triplets = useMemo(() => {
+    if (normalizedImages.length === 0) return [];
+    const groups = [];
+    for (let i = 0; i < normalizedImages.length; i += 3) {
+      groups.push(normalizedImages.slice(i, i + 3));
+    }
+    // Duplicate for infinite effect
+    return [groups[groups.length - 1] || groups[0], ...groups, groups[0]];
+  }, [normalizedImages]);
+
+  const displayIndex = currentIndex + 1;
 
   // Automatic sliding
   useEffect(() => {
-    if (images.length <= 3) return; // No auto-slide for 0–3 images
+    if (normalizedImages.length <= 3) return;
 
     const timer = setInterval(() => {
       setCurrentIndex((prev) => {
         if (prev === triplets.length - 2) {
-          // Jump to first real triplet (index 1) without animation
           setTimeout(() => setCurrentIndex(1), 0);
           return prev + 1;
         }
         return prev + 1;
       });
-    }, 6000); // Slide every 6 seconds
+    }, 6000);
 
-    return () => clearInterval(timer); // Cleanup on unmount
-  }, [triplets.length, images.length]);
+    return () => clearInterval(timer);
+  }, [triplets.length, normalizedImages.length]);
 
-  // Reset index when reaching duplicate triplets
+  // Reset index for infinite effect
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(triplets.length - 2), 0);
@@ -97,43 +74,18 @@ function TripleAdd() {
         return prev - 1;
       });
     },
-    trackMouse: true, // Allow mouse dragging for desktop
-    delta: 10, // Minimum swipe distance
+    trackMouse: true,
+    delta: 10,
+    preventDefaultTouchmoveEvent: true, // Improve touch responsiveness
   });
 
   // Jump to specific triplet
   const goToTriplet = (index) => {
-    setCurrentIndex(index + 1); // Adjust for extended triplets
+    setCurrentIndex(index + 1);
   };
 
-  // Handle loading state
-  if (loading) {
-    return (
-      <div className="w-full px-2 mb-5 h-20 ">
-        <div className="w-full h-18 bg-background rounded-2xl shadow-lg flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // Handle error state
-  if (error) {
-    return (
-      <div className="w-full px-2 mb-5 text-center">
-        <p className="text-destructive font-medium">Error: {error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   // Handle no images
-  if (images.length === 0) {
+  if (normalizedImages.length === 0) {
     return (
       <div className="w-full px-2 mb-5 text-center">
         <p className="text-muted-foreground">No triple ad images available</p>
@@ -145,7 +97,7 @@ function TripleAdd() {
     <div className="w-full mb-5">
       <div className="relative w-full bg-transparent overflow-hidden drop-shadow-lg">
         <div
-          className="flex h-full transition-transform duration-500 ease-in-out"
+          className="flex h-full transition-transform duration-500 ease-in-out will-change-transform"
           style={{
             transform: `translateX(-${currentIndex * 100}%)`,
           }}
@@ -154,7 +106,7 @@ function TripleAdd() {
           {triplets.map((triplet, tripletIndex) => (
             <div
               key={`triplet-${tripletIndex}`}
-              className="min-w-full h-full flex gap-1 px-1 "
+              className="min-w-full h-full flex gap-1 px-1"
             >
               {triplet.map((image, imgIndex) => (
                 <div
@@ -162,14 +114,15 @@ function TripleAdd() {
                   className="w-1/3 h-full flex items-center justify-center"
                 >
                   <img
-                    className="w-full h-full object-cover rounded-lg scale-100  transition-transform duration-500 group-hover:scale-105"
+                    className="w-full h-full object-cover rounded-lg scale-100 transition-transform duration-500 hover:scale-105"
                     src={image.url}
                     alt={image.alt}
                     loading="lazy"
+                    // Preload next images
+                    fetchpriority={tripletIndex === currentIndex + 1 ? 'high' : 'auto'}
                   />
                 </div>
               ))}
-              {/* Fill empty slots if triplet has fewer than 3 images */}
               {triplet.length < 3 &&
                 Array.from({ length: 3 - triplet.length }).map((_, i) => (
                   <div
@@ -181,10 +134,9 @@ function TripleAdd() {
           ))}
         </div>
       </div>
-      {/* Dots Navigation (Below Slider) */}
-      {images.length > 3 && (
+      {normalizedImages.length > 3 && (
         <div className="flex justify-center gap-2 mt-2">
-          {Array.from({ length: Math.ceil(images.length / 3) }).map((_, index) => (
+          {Array.from({ length: Math.ceil(normalizedImages.length / 3) }).map((_, index) => (
             <button
               key={index}
               onClick={() => goToTriplet(index)}
@@ -200,6 +152,6 @@ function TripleAdd() {
       )}
     </div>
   );
-}
+});
 
 export default TripleAdd;
