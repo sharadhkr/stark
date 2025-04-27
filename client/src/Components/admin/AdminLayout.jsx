@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -7,7 +7,6 @@ import {
   useSensor,
   useSensors,
   useDroppable,
-  DragOverlay,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -16,26 +15,10 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { toast } from 'sonner';
+import toast from 'react-hot-toast';
 import axios from '../axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '../../../@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '../../../@/components/ui/dialog';
-import { Card, CardContent } from '../../../@/components/ui/card';
-import { Loader2, Save, Edit, Trash2 } from 'lucide-react';
+import { FaSpinner, FaSave, FaEdit, FaTrash, FaGripVertical } from 'react-icons/fa';
 import useAdminAuth from '../../hooks/useAdminAuth';
 
 // Static component definitions
@@ -55,205 +38,126 @@ const availableComponents = [
   { id: 'product-section', name: 'ProductSection', displayName: 'Product Section' },
 ];
 
-// Animation variants
-const fadeIn = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
-};
-
-const rippleEffect = {
-  initial: { scale: 0, opacity: 0.3 },
-  animate: { scale: 3, opacity: 0, transition: { duration: 0.2, ease: 'easeOut' } },
-};
-
-const dropPulse = {
-  initial: { scale: 1, opacity: 0.2 },
-  animate: { scale: 1.05, opacity: 0, transition: { duration: 0.15, ease: 'easeOut' } },
-};
-
 // Sortable item component
-const SortableItem = React.memo(
-  ({ id, name, displayName, index, isMainBox, onRemove, onEditProps, isDragging, isOverId }) => {
-    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
-    const style = useMemo(
-      () => ({
-        transform: CSS.Transform.toString(transform),
-        transition: transition || 'transform 0.08s ease, margin 0.08s ease',
-        marginBottom: isOverId === id ? '28px' : '8px',
-      }),
-      [transform, transition, isOverId, id]
-    );
+const SortableItem = ({ id, name, displayName, index, isMainBox, onRemove, onEditProps }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || 'transform 0.2s ease',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    touchAction: 'none',
+    zIndex: isDragging ? 10 : 1,
+  };
 
-    return (
-      <motion.div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...listeners}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{
-          opacity: isDragging ? 0.2 : 1,
-          y: 0,
-          scale: isDragging ? 0.9 : 1,
-          boxShadow: isDragging ? '0 4px 8px rgba(0,0,0,0.15)' : '0 2px 4px rgba(0,0,0,0.1)',
-        }}
-        whileHover={{ scale: 1.03 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        className={`relative p-6 m-2 rounded-xl flex items-center justify-between touch-none bg-gradient-to-r ${
-          isMainBox
-            ? 'from-emerald-100 to-emerald-200 text-emerald-900'
-            : 'from-indigo-100 to-indigo-200 text-indigo-900'
-        } hover:shadow-sm transition-shadow duration-150 cursor-grab active:cursor-grabbing min-h-[60px] bg-indigo-200/50 active:bg-indigo-200/80`}
-        role="button"
-        aria-label={`Drag ${displayName} component`}
-        title={displayName}
-        onTouchStart={() => {
-          if ('vibrate' in navigator) navigator.vibrate(30);
-        }}
-      >
-        {isDragging && (
-          <motion.div
-            className="absolute inset-0 bg-indigo-300 opacity-10 rounded-xl"
-            variants={rippleEffect}
-            initial="initial"
-            animate="animate"
-          />
-        )}
-        <span className="text-base font-semibold select-none">{displayName}</span>
-        {isMainBox && (
-          <div className="flex gap-3">
-            {name === 'CategorySectionn' && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEditProps(index);
-                }}
-                className="p-3 bg-yellow-400 text-white rounded-full hover:bg-yellow-500 hover:scale-105 transition-transform duration-150"
-                aria-label="Edit category properties"
-                title="Edit category properties"
-              >
-                <Edit size={18} />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(index);
-              }}
-              className="p-3 bg-red-400 text-white rounded-full hover:bg-red-500 hover:scale-105 transition-transform duration-150"
-              aria-label="Remove component"
-              title="Remove component"
-            >
-              <Trash2 size={18} />
-            </Button>
-          </div>
-        )}
-        {isOverId === id && (
-          <motion.div
-            className="absolute inset-0 border-2 border-indigo-600 bg-gradient-to-r from-indigo-100 to-indigo-200 opacity-40 rounded-xl"
-            variants={dropPulse}
-            initial="initial"
-            animate="animate"
-          />
-        )}
-      </motion.div>
-    );
-  },
-  (prevProps, nextProps) => {
-    return (
-      prevProps.id === nextProps.id &&
-      prevProps.name === nextProps.name &&
-      prevProps.displayName === nextProps.displayName &&
-      prevProps.index === nextProps.index &&
-      prevProps.isMainBox === nextProps.isMainBox &&
-      prevProps.isDragging === nextProps.isDragging &&
-      prevProps.isOverId === nextProps.isOverId &&
-      prevProps.onRemove === nextProps.onRemove &&
-      prevProps.onEditProps === nextProps.onEditProps
-    );
-  }
-);
-
-// Droppable box component
-const DroppableBox = ({ id, children, title, isMainBox }) => {
-  const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <Card
+    <motion.div
       ref={setNodeRef}
-      className={`flex-1 p-4 bg-white rounded-2xl shadow-md border-2 ${
-        isOver ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100'
-      } min-h-[calc(100vh-250px)] max-h-[calc(100vh-250px)] overflow-y-auto overflow-x-hidden overscroll-y-none overscroll-x-none scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 touch-none`}
+      style={style}
+      {...attributes}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: isDragging ? 1.05 : 1,
+        boxShadow: isDragging ? '0 8px 16px rgba(0,0,0,0.2)' : 'none',
+      }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className={`p-3 my-2 rounded-xl flex items-center gap-3 touch-none ${
+        isMainBox ? 'bg-green-100 text-green-900' : 'bg-blue-100 text-blue-900'
+      } ${isMainBox ? 'justify-between' : 'cursor-move'}`}
+      role="button"
+      aria-label={`Drag ${displayName} component`}
+      onTouchStart={() => {
+        if ('vibrate' in navigator) navigator.vibrate(50); // Haptic feedback
+      }}
     >
-      <CardContent className="p-0">
-        <h4 className="text-base font-semibold text-gray-800 mb-3 sticky top-0 bg-white z-10 p-2 rounded-t-2xl">
-          {title}
-        </h4>
-        {children}
-      </CardContent>
-    </Card>
+      <FaGripVertical
+        className="text-gray-600 text-lg cursor-move touch-none"
+        {...listeners}
+        aria-hidden="true"
+      />
+      <span className="flex-1 text-sm font-medium select-none">{displayName}</span>
+      {isMainBox && (
+        <div className="flex gap-2">
+          {name === 'CategorySectionn' && (
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => onEditProps(index)}
+              className="p-2 bg-yellow-500 text-white rounded-full hover:bg-yellow-600 transition-colors"
+              aria-label={`Edit properties for ${displayName}`}
+              title="Edit Properties"
+            >
+              <FaEdit size={14} />
+            </motion.button>
+          )}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => onRemove(index)}
+            className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+            aria-label={`Remove ${displayName} from layout`}
+            title="Remove Component"
+          >
+            <FaTrash size={14} />
+          </motion.button>
+        </div>
+      )}
+    </motion.div>
   );
 };
 
-// Drag overlay component
-const DragOverlayItem = ({ id, name, displayName, isMainBox }) => (
-  <motion.div
-    initial={{ scale: 1 }}
-    animate={{
-      scale: 0.9,
-      boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
-    }}
-    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-    className={`p-6 m-2 rounded-xl flex items-center justify-between touch-none bg-gradient-to-r ${
-      isMainBox
-        ? 'from-emerald-100 to-emerald-200 text-emerald-900'
-        : 'from-indigo-100 to-indigo-200 text-indigo-900'
-    } shadow-md z-50 min-h-[60px]`}
-  >
-    <span className="text-base font-semibold select-none">{displayName}</span>
-  </motion.div>
-);
+// Droppable main box component
+const DroppableMainBox = ({ children, id }) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-h-[200px] bg-white rounded-xl p-3 border-2 ${
+        isOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200'
+      } overflow-y-auto max-h-[calc(100vh-250px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 touch-none`}
+      role="region"
+      aria-label="Homepage layout droppable area"
+    >
+      {children}
+    </div>
+  );
+};
 
-const AdminLayout = ({ categories = [] }) => {
+const AdminLayout = ({ categories = [], loading: parentLoading }) => {
   const { isAdmin, error, checkAdmin } = useAdminAuth();
   const [mainBoxComponents, setMainBoxComponents] = useState([]);
   const [editingProps, setEditingProps] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [layoutError, setLayoutError] = useState(null);
-  const [activeId, setActiveId] = useState(null);
-  const [overId, setOverId] = useState(null);
-  const deferredOverId = useDeferredValue(overId);
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 30, tolerance: 3 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 10 },
+    })
   );
 
-  // Generate unique ID
+  const fadeIn = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+  };
+
+  // Generate unique ID for components
   const generateUniqueId = useCallback((name) => {
     return `${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
 
-  // Debounce drag over
-  const debounce = useCallback((fn, wait) => {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => fn(...args), wait);
-    };
-  }, []);
-
-  // Fetch layout
+  // Fetch layout on mount
   useEffect(() => {
     const fetchLayout = async () => {
       setIsLoading(true);
       setLayoutError(null);
       try {
         const token = localStorage.getItem('adminToken');
-        if (!token) throw new Error('No admin token found');
+        if (!token) {
+          throw new Error('No admin token found');
+        }
         const layoutRes = await axios.get('/api/admin/auth/layout', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -275,70 +179,49 @@ const AdminLayout = ({ categories = [] }) => {
       }
     };
 
-    if (isAdmin) fetchLayout();
+    if (isAdmin) {
+      fetchLayout();
+    }
   }, [isAdmin, generateUniqueId]);
-
-  // Handle drag start
-  const handleDragStart = useCallback((event) => {
-    setActiveId(event.active.id);
-    if ('vibrate' in navigator) navigator.vibrate(30);
-    document.body.style.touchAction = 'none'; // Prevent scrolling
-  }, []);
-
-  // Handle drag over
-  const handleDragOver = useCallback(
-    debounce((event) => {
-      const { over } = event;
-      setOverId(over?.id || null);
-    }, 150),
-    [debounce]
-  );
 
   // Handle drag end
   const handleDragEnd = useCallback(
     (event) => {
       const { active, over } = event;
-      setActiveId(null);
-      setOverId(null);
-      document.body.style.touchAction = ''; // Restore scrolling
-
       if (!over) return;
 
       const isActiveInAvailable = availableComponents.some((comp) => comp.id === active.id);
       const isActiveInMain = mainBoxComponents.some((comp) => comp.id === active.id);
 
-      if (isActiveInAvailable && over.id === 'main-droppable') {
+      if (isActiveInAvailable) {
         const component = availableComponents.find((comp) => comp.id === active.id);
         const newComponent = {
           ...component,
           id: generateUniqueId(component.name),
           props: component.name === 'CategorySectionn' ? { categoryId: '', categoryName: '' } : {},
         };
-        setMainBoxComponents((prev) => [...prev, newComponent]);
-        toast.success(`${component.displayName} added to layout`);
-        if ('vibrate' in navigator) navigator.vibrate(30);
-      } else if (isActiveInAvailable && mainBoxComponents.some((comp) => comp.id === over.id)) {
-        const component = availableComponents.find((comp) => comp.id === active.id);
-        const newComponent = {
-          ...component,
-          id: generateUniqueId(component.name),
-          props: component.name === 'CategorySectionn' ? { categoryId: '', categoryName: '' } : {},
-        };
-        const overIndex = mainBoxComponents.findIndex((comp) => comp.id === over.id);
-        setMainBoxComponents((prev) => [
-          ...prev.slice(0, overIndex),
-          newComponent,
-          ...prev.slice(overIndex),
-        ]);
-        toast.success(`${component.displayName} added to layout`);
-        if ('vibrate' in navigator) navigator.vibrate(30);
+
+        if (over.id === 'main-droppable') {
+          setMainBoxComponents((prev) => [...prev, newComponent]);
+          toast.success(`${component.displayName} added to layout`);
+          if ('vibrate' in navigator) navigator.vibrate(50); // Haptic feedback
+        } else if (mainBoxComponents.some((comp) => comp.id === over.id)) {
+          const overIndex = mainBoxComponents.findIndex((comp) => comp.id === over.id);
+          setMainBoxComponents((prev) => [
+            ...prev.slice(0, overIndex),
+            newComponent,
+            ...prev.slice(overIndex),
+          ]);
+          toast.success(`${component.displayName} added to layout`);
+          if ('vibrate' in navigator) navigator.vibrate(50);
+        }
       } else if (isActiveInMain && mainBoxComponents.some((comp) => comp.id === over.id)) {
         const oldIndex = mainBoxComponents.findIndex((comp) => comp.id === active.id);
         const newIndex = mainBoxComponents.findIndex((comp) => comp.id === over.id);
         if (oldIndex !== newIndex) {
           setMainBoxComponents((prev) => arrayMove(prev, oldIndex, newIndex));
           toast.success('Component reordered');
-          if ('vibrate' in navigator) navigator.vibrate(30);
+          if ('vibrate' in navigator) navigator.vibrate(50);
         }
       }
     },
@@ -348,7 +231,7 @@ const AdminLayout = ({ categories = [] }) => {
   // Remove component
   const removeComponent = useCallback((index) => {
     setMainBoxComponents((prev) => [...prev.slice(0, index), ...prev.slice(index + 1)]);
-    toast.success('Component removed');
+    toast.success('Component removed from layout');
   }, []);
 
   // Edit props
@@ -361,15 +244,23 @@ const AdminLayout = ({ categories = [] }) => {
 
   // Update props
   const updateProps = useCallback(
-    (value) => {
+    (e) => {
+      const { name, value } = e.target;
       setEditingProps((prev) => {
-        const category = categories.find((cat) => cat._id === value);
+        if (name === 'categoryId') {
+          const category = categories.find((cat) => cat._id === value);
+          return {
+            ...prev,
+            props: {
+              ...prev.props,
+              categoryId: value,
+              categoryName: category ? category.name : '',
+            },
+          };
+        }
         return {
           ...prev,
-          props: {
-            categoryId: value,
-            categoryName: category ? category.name : prev.props.categoryName,
-          },
+          props: { ...prev.props, [name]: value },
         };
       });
     },
@@ -388,7 +279,7 @@ const AdminLayout = ({ categories = [] }) => {
       return newMainBox;
     });
     setEditingProps(null);
-    toast.success('Category properties saved');
+    toast.success('Properties saved');
   }, [editingProps, mainBoxComponents]);
 
   // Save layout
@@ -396,21 +287,25 @@ const AdminLayout = ({ categories = [] }) => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('adminToken');
-      if (!token) throw new Error('No admin token found');
+      if (!token) {
+        throw new Error('No admin token found');
+      }
       const layout = {
         components: mainBoxComponents.map((comp) => ({
           name: comp.name,
           props: comp.props,
         })),
       };
-      await axios.post('/api/admin/auth/layout', layout, {
+      const response = await axios.post('/api/admin/auth/layout', layout, {
         headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
+        timeout: 10000, // Add timeout for mobile networks
       });
       toast.success('Layout saved successfully');
+      return response.data;
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to save layout';
       toast.error(message);
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -419,16 +314,6 @@ const AdminLayout = ({ categories = [] }) => {
   // Memoize categories
   const memoizedCategories = useMemo(() => categories, [categories]);
 
-  // Get active component for drag overlay
-  const activeComponent = useMemo(() => {
-    if (!activeId) return null;
-    const available = availableComponents.find((comp) => comp.id === activeId);
-    if (available) return { ...available, isMainBox: false };
-    const main = mainBoxComponents.find((comp) => comp.id === activeId);
-    if (main) return { ...main, isMainBox: true };
-    return null;
-  }, [activeId, mainBoxComponents]);
-
   // Validate props
   if (!Array.isArray(categories)) {
     return (
@@ -436,15 +321,15 @@ const AdminLayout = ({ categories = [] }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="p-6 bg-red-50 rounded-2xl shadow-md text-center border border-red-300"
+        className="p-4 bg-red-50 rounded-xl shadow-md text-center"
       >
-        <p className="text-red-700 font-medium text-base">Error: Invalid categories data</p>
+        <p className="text-red-600 font-medium text-sm">Error: Invalid categories data. Please refresh the page.</p>
       </motion.div>
     );
   }
 
   // Render loading state
-  if (isAdmin === null || isLoading) {
+  if (isAdmin === null || parentLoading || isLoading) {
     return (
       <motion.div
         initial="hidden"
@@ -452,7 +337,7 @@ const AdminLayout = ({ categories = [] }) => {
         variants={fadeIn}
         className="flex justify-center items-center h-64"
       >
-        <Loader2 className="animate-spin text-indigo-500 text-4xl" aria-label="Loading" />
+        <FaSpinner className="animate-spin text-blue-600 text-4xl" aria-label="Loading" />
       </motion.div>
     );
   }
@@ -464,18 +349,18 @@ const AdminLayout = ({ categories = [] }) => {
         initial="hidden"
         animate="visible"
         variants={fadeIn}
-        className="p-6 bg-red-50 rounded-2xl shadow-md text-center border border-red-300"
+        className="p-4 bg-red-50 rounded-xl shadow-md text-center"
       >
-        <h3 className="text-lg font-semibold text-red-800">Access Denied</h3>
-        <p className="text-base text-red-700 mb-4">{error || 'Please try again'}</p>
-        <Button
+        <h3 className="text-base font-semibold text-red-700">Access Denied</h3>
+        <p className="text-xs text-red-600 mb-3">{error || 'Please try again later.'}</p>
+        <motion.button
           onClick={checkAdmin}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-base py-3 px-6 hover:scale-105 transition-transform duration-150"
+          whileTap={{ scale: 0.95 }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm"
           aria-label="Retry authentication"
-          title="Retry authentication"
         >
           Retry
-        </Button>
+        </motion.button>
       </motion.div>
     );
   }
@@ -485,187 +370,185 @@ const AdminLayout = ({ categories = [] }) => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="p-4 bg-gradient-to-b from-gray-100 to-gray-200 rounded-2xl shadow-xl max-w-full mx-auto"
+      className="p-3 sm:p-4 bg-gray-50 rounded-xl shadow-lg max-w-full mx-auto"
     >
-      <div className="flex flex-col items-center mb-6 gap-4">
-        <h3 className="text-lg font-bold text-gray-800">Manage Homepage Layout</h3>
-        <Button
-          onClick={saveLayout}
-          disabled={isLoading}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-base py-3 px-6 flex items-center gap-2 hover:scale-105 transition-transform duration-150 sticky bottom-4 z-20 md:static"
-          aria-label="Save homepage layout"
-          title="Save homepage layout"
-        >
-          {isLoading ? (
-            <Loader2 className="animate-spin" size={18} />
-          ) : (
-            <Save size={18} />
-          )}
-          Save Layout
-        </Button>
-      </div>
+      <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3">Manage Homepage Layout</h3>
       {layoutError && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-red-700 bg-red-50 p-4 rounded-lg mb-6 text-base border border-red-300"
+          className="text-red-600 bg-red-100 p-2 rounded-lg mb-3 text-xs"
         >
           {layoutError}
         </motion.p>
       )}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex flex-col md:flex-row gap-4">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <div className="flex flex-col gap-3">
           {/* Available Components */}
-          <DroppableBox
-            id="available-droppable"
-            title="Available Components"
-            isMainBox={false}
-          >
-            <SortableContext
-              items={availableComponents.map((comp) => comp.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {availableComponents.map((comp) => (
-                <SortableItem
-                  key={comp.id}
-                  id={comp.id}
-                  name={comp.name}
-                  displayName={comp.displayName}
-                  index={comp.id}
-                  isMainBox={false}
-                  isDragging={activeId === comp.id}
-                  isOverId={deferredOverId}
-                />
-              ))}
-            </SortableContext>
-          </DroppableBox>
+          <div className="bg-white p-3 rounded-xl shadow-sm">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Available Components</h4>
+            <div className="bg-gray-50 rounded-lg p-2 border border-gray-200 max-h-[250px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              <SortableContext
+                items={availableComponents.map((comp) => comp.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <AnimatePresence>
+                  {availableComponents.map((comp) => (
+                    <SortableItem
+                      key={comp.id}
+                      id={comp.id}
+                      name={comp.name}
+                      displayName={comp.displayName}
+                      index={comp.id}
+                      isMainBox={false}
+                    />
+                  ))}
+                </AnimatePresence>
+              </SortableContext>
+            </div>
+          </div>
 
-          {/* Homepage Layout */}
-          <DroppableBox
-            id="main-droppable"
-            title="Homepage Layout"
-            isMainBox={true}
-          >
+          {/* Main Layout Box */}
+          <div className="bg-white p-3 rounded-xl shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-3 gap-3">
+              <h4 className="text-sm font-medium text-gray-700">Homepage Layout</h4>
+              <motion.button
+                onClick={saveLayout}
+                whileTap={{ scale: 0.95 }}
+                disabled={isLoading}
+                className={`px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-medium w-full sm:w-auto ${
+                  isLoading
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+                aria-label="Save homepage layout"
+              >
+                {isLoading ? (
+                  <FaSpinner className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <FaSave aria-hidden="true" />
+                )}
+                Save Layout
+              </motion.button>
+            </div>
             <SortableContext
               items={mainBoxComponents.map((comp) => comp.id)}
               strategy={verticalListSortingStrategy}
             >
-              {mainBoxComponents.length === 0 ? (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-center text-gray-500 py-8 text-base"
-                >
-                  Drag components here to build the layout
-                </motion.p>
-              ) : (
-                mainBoxComponents.map((comp, index) => (
-                  <SortableItem
-                    key={comp.id}
-                    id={comp.id}
-                    name={comp.name}
-                    displayName={
-                      availableComponents.find((c) => c.name === comp.name)?.displayName ||
-                      comp.name
-                    }
-                    index={index}
-                    isMainBox={true}
-                    onRemove={removeComponent}
-                    onEditProps={editProps}
-                    isDragging={activeId === comp.id}
-                    isOverId={deferredOverId}
-                  />
-                ))
-              )}
+              <DroppableMainBox id="main-droppable">
+                <AnimatePresence>
+                  {mainBoxComponents.length === 0 ? (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="text-center text-gray-500 py-6 text-xs"
+                    >
+                      Drag components here to build the layout
+                    </motion.p>
+                  ) : (
+                    mainBoxComponents.map((comp, index) => (
+                      <SortableItem
+                        key={comp.id}
+                        id={comp.id}
+                        name={comp.name}
+                        displayName={
+                          availableComponents.find((c) => c.name === comp.name)?.displayName ||
+                          comp.name
+                        }
+                        index={index}
+                        isMainBox={true}
+                        onRemove={removeComponent}
+                        onEditProps={editProps}
+                      />
+                    ))
+                  )}
+                </AnimatePresence>
+              </DroppableMainBox>
             </SortableContext>
-          </DroppableBox>
+          </div>
         </div>
-        <DragOverlay>
-          {activeComponent && (
-            <DragOverlayItem
-              id={activeComponent.id}
-              name={activeComponent.name}
-              displayName={activeComponent.displayName}
-              isMainBox={activeComponent.isMainBox}
-            />
-          )}
-        </DragOverlay>
       </DndContext>
 
-      {/* Props Editor Dialog */}
-      <Dialog open={!!editingProps} onOpenChange={() => setEditingProps(null)}>
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 600, damping: 25 }}
-        >
-          <DialogContent className="sm:max-w-[90vw] rounded-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-lg">Edit Specific Category Properties</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
+      {/* Props Editor Modal */}
+      <AnimatePresence>
+        {editingProps && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3"
+            aria-modal="true"
+            role="dialog"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white p-4 rounded-xl shadow-xl w-full max-w-sm max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+            >
+              <h4 className="text-base font-semibold text-gray-800 mb-3">
+                Edit CategorySectionn Properties
+              </h4>
+              <div className="mb-3">
                 <label
                   htmlFor="categoryId"
-                  className="block text-base font-medium text-gray-700 mb-2"
+                  className="block text-xs font-medium text-gray-700 mb-1"
                 >
                   Select Category <span className="text-red-500">*</span>
                 </label>
-                <Select
-                  value={editingProps?.props.categoryId || ''}
-                  onValueChange={updateProps}
+                <select
+                  id="categoryId"
+                  name="categoryId"
+                  value={editingProps.props.categoryId || ''}
+                  on
+
+Change={updateProps}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none transition-colors text-sm"
                   required
+                  aria-required="true"
+                  aria-label="Select category"
                 >
-                  <SelectTrigger
-                    id="categoryId"
-                    className="w-full rounded-lg text-base py-3"
-                    aria-label="Select category"
-                  >
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {memoizedCategories.map((cat) => (
-                      <SelectItem key={cat._id} value={cat._id} className="text-base py-2">
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!editingProps?.props.categoryId && (
-                  <p className="text-red-500 text-sm mt-1">Category is required</p>
+                  <option value="">Select a category</option>
+                  {memoizedCategories.map((cat) => (
+                    <option key={cat._id} value={cat._id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                {!editingProps.props.categoryId && (
+                  <p className="text-red-500 text-xs mt-1">Category is required</p>
                 )}
               </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setEditingProps(null)}
-                className="rounded-lg text-base py-3 px-6 hover:scale-105 transition-transform duration-150"
-                title="Cancel editing"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={saveProps}
-                disabled={!editingProps?.props.categoryId}
-                className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-base py-3 px-6 hover:scale-105 transition-transform duration-150"
-                title="Save category properties"
-              >
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </motion.div>
-      </Dialog>
+              <div className="flex justify-end gap-2">
+                <motion.button
+                  onClick={() => setEditingProps(null)}
+                  whileTap={{ scale: 0.95 }}
+                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors text-sm"
+                  aria-label="Cancel editing properties"
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  onClick={saveProps}
+                  whileTap={{ scale: 0.95 }}
+                  disabled={!editingProps.props.categoryId}
+                  className={`px-3 py-2 rounded-xl text-sm font-medium ${
+                    !editingProps.props.categoryId
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                  aria-label="Save properties"
+                >
+                  Save
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
 
-export default React.memo(AdminLayout);
+export default AdminLayout;

@@ -144,6 +144,41 @@ router.post('/verify-otp', async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+router.post('/login-register', async (req, res) => {
+  const { phoneNumber, pin } = req.body;
+  if (!phoneNumber || !pin) return res.status(400).json({ message: 'Phone number and PIN are required' });
+  if (!/^\d{6}$/.test(pin)) return res.status(400).json({ message: 'PIN must be a 6-digit number' });
+
+  try {
+    let user = await User.findOne({ phoneNumber });
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      user = new User({
+        phoneNumber,
+        role: 'user',
+        pin,
+      });
+      await user.save();
+    }
+
+    const token = jwt.sign(
+      { id: user._id, phoneNumber: user.phoneNumber, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(200).json({
+      message: isNewUser ? 'Registered and logged in successfully' : 'Logged in successfully',
+      user: { id: user._id, phoneNumber: user.phoneNumber, role: user.role },
+      token,
+    });
+  } catch (error) {
+    console.error('Login/Register Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 router.get('/verify-token', userLoggedin, async (req, res) => {
   try {

@@ -6,13 +6,23 @@ import toast from 'react-hot-toast';
 import placeholderImage from '../assets/logo.png';
 
 const CartProductCard = ({
-  item = {},
-  onUpdateQuantity,
-  onRemove,
-  onSaveForLater,
+  item = null,
+  onUpdateQuantity = () => {},
+  onRemove = () => {},
+  onSaveForLater = () => {},
   isSavedForLater = false,
 }) => {
   const navigate = useNavigate();
+
+  // Validate item
+  if (!item || !item.productId) {
+    return (
+      <div className="w-full h-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm sm:text-base">
+        Invalid or Missing Item
+      </div>
+    );
+  }
+
   const {
     productId,
     name = 'Unnamed Product',
@@ -27,25 +37,41 @@ const CartProductCard = ({
 
   const stopPropagation = (e) => e.stopPropagation();
 
-  const handleQuantityChange = (newQuantity) => {
+  const handleQuantityChange = async (newQuantity) => {
     if (newQuantity < 1) return;
     if (newQuantity > stock) {
       toast.error(`Only ${stock} items available!`);
       return;
     }
-    onUpdateQuantity(productId, newQuantity, size, color);
+    try {
+      await onUpdateQuantity(productId, newQuantity, size, color);
+      toast.success(`Updated quantity to ${newQuantity}`);
+    } catch (error) {
+      console.error('Update quantity error:', error);
+      toast.error('Failed to update quantity. Please try again.');
+    }
   };
 
-  const handleRemove = (e) => {
+  const handleRemove = async (e) => {
     stopPropagation(e);
-    onRemove(productId, size, color);
-    toast.success(`${name} removed ${isSavedForLater ? 'from saved' : 'from cart'}!`);
+    try {
+      await onRemove(productId, size, color);
+      toast.success(`${name} removed ${isSavedForLater ? 'from saved' : 'from cart'}!`);
+    } catch (error) {
+      console.error('Remove item error:', error);
+      toast.error('Failed to remove item. Please try again.');
+    }
   };
 
-  const handleSaveForLater = (e) => {
+  const handleSaveForLater = async (e) => {
     stopPropagation(e);
-    onSaveForLater(productId, quantity, size, color);
-    toast.success(`${name} ${isSavedForLater ? 'moved to cart' : 'saved'}!`);
+    try {
+      await onSaveForLater(productId, quantity, size, color);
+      toast.success(`${name} ${isSavedForLater ? 'moved to cart' : 'saved'}!`);
+    } catch (error) {
+      console.error('Save for later error:', error);
+      toast.error('Failed to save item. Please try again.');
+    }
   };
 
   const handleProductClick = () => {
@@ -54,17 +80,13 @@ const CartProductCard = ({
     }
   };
 
-  if (!productId) {
-    return (
-      <div className="w-full h-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">
-        Invalid Item
-      </div>
-    );
-  }
-
-  const displayImage = Array.isArray(image) && image.length > 0 ? image[0] : placeholderImage;
+  const displayImage = Array.isArray(image) && image.length > 0 && image[0] ? image[0] : placeholderImage;
   const originalPrice = discount > 0 ? (price / (1 - discount / 100)).toFixed(2) : price;
   const isLowStock = stock > 0 && stock <= 5;
+
+  // Check authentication
+  const token = localStorage.getItem('token');
+  const isDisabled = !token || stock === 0;
 
   return (
     <motion.div
@@ -72,12 +94,12 @@ const CartProductCard = ({
       whileHover={{ scale: 1.01, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)' }}
       whileTap={{ scale: 0.98 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className={`w-full max-w-2xl h-36 bg-white rounded-lg border ${
+      className={`w-full max-w-2xl h-40 sm:h-36 bg-white rounded-lg border ${
         isSavedForLater ? 'border-amber-100' : 'border-gray-100'
-      } flex cursor-pointer overflow-hidden`}
+      } flex cursor-pointer overflow-hidden touch-none`}
     >
       {/* Image Section */}
-      <div className="w-24 h-full flex-shrink-0 bg-gray-50">
+      <div className="w-28 sm:w-24 h-full flex-shrink-0 bg-gray-50">
         <img
           src={displayImage}
           alt={name}
@@ -86,40 +108,40 @@ const CartProductCard = ({
           loading="lazy"
         />
         {discount > 0 && (
-          <span className="absolute top-1 left-1 bg-rose-500 text-white text-xs font-medium px-1.5 py-0.5 rounded-full">
+          <span className="absolute top-1 left-1 bg-rose-500 text-white text-xs sm:text-sm font-medium px-2 py-0.5 rounded-full">
             {discount}%
           </span>
         )}
       </div>
 
       {/* Content Section */}
-      <div className="flex-grow flex flex-col p-3">
+      <div className="flex-grow flex flex-col p-3 sm:p-4">
         <div className="flex flex-col h-full justify-between">
           {/* Top: Name and Price */}
           <div className="flex justify-between items-center">
             <h3
-              className="text-sm font-medium text-gray-900 truncate max-w-[60%] hover:text-blue-500 transition-colors"
+              className="text-sm sm:text-base font-medium text-gray-900 truncate max-w-[60%] hover:text-blue-500 transition-colors"
               title={name}
             >
               {name}
             </h3>
             <div className="flex items-center gap-1.5">
-              <p className="text-base font-semibold text-teal-600">₹{price.toFixed(2)}</p>
+              <p className="text-base sm:text-lg font-semibold text-teal-600">₹{price.toFixed(2)}</p>
               {discount > 0 && (
-                <p className="text-xs text-gray-400 line-through">₹{originalPrice}</p>
+                <p className="text-xs sm:text-sm text-gray-400 line-through">₹{originalPrice}</p>
               )}
             </div>
           </div>
 
           {/* Middle: Details */}
-          <div className="flex items-center gap-3 text-xs text-gray-600">
+          <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-600">
             <span className="truncate">₹{(price * quantity).toFixed(2)}</span>
             <div className="flex items-center gap-1">
               <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-md">{size}</span>
             </div>
             <div className="flex items-center gap-1">
               <span
-                className="w-2.5 h-2.5 rounded-full border border-gray-200"
+                className="w-3 h-3 rounded-full border border-gray-200"
                 style={{
                   backgroundColor: color === 'N/A' ? '#d1d5db' : color.toLowerCase(),
                 }}
@@ -131,7 +153,7 @@ const CartProductCard = ({
           {/* Bottom: Stock and Controls */}
           <div className="flex justify-between items-center">
             <p
-              className={`text-xs ${
+              className={`text-xs sm:text-sm ${
                 stock === 0 ? 'text-red-500' : isLowStock ? 'text-orange-500' : 'text-gray-500'
               }`}
             >
@@ -147,13 +169,13 @@ const CartProductCard = ({
                       stopPropagation(e);
                       handleQuantityChange(quantity - 1);
                     }}
-                    className="w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
-                    disabled={quantity <= 1 || stock === 0}
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
+                    disabled={isDisabled || quantity <= 1}
                     aria-label="Decrease quantity"
                   >
                     -
                   </motion.button>
-                  <span className="text-xs font-medium text-gray-800 w-8 text-center">
+                  <span className="text-sm font-medium text-gray-800 w-10 text-center">
                     {quantity}
                   </span>
                   <motion.button
@@ -163,8 +185,8 @@ const CartProductCard = ({
                       stopPropagation(e);
                       handleQuantityChange(quantity + 1);
                     }}
-                    className="w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
-                    disabled={stock === 0 || quantity >= stock}
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 transition-colors"
+                    disabled={isDisabled || quantity >= stock}
                     aria-label="Increase quantity"
                   >
                     +
@@ -176,23 +198,25 @@ const CartProductCard = ({
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleSaveForLater}
-                  className={`w-7 h-7 flex items-center justify-center rounded-full bg-white border ${
+                  className={`w-8 h-8 flex items-center justify-center rounded-full bg-white border ${
                     isSavedForLater
                       ? 'text-amber-500 border-amber-100 hover:bg-amber-50'
                       : 'text-gray-500 border-gray-100 hover:bg-blue-50 hover:text-blue-500'
                   } transition-all`}
                   title={isSavedForLater ? 'Move to Cart' : 'Save for Later'}
+                  disabled={!token}
                 >
-                  {isSavedForLater ? <IoSave size={14} /> : <IoSaveOutline size={14} />}
+                  {isSavedForLater ? <IoSave size={16} /> : <IoSaveOutline size={16} />}
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.1, color: '#ef4444' }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleRemove}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-white text-gray-500 border border-gray-100 hover:bg-red-50 transition-all"
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white text-gray-500 border border-gray-100 hover:bg-red-50 transition-all"
                   title="Remove"
+                  disabled={!token}
                 >
-                  <IoTrashOutline size={14} />
+                  <IoTrashOutline size={16} />
                 </motion.button>
               </div>
             </div>
@@ -203,4 +227,4 @@ const CartProductCard = ({
   );
 };
 
-export default CartProductCard;
+export default React.memo(CartProductCard);
