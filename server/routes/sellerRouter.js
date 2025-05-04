@@ -8,7 +8,7 @@ const { sendOtp, verifyOtp } = require('../utils/otp');
 const jwt = require('jsonwebtoken');
 const authenticateToken = require('../middleware/auth');
 const multer = require('multer');
-const { uploadToCloudinary } = require('../config/clowdnaryConfig');
+const { uploadToCloudinary } = require('../config/cloudinaryConfig');
 const mongoose = require('mongoose');
 require('dotenv').config();
 

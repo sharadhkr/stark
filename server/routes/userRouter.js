@@ -12,7 +12,7 @@ const Order = require('../models/orderModel');
 const { sendOtp, verifyOtp } = require('../utils/otp');
 const userLoggedin = require('../middleware/userLoggedin');
 const { uploadSingle } = require('../config/multerConfig');
-const { uploadToCloudinary } = require('../config/clowdnaryConfig');
+const { uploadToCloudinary } = require('../config/cloudinaryConfig');
 
 // Environment Variables
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';

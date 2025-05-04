@@ -4,6 +4,7 @@ import axios from '../selleraxios';
 import toast from 'react-hot-toast';
 import { FaPlus, FaEdit, FaTrash, FaSearch } from 'react-icons/fa';
 import ProductForm from './ProductForm';
+import PropTypes from 'prop-types';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
@@ -75,7 +76,7 @@ const Products = ({ products, setProducts, categories, loading }) => {
             <motion.div
               key={product._id}
               variants={fadeIn}
-              className="bg-blue-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all duration-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+              className="bg-blue-50 p-6 driven-2xl shadow-md hover:shadow-lg transition-all duration-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
             >
               <div className="flex items-center gap-4">
                 {product.images[0] ? (
@@ -95,8 +96,7 @@ const Products = ({ products, setProducts, categories, loading }) => {
                     ₹{product.price} | Qty: {product.quantity}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {product.category.name} | Sizes: {product.sizes.join(', ')} | Colors:{' '}
-                    {product.colors.join(', ')}
+                    {product.category?.name || 'No Category'} | Sizes: {product.sizes.join(', ')} | Colors: {product.colors.join(', ')}
                   </p>
                   <p className="text-sm text-gray-600">
                     Brand: {product.brand} |{' '}
@@ -151,6 +151,34 @@ const Products = ({ products, setProducts, categories, loading }) => {
       )}
     </motion.div>
   );
+};
+
+Products.propTypes = {
+  products: PropTypes.arrayOf(
+    PropTypes.shape({
+      _id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      price: PropTypes.number.isRequired,
+      quantity: PropTypes.number.isRequired,
+      category: PropTypes.shape({
+        _id: PropTypes.string,
+        name: PropTypes.string,
+      }),
+      sizes: PropTypes.arrayOf(PropTypes.string).isRequired,
+      colors: PropTypes.arrayOf(PropTypes.string).isRequired,
+      brand: PropTypes.string.isRequired,
+      status: PropTypes.string.isRequired,
+      images: PropTypes.arrayOf(PropTypes.string),
+    })
+  ).isRequired,
+  setProducts: PropTypes.func.isRequired,
+  categories: PropTypes.arrayOf(
+    PropTypes.shape({
+      _id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+    })
+  ).isRequired,
+  loading: PropTypes.bool.isRequired,
 };
 
 export default Products;

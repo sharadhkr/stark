@@ -3,11 +3,12 @@ import { motion } from 'framer-motion';
 import axios from '../selleraxios';
 import toast from 'react-hot-toast';
 import { FaUpload, FaTimes } from 'react-icons/fa';
+import PropTypes from 'prop-types';
 
 const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
   const [productForm, setProductForm] = useState({
     name: editingProduct?.name || '',
-    category: editingProduct?.category._id || '',
+    category: editingProduct?.category?._id || '',
     quantity: editingProduct?.quantity || '',
     price: editingProduct?.price || '',
     discount: editingProduct?.discount || 0,
@@ -28,7 +29,9 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
     isCashOnDeliveryAvailable: editingProduct?.isCashOnDeliveryAvailable || false,
     onlinePaymentPercentage: editingProduct?.onlinePaymentPercentage || 100,
   });
-  const [imagePreviews, setImagePreviews] = useState(editingProduct?.images || []);
+  const [imagePreviews, setImagePreviews] = useState(
+    Array.isArray(editingProduct?.images) ? editingProduct.images : []
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const productImageInputRef = useRef(null);
 
@@ -52,7 +55,6 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
         if (name === 'isCashOnDeliveryAvailable' && !checked) {
           newState.onlinePaymentPercentage = 100;
         }
-        // Ensure only one discount type is active
         if (name === 'discount' && value > 0) {
           newState.discountPercentage = 0;
         }
@@ -85,7 +87,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
   };
 
   const removeImage = (index) => {
-    const updatedImages = productForm.images.filter((_, i) => i !== index);
+    const updatedImages = productForm.images.filter((_, Pediatr) => i !== index);
     const updatedPreviews = imagePreviews.filter((_, i) => i !== index);
     setProductForm((prev) => ({ ...prev, images: updatedImages }));
     setImagePreviews(updatedPreviews);
@@ -116,6 +118,10 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
       )
     ) {
       toast.error('All required fields must be filled');
+      return;
+    }
+    if (!productForm.category) {
+      toast.error('Please select a valid category');
       return;
     }
     if (productForm.isReturnable && (!productForm.returnPeriod || productForm.returnPeriod <= 0)) {
@@ -185,6 +191,32 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
       setIsSubmitting(false);
     }
   };
+
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-blue-50 p-6 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        >
+          <h2 className="text-xl sm:text-2xl font-semibold text-gray-700 mb-6">
+            {editingProduct ? 'Edit Product' : 'Add Product'}
+          </h2>
+          <p className="text-red-600">Error: No categories available. Please try again later.</p>
+          <motion.button
+            type="button"
+            onClick={onClose}
+            whileHover={{ scale: 1.05 }}
+            className="mt-4 bg-gray-200 text-gray-700 px-6 py-2 rounded-xl hover:bg-gray-300 transition-all duration-200 shadow-sm"
+            aria-label="Cancel"
+          >
+            Close
+          </motion.button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -587,6 +619,48 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
       </motion.div>
     </div>
   );
+};
+
+ProductForm.propTypes = {
+  editingProduct: PropTypes.shape({
+    _id: PropTypes.string,
+    name: PropTypes.string,
+    category: PropTypes.shape({
+      _id: PropTypes.string,
+      name: PropTypes.string,
+    }),
+    quantity: PropTypes.number,
+    price: PropTypes.number,
+    discount: PropTypes.number,
+    discountPercentage: PropTypes.number,
+    description: PropTypes.string,
+    images: PropTypes.arrayOf(PropTypes.string),
+    sizes: PropTypes.arrayOf(PropTypes.string),
+    colors: PropTypes.arrayOf(PropTypes.string),
+    material: PropTypes.string,
+    gender: PropTypes.string,
+    brand: PropTypes.string,
+    fit: PropTypes.string,
+    careInstructions: PropTypes.string,
+    isReturnable: PropTypes.bool,
+    returnPeriod: PropTypes.number,
+    dimensions: PropTypes.shape({
+      chest: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      length: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      sleeve: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    }),
+    weight: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    isCashOnDeliveryAvailable: PropTypes.bool,
+    onlinePaymentPercentage: PropTypes.number,
+  }),
+  setProducts: PropTypes.func.isRequired,
+  categories: PropTypes.arrayOf(
+    PropTypes.shape({
+      _id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+    })
+  ).isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default ProductForm;

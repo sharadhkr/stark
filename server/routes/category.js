@@ -6,7 +6,7 @@ const Product = require('../models/productModel'); // Ensure the path is correct
 const authMiddleware = require('../middleware/auth'); // Authentication middleware
 const adminMiddleware = require('../middleware/adminLoggedin'); // Admin middleware
 const { uploadSingle } = require('../config/multerConfig'); // Multer config for single file upload
-const { uploadToCloudinary, deleteFromCloudinary } = require('../config/clowdnaryConfig'); // Cloudinary config
+const { uploadToCloudinary, deleteFromCloudinary } = require('../config/cloudinaryConfig'); // Cloudinary config
 
 // Helper function to extract Cloudinary public ID from URL (for deletion)
 const getCloudinaryPublicId = (url) => {

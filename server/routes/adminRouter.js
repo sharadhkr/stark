@@ -12,7 +12,7 @@ const ComboOffer = require('../models/ComboOfferModel');
 const Layout = require('../models/layoutModel');
 const adminLoggedin = require('../middleware/adminLoggedin');
 const multer = require('multer');
-const { uploadToCloudinary } = require('../config/clowdnaryConfig');
+const { uploadToCloudinary } = require('../config/cloudinaryConfig');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
