@@ -1,42 +1,69 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { TbCategory } from 'react-icons/tb';
+import { debounce } from 'lodash';
 import CategoryModal from '../AIAssistantModal';
 
 const GenderFilterBar = ({ products = [], setFilteredProducts }) => {
   const [selectedGender, setSelectedGender] = useState('all');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  // Normalize gender
-  const normalizeGender = (gender) => {
+  // Memoized gender normalization function
+  const normalizeGender = useCallback((gender) => {
     if (!gender) return 'unknown';
-    const lower = gender.toLowerCase();
-    if (['male', 'men'].includes(lower)) return 'men';
-    if (['female', 'women'].includes(lower)) return 'women';
-    if (['kid', 'kids', 'child', 'children'].includes(lower)) return 'kids';
-    return lower;
-  };
+    const lower = gender.toLowerCase().trim();
+    if (['male', 'men', 'man'].includes(lower)) return 'men';
+    if (['female', 'women', 'woman'].includes(lower)) return 'women';
+    if (['kid', 'kids', 'child', 'children', 'kidz'].includes(lower)) return 'kids';
+    return 'unknown';
+  }, []);
 
-  // Memoize filtered products
+  // Memoize filtered products with deduplication
   const filteredProducts = useMemo(() => {
     let filtered = [...products];
 
     if (selectedGender !== 'all') {
       filtered = filtered.filter((product) => {
         const productGender = normalizeGender(product.gender);
+        console.log(`Product ID: ${product._id}, Gender: ${product.gender}, Normalized: ${productGender}`); // Debug
         return productGender === selectedGender;
       });
     }
 
+    // Sort by price
     filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
-    console.log('GenderFilterBar filteredProducts:', filtered); // Debug
-    return filtered;
-  }, [products, selectedGender]);
 
-  // Update filteredProducts
+    // Deduplicate
+    const seenIds = new Set();
+    const uniqueFiltered = filtered.filter((product) => {
+      if (!product._id || seenIds.has(product._id)) {
+        console.warn(`Duplicate product ID in GenderFilterBar: ${product._id}`, product);
+        return false;
+      }
+      seenIds.add(product._id);
+      return true;
+    });
+
+    console.log(`Filtered products for ${selectedGender}: ${uniqueFiltered.length}`); // Debug
+    return uniqueFiltered;
+  }, [products, selectedGender, normalizeGender]);
+
+  // Debounced setFilteredProducts to prevent rapid updates
+  const debouncedSetFilteredProducts = useCallback(
+    debounce((filtered) => {
+      setFilteredProducts(filtered);
+    }, 300),
+    [setFilteredProducts]
+  );
+
+  // Update filtered products
   useEffect(() => {
-    setFilteredProducts(filteredProducts);
-  }, [filteredProducts, setFilteredProducts]);
+    debouncedSetFilteredProducts(filteredProducts);
+    return () => debouncedSetFilteredProducts.cancel(); // Cleanup debounce
+  }, [filteredProducts, debouncedSetFilteredProducts]);
+
+  // Memoize gender options
+  const genderOptions = useMemo(() => ['all', 'men', 'women', 'kids'], []);
 
   return (
     <div className="w-full relative">
@@ -44,14 +71,15 @@ const GenderFilterBar = ({ products = [], setFilteredProducts }) => {
         <div className="w-full mx-auto px-4 py-4 flex items-center">
           <div className="w-full flex justify-between">
             <div className="w-[76%] flex justify-between">
-              {['all', 'men', 'women', 'kids'].map((gender) => (
+              {genderOptions.map((gender) => (
                 <motion.button
                   key={gender}
                   onClick={() => setSelectedGender(gender)}
-                  className={`flex items-center text-sm font-semibold uppercase rounded-lg transition-all duration-300 ${selectedGender === gender
-                    ? 'bg-gray-500/0 text-violet-700   drop-shadow-md'
-                    : 'bg-gray-100/0 text-gray-600 '
-                    }`}
+                  className={`flex items-center text-sm font-semibold uppercase rounded-lg transition-all duration-300 ${
+                    selectedGender === gender
+                      ? 'bg-gray-500/0 text-violet-700 drop-shadow-md'
+                      : 'bg-gray-100/0 text-gray-600'
+                  }`}
                   whileTap={{ scale: 0.95 }}
                   aria-label={`Filter by ${gender === 'all' ? 'All Genders' : gender}`}
                 >
@@ -59,22 +87,22 @@ const GenderFilterBar = ({ products = [], setFilteredProducts }) => {
                 </motion.button>
               ))}
             </div>
-            <div className='w-[10%] flex items-end'>
-            <motion.button
-              onClick={() => setIsCategoryModalOpen(true)}
-              className={`flex items-center text-sm font-semibold uppercase rounded-lg transition-all duration-300 ${isCategoryModalOpen
-                ? 'bg-blue-500/0 text-violet-700 drop-shadow-md'
-                : 'bg-gray-100/0 text-gray-600 '
+            <div className="w-[10%] flex items-end">
+              <motion.button
+                onClick={() => setIsCategoryModalOpen(true)}
+                className={`flex items-center text-sm font-semibold uppercase rounded-lg transition-all duration-300 ${
+                  isCategoryModalOpen
+                    ? 'bg-blue-500/0 text-violet-700 drop-shadow-md'
+                    : 'bg-gray-100/0 text-gray-600'
                 }`}
-              whileTap={{ scale: 0.95 }}
-              aria-label="Open category modal"
-            >
-              <TbCategory className="w-6 h-6 text-purple-700 " />
-            </motion.button>
+                whileTap={{ scale: 0.95 }}
+                aria-label="Open category modal"
+              >
+                <TbCategory className="w-6 h-6 text-purple-700" />
+              </motion.button>
             </div>
           </div>
         </div>
-
         {isCategoryModalOpen && (
           <CategoryModal
             isOpen={isCategoryModalOpen}

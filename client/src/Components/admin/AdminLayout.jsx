@@ -383,7 +383,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
         </motion.p>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="flex flex-col gap-3">
+        <div className="flex gap-3">
           {/* Available Components */}
           <div className="bg-white p-3 rounded-xl shadow-sm">
             <h4 className="text-sm font-medium text-gray-700 mb-2">Available Components</h4>

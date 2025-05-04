@@ -1,5 +1,5 @@
 import React from 'react'
-import slogo from '../../assets/signn.jpg'
+import slogo from '../../assets/top.avif'
 
 function Topbox() {
   return (

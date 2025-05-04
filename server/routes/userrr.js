@@ -1772,19 +1772,100 @@ router.get('/sponsored', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch sponsored products', error: error.message });
   }
 });
-
 router.get('/trending', async (req, res) => {
   try {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    // Extract query parameters
+    const {
+      timeRange = 'today', // Default: today
+      startDate, // For custom range (ISO format)
+      endDate, // For custom range (ISO format)
+      sortBy = 'trendScore', // Default: trendScore
+      sortOrder = 'desc', // Default: descending
+      category, // Optional category filter
+      limit = 10, // Default: 10 products
+    } = req.query;
 
-    // Fetch products with high orders or viewCount for today
-    const trendingProducts = await Product.aggregate([
+    // Validate limit
+    const maxLimit = 50;
+    const parsedLimit = parseInt(limit, 10);
+    if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > maxLimit) {
+      return res.status(400).json({ message: `Limit must be between 1 and ${maxLimit}` });
+    }
+
+    // Validate sortBy
+    const validSortFields = ['trendScore', 'orders', 'viewCount', 'price'];
+    if (!validSortFields.includes(sortBy)) {
+      return res.status(400).json({ message: `sortBy must be one of: ${validSortFields.join(', ')}` });
+    }
+
+    // Validate sortOrder
+    const validSortOrders = ['asc', 'desc'];
+    if (!validSortOrders.includes(sortOrder)) {
+      return res.status(400).json({ message: `sortOrder must be one of: ${validSortOrders.join(', ')}` });
+    }
+
+    // Validate category (if provided)
+    let categoryFilter = {};
+    if (category) {
+      if (typeof category !== 'string' || category.trim().length === 0) {
+        return res.status(400).json({ message: 'Category must be a non-empty string' });
+      }
+      categoryFilter = { category: category.trim() };
+    }
+
+    // Determine time range
+    let dateFilter = {};
+    const now = new Date();
+    if (timeRange === 'custom') {
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: 'startDate and endDate are required for custom timeRange' });
+      }
+      const parsedStartDate = moment(startDate, moment.ISO_8601, true);
+      const parsedEndDate = moment(endDate, moment.ISO_8601, true);
+      if (!parsedStartDate.isValid() || !parsedEndDate.isValid()) {
+        return res.status(400).json({ message: 'startDate and endDate must be valid ISO 8601 dates' });
+      }
+      if (parsedEndDate.isBefore(parsedStartDate)) {
+        return res.status(400).json({ message: 'endDate must be after startDate' });
+      }
+      dateFilter = {
+        updatedAt: {
+          $gte: parsedStartDate.toDate(),
+          $lte: parsedEndDate.toDate(),
+        },
+      };
+    } else {
+      let startDate;
+      switch (timeRange) {
+        case 'today':
+          startDate = new Date(now.setHours(0, 0, 0, 0));
+          break;
+        case 'week':
+          startDate = new Date(now.setDate(now.getDate() - 7));
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          startDate = new Date(now.setDate(now.getDate() - 30));
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        default:
+          return res.status(400).json({ message: 'timeRange must be one of: today, week, month, custom' });
+      }
+      const endDate = new Date(now.setHours(23, 59, 59, 999));
+      dateFilter = {
+        updatedAt: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      };
+    }
+
+    // Build aggregation pipeline
+    const pipeline = [
       {
         $match: {
-          updatedAt: { $gte: startOfDay, $lte: endOfDay },
+          ...dateFilter,
+          ...categoryFilter,
           $or: [
             { orders: { $gt: 0 } },
             { viewCount: { $gt: 0 } },
@@ -1796,8 +1877,15 @@ router.get('/trending', async (req, res) => {
           trendScore: { $add: [{ $ifNull: ['$orders', 0] }, { $ifNull: ['$viewCount', 0] }] },
         },
       },
-      { $sort: { trendScore: -1, orders: -1, viewCount: -1 } },
-      { $limit: 10 },
+      {
+        $sort: {
+          [sortBy]: sortOrder === 'desc' ? -1 : 1,
+          // Secondary sort by orders and viewCount for consistency
+          orders: -1,
+          viewCount: -1,
+        },
+      },
+      { $limit: parsedLimit },
       {
         $project: {
           _id: 1,
@@ -1810,7 +1898,10 @@ router.get('/trending', async (req, res) => {
           category: 1,
         },
       },
-    ]);
+    ];
+
+    // Execute aggregation
+    const trendingProducts = await Product.aggregate(pipeline);
 
     res.status(200).json({ success: true, products: trendingProducts });
   } catch (error) {
@@ -1830,5 +1921,257 @@ router.get('/sponsored', async (req, res) => {
   }
 });
 
+
+router.get('/homee', async (req, res) => {
+  try {
+    // Extract token for authenticated user data
+    let user = null;
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = await User.findById(decoded.id).select('recentlyViewed recentSearches').lean();
+      } catch (error) {
+        console.warn('Token invalid for /home:', error.message);
+      }
+    }
+
+    // Check cache for unauthenticated users
+    const now = Date.now();
+    if (!user && homeCache.data && now - homeCache.timestamp < homeCache.TTL) {
+      console.log('Serving /home from cache');
+      return res.status(200).json(homeCache.data);
+    }
+
+    // Fetch data in parallel
+    const [
+      products,
+      sellers,
+      categories,
+      sponsoredProducts,
+      trendingProducts,
+      topSellers,
+      topCategories,
+      topProducts,
+      comboOffers,
+    ] = await Promise.all([
+      Product.find({ status: 'enabled' })
+        .sort({ viewCount: -1 })
+        .limit(10)
+        .select('_id name price discountedPrice images category sellerId')
+        .populate('category', 'name')
+        .populate('sellerId', 'name shopName')
+        .lean(),
+      Seller.find({ role: 'seller', status: 'enabled' })
+        .sort({ totalOrders: -1 })
+        .limit(5)
+        .select('_id name shopName profilePicture')
+        .lean()
+        .then((sellers) =>
+          sellers.map((seller) => ({
+            ...seller,
+            profilePicture: seller.profilePicture || 'https://via.placeholder.com/80x80?text=No+Image',
+          }))
+        ),
+      Category.find()
+        .sort({ productCount: -1 })
+        .limit(5)
+        .select('_id name icon')
+        .lean(),
+      SponsoredProduct.find()
+        .populate({
+          path: 'productId',
+          select: '_id name price discountedPrice images category sellerId',
+          populate: [
+            { path: 'category', select: 'name' },
+            { path: 'sellerId', select: 'name shopName' },
+          ],
+        })
+        .sort({ addedAt: -1 })
+        .limit(5)
+        .lean()
+        .then((sponsored) => sponsored.filter((sp) => sp.productId).map((sp) => sp.productId)),
+      Product.find({
+        updatedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        $or: [{ orders: { $gt: 0 } }, { viewCount: { $gt: 0 } }],
+      })
+        .sort({ viewCount: -1, orders: -1 })
+        .limit(10)
+        .select('_id name price discountedPrice images category sellerId')
+        .populate('category', 'name')
+        .populate('sellerId', 'name shopName')
+        .lean(),
+      Seller.find()
+        .sort({ totalOrders: -1 })
+        .limit(5)
+        .select('_id name shopName')
+        .lean(),
+      Category.find()
+        .sort({ productCount: -1 })
+        .limit(5)
+        .select('_id name')
+        .lean(),
+      Product.find()
+        .sort({ viewCount: -1 })
+        .limit(5)
+        .select('_id name images')
+        .lean(),
+      Product.aggregate([
+        {
+          $match: {
+            discountedPrice: { $exists: true, $ne: null },
+          },
+        },
+        {
+          $match: {
+            $expr: { $lt: ['$discountedPrice', '$price'] },
+          },
+        },
+        {
+          $limit: 5,
+        },
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            price: 1,
+            discountedPrice: 1,
+            images: 1,
+          },
+        },
+      ]).then((products) =>
+        products.map((p) => ({
+          _id: p._id,
+          name: `${p.name} Combo`,
+          products: [p],
+          price: p.discountedPrice || p.price,
+        }))
+      ),
+    ]);
+
+    // Recently Viewed
+    let recentlyViewed = [];
+    if (user && user.recentlyViewed?.length) {
+      recentlyViewed = await Product.find({
+        _id: { $in: user.recentlyViewed.map((rv) => rv.productId) },
+      })
+        .select('_id name price discountedPrice images category')
+        .populate('category', 'name')
+        .lean()
+        .then((products) =>
+          user.recentlyViewed
+            .filter((rv) => products.find((p) => p._id.toString() === rv.productId.toString()))
+            .sort((a, b) => new Date(b.viewedAt) - new Date(a.viewedAt))
+            .map((rv) => products.find((p) => p._id.toString() === rv.productId.toString()))
+            .slice(0, 10)
+        );
+    }
+
+    // Search Suggestions
+    let searchSuggestions = {
+      recentSearches: user?.recentSearches || [],
+      categories: [],
+      sellers: [],
+      products: [],
+    };
+    if (user?.recentSearches?.length) {
+      const searches = await Promise.all(
+        user.recentSearches.slice(0, 5).map(async (query) => {
+          try {
+            const [products, categories, sellers] = await Promise.all([
+              elasticsearch
+                ? elasticsearch.search({
+                    index: 'products',
+                    body: {
+                      query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                      size: 4,
+                    },
+                  }).then((res) => res.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source })))
+                : Product.find({ $text: { $search: query } })
+                    .limit(4)
+                    .select('_id name images')
+                    .lean(),
+              elasticsearch
+                ? elasticsearch.search({
+                    index: 'categories',
+                    body: { query: { match: { name: query } }, size: 4 },
+                  }).then((res) => res.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source })))
+                : Category.find({ $text: { $search: query } })
+                    .limit(4)
+                    .select('_id name')
+                    .lean(),
+              elasticsearch
+                ? elasticsearch.search({
+                    index: 'sellers',
+                    body: { query: { multi_match: { query, fields: ['name', 'shopName'], fuzziness: 'AUTO' } }, size: 4 },
+                  }).then((res) => res.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source })))
+                : Seller.find({ $text: { $search: query } })
+                    .limit(4)
+                    .select('_id name shopName')
+                    .lean(),
+            ]);
+            return { query, products, categories, sellers };
+          } catch (error) {
+            console.warn('Search failed for query:', query, error.message);
+            return { query, products: [], categories: [], sellers: [] };
+          }
+        })
+      );
+      searchSuggestions = {
+        recentSearches: searches.map((s) => s.query),
+        products: searches.flatMap((s) => s.products).slice(0, 8),
+        categories: searches.flatMap((s) => s.categories).slice(0, 8),
+        sellers: searches.flatMap((s) => s.sellers).slice(0, 8),
+      };
+    }
+
+    // Ads
+    const ads = [
+      { id: 'ad1', image: 'https://via.placeholder.com/300x100?text=Ad+1', url: '#' },
+      { id: 'ad2', image: 'https://via.placeholder.com/300x100?text=Ad+2', url: '#' },
+    ];
+
+    // Layout
+    const layout = [
+      { type: 'banner', content: { image: 'https://via.placeholder.com/1200x300?text=Welcome', url: '#' } },
+      { type: 'categoryScroll', content: { categories: categories.map((c) => c._id) } },
+      { type: 'productGrid', content: { products: products.map((p) => p._id) } },
+    ];
+
+    // Trending Searches
+    const trendingSearches = {
+      trendingSearches: ['phones', 'laptops', 'clothes', 'shoes', 'accessories'],
+      topSellers,
+      topCategories,
+      topProducts,
+    };
+
+    // Construct response
+    const response = {
+      products,
+      sellers,
+      categories,
+      layout,
+      comboOffers,
+      sponsoredProducts,
+      ads,
+      recentlyViewed,
+      trendingProducts,
+      searchSuggestions,
+      trendingSearches,
+    };
+
+    // Update cache for unauthenticated users
+    if (!user) {
+      homeCache.data = response;
+      homeCache.timestamp = now;
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Home Route Error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ message: 'Failed to fetch home data', error: error.message });
+  }
+});
 
 module.exports = router;

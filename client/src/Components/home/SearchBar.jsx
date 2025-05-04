@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import PropTypes from 'prop-types';
-import agroLogo from '../../assets/slogo.png';
+import agroLogo from '../../assets/slogo.webp';
 import { DataContext } from '../../App';
 
 // Animation variants

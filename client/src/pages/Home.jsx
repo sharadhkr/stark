@@ -3,8 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import debounce from 'lodash.debounce';
 import axios from '../useraxios';
-import logo from '../assets/slogooo.png';
-import Loding from '../assets/loadingg.mp4';
+import logo from '../assets/slogooo.webp';
+// import Loding from '../assets/loadingg.mp4';
 
 // Component imports
 import SearchBar from '../Components/home/SearchBar';
@@ -275,7 +275,7 @@ const Home = React.memo(() => {
     () => (
       <div className="text-center flex flex-col min-h-screen relative justify-center items-center">
         <div className="absolute w-full top-[45%] left-1/2 mix-blend-multiply -translate-x-1/2 -translate-y-1/2">
-          <video
+          {/* <video
             autoPlay
             loop
             muted
@@ -283,7 +283,7 @@ const Home = React.memo(() => {
             className="w-full m-auto object-cover mix-blend-multiply"
             src={Loding}
             loading="lazy"
-          />
+          /> */}
         </div>
         <img
           className="drop-shadow-xl w-1/2 opacity-0 relative -z-10"

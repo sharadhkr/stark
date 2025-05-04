@@ -1,29 +1,29 @@
-import React, { useMemo, createContext, useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy, createContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { matchPath } from 'react-router-dom';
 import BottomNavbar from './Components/Navbar';
 import Bottom from './Components/botttommm';
 
 // Lazy-loaded page components
-const Home = lazy(() => import('./pages/Home'));
-const Cart = lazy(() => import('./pages/Cart'));
-const LoginRegister = lazy(() => import('./pages/LoginRegister'));
-const SellerAuth = lazy(() => import('./pages/SellerAuth'));
-const SellerDashboard = lazy(() => import('./pages/SellerDashboard'));
-const UserDashboard = lazy(() => import('./pages/UserDashboard'));
-const AdminAuth = lazy(() => import('./pages/AdminAuth'));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const WishlistPage = lazy(() => import('./pages/WishlistPage'));
-const CategoryPage = lazy(() => import('./pages/CategoryPage'));
-const OwnerProfilePage = lazy(() => import('./pages/OwnerProfilePage'));
-const ProductPage = lazy(() => import('./pages/ProductPage'));
-const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
-const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation'));
-const OrderDetails = lazy(() => import('./pages/OrderDetails'));
-const SellerProducts = lazy(() => import('./pages/SellerProducts'));
-const SellerOrders = lazy(() => import('./pages/SellerOrders'));
-const SearchResults = lazy(() => import('./pages/SearchResults'));
-const ComboOfferPage = lazy(() => import('./pages/ComboOfferPage'));
+const Home = lazy(() => import('./pages/Home.jsx'));
+const Cart = lazy(() => import('./pages/Cart.jsx'));
+const LoginRegister = lazy(() => import('./pages/LoginRegister.jsx'));
+const SellerAuth = lazy(() => import('./pages/SellerAuth.jsx'));
+const SellerDashboard = lazy(() => import('./pages/SellerDashboard.jsx'));
+const UserDashboard = lazy(() => import('./pages/UserDashboard.jsx'));
+const AdminAuth = lazy(() => import('./pages/AdminAuth.jsx'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'));
+const WishlistPage = lazy(() => import('./pages/WishlistPage.jsx'));
+const WrappedCategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
+const OwnerProfilePage = lazy(() => import('./pages/OwnerProfilePage.jsx'));
+const ProductPage = lazy(() => import('./pages/ProductPage.jsx'));
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage.jsx'));
+const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation.jsx'));
+const OrderDetails = lazy(() => import('./pages/OrderDetails.jsx'));
+const SellerProducts = lazy(() => import('./pages/SellerProducts.jsx'));
+const SellerOrders = lazy(() => import('./pages/SellerOrders.jsx'));
+const SearchResults = lazy(() => import('./pages/SearchResults.jsx'));
+const ComboOfferPage = lazy(() => import('./pages/ComboOfferPage.jsx'));
 
 // Data Context
 export const DataContext = createContext();
@@ -41,20 +41,24 @@ const DataProvider = ({ children }) => {
     trendingProducts: { data: [], timestamp: 0 },
     searchSuggestions: { data: { recentSearches: [], categories: [], sellers: [], products: [] }, timestamp: 0 },
     trendingSearches: { data: { trendingSearches: [], topSellers: [], topCategories: [], topProducts: [] }, timestamp: 0 },
-    // Note: category_<id> keys are dynamic
   });
 
-  const isDataStale = (timestamp) => Date.now() - timestamp > 300_000; // 5 minutes
+  const isDataStale = useCallback((timestamp) => {
+    if (!timestamp) return true;
+    const now = Date.now();
+    const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+    return now - timestamp > STALE_THRESHOLD;
+  }, []);
 
-  const updateCache = (key, data) => {
-    setCache((prev) => ({ ...prev, [key]: { data, timestamp: Date.now() } }));
-  };
+  const updateCache = useCallback((key, data) => {
+    setCache((prev) => {
+      const newCache = { ...prev, [key]: { data, timestamp: Date.now() } };
+      console.log(`DataProvider: Updated cache for ${key}:`, newCache[key].data.length, 'items');
+      return newCache;
+    });
+  }, []);
 
-  const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache]);
-
-  useEffect(() => {
-    console.debug('DataProvider cache updated:', Object.keys(cache));
-  }, [cache]);
+  const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache, updateCache, isDataStale]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
@@ -81,7 +85,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div className="text-center py-8 text-red-500">
-          <p>Something went wrong. Please try again.</p>
+          <p>Something went wrong: {this.state.error.message}</p>
           <button
             onClick={() => window.location.reload()}
             className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg"
@@ -141,9 +145,9 @@ const routes = [
   { path: '/wishlist', element: <WishlistPage />, layout: true },
   { path: '/dashboard', element: <UserDashboard />, layout: true },
   { path: '/seller/products', element: <SellerProducts />, layout: true },
-  { path: '/seller/orders', element: <SellerProducts />, layout: true },
+  { path: '/seller/orders', element: <SellerOrders />, layout: true },
   { path: '/order/:orderId', element: <OrderDetails />, layout: true },
-  { path: '/category/:categoryName', element: <CategoryPage />, layout: true },
+  { path: '/category/:categoryName', element: <WrappedCategoryPage />, layout: true },
   { path: '/seller/:sellerId', element: <OwnerProfilePage />, layout: true },
   { path: '/product/:productId', element: <ProductPage />, layout: true },
   { path: '/search', element: <SearchResults />, layout: true },
@@ -181,7 +185,7 @@ function App() {
             </Routes>
           </Suspense>
         </DataProvider>
-      </ErrorBoundary>
+      </ErrorBoundary>  
     </Router>
   );
 }

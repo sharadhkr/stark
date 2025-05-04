@@ -42,10 +42,10 @@ const CategorySection = ({ categories, loading }) => {
         </div>
       </motion.div>
       <div className="absolute w-full -z-10 opacity-100 top-0 left-0 flex items-center justify-center blur-2xl">
-        <div className='w-[30%] h-10 bg-red-400'></div>
-        <div className='w-[30%] h-10 bg-purple-400'></div>
-        <div className='w-[30%] h-10 bg-pink-400'></div>
-        <div className='w-[30%] h-10 bg-green-400'></div>
+        <div className="w-[30%] h-10 bg-red-400"></div>
+        <div className="w-[30%] h-10 bg-purple-400"></div>
+        <div className="w-[30%] h-10 bg-pink-400"></div>
+        <div className="w-[30%] h-10 bg-green-400"></div>
       </div>
     </div>
   );

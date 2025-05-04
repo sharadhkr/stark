@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { FaEye } from 'react-icons/fa';
-import axios from '../useraxios';
+import axios from '../useraxios'; // Custom axios instance
 import toast from 'react-hot-toast';
 import Cookies from 'js-cookie';
 import ProductCard from '../ProductCard';
@@ -15,32 +15,44 @@ const RecentlyViewedSection = React.memo(() => {
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
   const isMounted = useRef(true);
+  const retryCount = useRef(0);
+  const debounceTimeout = useRef(null);
+  const MAX_RETRIES = 3;
+  const BASE_RETRY_DELAY = 1000; // 1 second
 
   const products = useMemo(() => cache.recentlyViewed?.data || [], [cache.recentlyViewed]);
 
-  const fetchRecentlyViewed = async () => {
+  const delay = useCallback((ms) => new Promise((resolve) => setTimeout(resolve, ms)), []);
+
+  const fetchRecentlyViewed = useCallback(async () => {
     if (!isMounted.current) return;
-    if (!isDataStale(cache.recentlyViewed?.timestamp) && products.length > 0) {
-      return; // Use cached data if fresh
+    if (!isDataStale(cache.recentlyViewed?.timestamp) && cache.recentlyViewed?.data) {
+      return; // Skip if data is fresh (even if empty)
+    }
+    if (retryCount.current >= MAX_RETRIES) {
+      setError('Unable to load recently viewed products');
+      setLoading(false);
+      toast.error('Failed to load recently viewed products');
+      return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const userToken = localStorage.getItem('token');
       let fetchedProducts = [];
+      const userToken = localStorage.getItem('token');
 
       if (userToken) {
-        const response = await axios.get('/api/user/auth/recently-viewed', {
-          headers: { Authorization: `Bearer ${userToken}` },
-        });
+        // Try authenticated endpoint
+        const response = await axios.get('/api/user/auth/recently-viewed');
         fetchedProducts = response.data.products || [];
       } else {
+        // Use cookie-based products for unauthenticated users
         const cookieViews = Cookies.get('recentlyViewed')
           ? JSON.parse(Cookies.get('recentlyViewed'))
           : [];
         if (cookieViews.length > 0) {
-          const response = await axios.post('/api/user/auth/products-by-ids', {
+          const response = await axios.post('/api/public/products-by-ids', {
             productIds: cookieViews,
           });
           fetchedProducts = response.data.products || [];
@@ -49,25 +61,44 @@ const RecentlyViewedSection = React.memo(() => {
       }
 
       updateCache('recentlyViewed', fetchedProducts);
+      retryCount.current = 0; // Reset on success, even if empty
+      setLoading(false); // Ensure loading stops for empty response
     } catch (error) {
       console.error('Error fetching recently viewed products:', error);
-      const errorMsg = error.response?.data?.message || 'Failed to load recently viewed products';
+      const status = error.response?.status;
+      const errorMsg = status === 401 ? 'Please log in to view recently viewed products' : error.response?.data?.message || 'Failed to load recently viewed products';
       setError(errorMsg);
       toast.error(errorMsg);
+      if (status !== 401) {
+        retryCount.current += 1;
+        if (retryCount.current < MAX_RETRIES) {
+          const delayMs = BASE_RETRY_DELAY * Math.pow(2, retryCount.current);
+          console.log(`Retrying fetch after ${delayMs}ms (attempt ${retryCount.current + 1})`);
+          await delay(delayMs);
+          fetchRecentlyViewed(); // Retry
+        }
+      }
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (isMounted.current && (retryCount.current >= MAX_RETRIES || error?.includes('log in'))) {
+        setLoading(false);
+      }
     }
-  };
+  }, [isDataStale, updateCache, delay]);
 
-  const trackProductView = async (productId) => {
+  const debouncedFetchRecentlyViewed = useCallback(() => {
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+    debounceTimeout.current = setTimeout(() => {
+      fetchRecentlyViewed();
+    }, 500); // 500ms debounce
+  }, [fetchRecentlyViewed]);
+
+  const trackProductView = useCallback(async (productId) => {
     try {
       const userToken = localStorage.getItem('token');
       if (userToken) {
-        await axios.post(
-          '/api/user/auth/recently-viewed',
-          { productId },
-          { headers: { Authorization: `Bearer ${userToken}` } }
-        );
+        await axios.post('/api/user/auth/recently-viewed', { productId });
       } else {
         let cookieViews = Cookies.get('recentlyViewed')
           ? JSON.parse(Cookies.get('recentlyViewed'))
@@ -77,66 +108,56 @@ const RecentlyViewedSection = React.memo(() => {
           Cookies.set('recentlyViewed', JSON.stringify(cookieViews), { expires: 7 });
         }
       }
-      fetchRecentlyViewed();
+      debouncedFetchRecentlyViewed(); // Debounced refresh
     } catch (error) {
       console.error('Error tracking product view:', error);
     }
-  };
+  }, [debouncedFetchRecentlyViewed]);
 
-  useEffect(() => {
-    isMounted.current = true;
-    fetchRecentlyViewed();
-
-   
-
- return () => {
-      isMounted.current = false;
-    };
-  }, [cache.recentlyViewed?.timestamp, isDataStale, updateCache]);
-
-  const addToCart = async (productId) => {
+  const addToCart = useCallback(async (productId) => {
     try {
       const userToken = localStorage.getItem('token');
       if (!userToken) {
         toast.error('Please log in to add items to cart');
         return;
       }
-      await axios.post(
-        '/api/user/auth/cart',
-        { productId, quantity: 1, size: 'N/A', color: 'N/A' },
-        { headers: { Authorization: `Bearer ${userToken}` } }
-      );
+      await axios.post('/api/user/auth/cart', {
+        productId,
+        quantity: 1,
+        size: 'N/A',
+        color: 'N/A',
+      });
       toast.success('Added to cart');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to add to cart');
     }
-  };
+  }, []);
 
-  const scrollLeft = () => {
+  useEffect(() => {
+    isMounted.current = true;
+    fetchRecentlyViewed();
+    return () => {
+      isMounted.current = false;
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+    };
+  }, [fetchRecentlyViewed]);
+
+  const scrollLeft = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollBy({ left: -224, behavior: 'smooth' });
     }
-  };
+  }, []);
 
-  const scrollRight = () => {
+  const scrollRight = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollBy({ left: 224, behavior: 'smooth' });
     }
-  };
+  }, []);
 
   if (!loading && products.length === 0 && !error) {
-    return (
-      <motion.section
-        initial="hidden"
-        animate="visible"
-        variants={fadeIn}
-        className="py-4 px-2 sm:px-6 lg:px-8 bg-gray-50"
-      >
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-gray-500">No recently viewed products</p>
-        </div>
-      </motion.section>
-    );
+    return null; // Hide component if no products
   }
 
   return (
@@ -189,7 +210,7 @@ const RecentlyViewedSection = React.memo(() => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M9 5l-7 7 7-7"
+                    d="M9 5l7 7-7 7"
                   />
                 </svg>
               </button>
@@ -205,7 +226,10 @@ const RecentlyViewedSection = React.memo(() => {
           <div className="text-center py-8">
             <p className="text-red-500">{error}</p>
             <button
-              onClick={fetchRecentlyViewed}
+              onClick={() => {
+                retryCount.current = 0;
+                fetchRecentlyViewed();
+              }}
               className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
             >
               Retry
