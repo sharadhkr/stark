@@ -27,42 +27,38 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     rootMargin: '200px',
   });
 
+  // Deduplicate products
   const validFilteredProducts = useMemo(() => {
     const seenIds = new Set();
     const uniqueProducts = filteredProducts
       .filter((product) => {
-        if (!product || !product._id) return false;
+        if (!product || !product._id) {
+          console.warn('Invalid product:', product);
+          return false;
+        }
         if (seenIds.has(product._id)) {
-          console.warn(`Duplicate product ID found: ${product._id}`, product);
+          console.warn(`Duplicate product ID: ${product._id}`);
           return false;
         }
         seenIds.add(product._id);
         return true;
       })
       .slice(0);
-    console.log(`Unique products count: ${uniqueProducts.length}`);
+    console.log(`ProductSection: Unique products count: ${uniqueProducts.length}`);
     return uniqueProducts;
   }, [filteredProducts]);
 
+  // Fetch with retry for wishlist and cart
   const fetchWithRetry = useCallback(
-    async (url, setData, setLoading, setError, retries = 3, delay = 1000) => {
+    async (url, setData, setLoading, setError, retries = 2, delay = 500) => {
       const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn(`No token found for ${url}`);
-        toast.error('Please login to access wishlist and cart');
-        setLoading(false);
-        setError(new Error('No token'));
-        return;
-      }
-
-      console.log(`Fetching ${url} with token: ${token.substring(0, 10)}...`);
       setLoading(true);
       setError(null);
 
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           const response = await axios.get(url);
-          console.log(`Success for ${url}:`, response.data);
+          console.log(`ProductSection: Success for ${url}:`, response.data);
           if (url.includes('wishlist')) {
             const wishlistIds = Array.isArray(response.data.wishlist)
               ? response.data.wishlist.map((item) => item._id?.toString() || item.productId?.toString())
@@ -77,13 +73,12 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
           setLoading(false);
           return;
         } catch (error) {
-          console.error(`Attempt ${attempt} failed for ${url}:`, error);
+          console.error(`ProductSection: Attempt ${attempt} failed for ${url}:`, error);
           if (error.response?.status === 401) {
-            console.warn('Unauthorized error, redirecting to login');
-            toast.error('Session expired, please login again');
-            localStorage.removeItem('token');
+            console.warn('ProductSection: Unauthorized, prompting login');
+            toast.error('Please login to access wishlist/cart');
             setLoading(false);
-            setError(error);
+            setError(new Error('Unauthorized'));
             return;
           }
           if (attempt === retries) {
@@ -92,60 +87,61 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
             toast.error(`Failed to load ${url.includes('wishlist') ? 'wishlist' : 'cart'}`);
             return;
           }
-          await new Promise((resolve) => setTimeout(resolve, delay * attempt));
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     },
-    [navigate]
+    []
   );
 
+  // Fetch wishlist and cart
   useEffect(() => {
-    fetchWithRetry(
-      'http://localhost:3000/api/user/auth/wishlist',
-      setWishlist,
-      setWishlistLoading,
-      setWishlistError
-    );
-    fetchWithRetry(
-      'http://localhost:3000/api/user/auth/cart',
-      setCart,
-      setCartLoading,
-      setCartError
-    );
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('ProductSection: No token, skipping wishlist/cart fetch');
+      setWishlist([]);
+      setCart([]);
+      return;
+    }
+    fetchWithRetry('/api/user/auth/wishlist', setWishlist, setWishlistLoading, setWishlistError);
+    fetchWithRetry('/api/user/auth/cart', setCart, setCartLoading, setCartError);
   }, [fetchWithRetry]);
 
+  // Infinite scroll to fetch more products
   const loadMoreProducts = useCallback(async () => {
     if (isFetching || !hasMore) return;
     setIsFetching(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const itemsPerPage = 50;
-      const startIndex = (page - 1) * itemsPerPage;
-      const newProducts = products.slice(startIndex, startIndex + itemsPerPage);
-      if (newProducts.length === 0) {
+      const response = await axios.get('/api/user/auth/products', {
+        params: { page, limit: 20 }, // Fetch 20 products per page
+      });
+      const newProducts = response.data.products || [];
+      if (newProducts.length < 20) {
         setHasMore(false);
-      } else {
-        setFilteredProducts((prev) => {
-          const prevIds = new Set(prev.map((p) => p._id));
-          const uniqueNewProducts = newProducts.filter((p) => !prevIds.has(p._id));
-          console.log(`Appending ${uniqueNewProducts.length} new unique products`);
-          return [...prev, ...uniqueNewProducts];
-        });
-        setPage((prev) => prev + 1);
       }
+      setFilteredProducts((prev) => {
+        const prevIds = new Set(prev.map((p) => p._id));
+        const uniqueNewProducts = newProducts.filter((p) => p._id && !prevIds.has(p._id));
+        console.log(`ProductSection: Appending ${uniqueNewProducts.length} new products`);
+        return [...prev, ...uniqueNewProducts];
+      });
+      setPage((prev) => prev + 1);
     } catch (error) {
-      console.error('Error loading more products:', error);
+      console.error('ProductSection: Error loading more products:', error);
+      toast.error('Failed to load more products');
     } finally {
       setIsFetching(false);
     }
-  }, [isFetching, hasMore, page, products, setFilteredProducts]);
+  }, [isFetching, hasMore, page, setFilteredProducts]);
 
+  // Trigger infinite scroll
   useEffect(() => {
     if (inView && !isFetching && hasMore) {
       loadMoreProducts();
     }
   }, [inView, isFetching, hasMore, loadMoreProducts]);
 
+  // Intersection observer for product visibility
   const observerRef = useRef(null);
   const [visibleProducts, setVisibleProducts] = useState([]);
 
@@ -165,12 +161,13 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     return () => observer.disconnect();
   }, [validFilteredProducts]);
 
+  // Loading state
   if (loading) {
     return (
       <div className="w-full min-h-screen flex flex-col">
         <GenderFilterBar products={products} setFilteredProducts={setFilteredProducts} />
         <div className="grid gap-4 p-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-          {Array(10)
+          {Array(5) // Reduced for speed
             .fill()
             .map((_, i) => (
               <ProductSkeleton key={`skeleton-${i}`} />
@@ -180,6 +177,7 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     );
   }
 
+  // Empty state
   if (validFilteredProducts.length === 0) {
     return (
       <div className="w-full min-h-screen flex flex-col">
@@ -191,6 +189,7 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     );
   }
 
+  // Main render
   return (
     <div className="w-full min-h-screen flex flex-col">
       <GenderFilterBar products={products} setFilteredProducts={setFilteredProducts} />
