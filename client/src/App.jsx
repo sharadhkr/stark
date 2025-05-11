@@ -5,6 +5,7 @@ import BottomNavbar from './Components/Navbar';
 import Bottom from './Components/botttommm';
 import 'leaflet/dist/leaflet.css';
 import axios from './useraxios';
+import lzString from 'lz-string';
 
 // Lazy-loaded page components
 const Home = lazy(() => import('./pages/Home.jsx'));
@@ -26,6 +27,10 @@ const SellerProducts = lazy(() => import('./pages/SellerProducts.jsx'));
 const SellerOrders = lazy(() => import('./pages/SellerOrders.jsx'));
 const SearchResults = lazy(() => import('./pages/SearchResults.jsx'));
 const ComboOfferPage = lazy(() => import('./pages/ComboOfferPage.jsx'));
+
+// Default images
+const FALLBACK_IMAGE = 'https://via.placeholder.com/150?text=No+Image';
+const DEFAULT_IMAGE = 'http://your-server.com/images/default-product.jpg'; // Replace with your actual default image URL
 
 // Data Context
 export const DataContext = createContext();
@@ -49,67 +54,116 @@ const DataProvider = ({ children }) => {
 
   const isDataStale = useCallback((timestamp) => {
     if (!timestamp) return true;
-    const now = Date.now();
-    const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
-    return now - timestamp > STALE_THRESHOLD;
+    const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
+    return Date.now() - timestamp > STALE_THRESHOLD;
   }, []);
 
   const updateCache = useCallback((key, data) => {
     setCache((prev) => {
-      const newCache = { ...prev, [key]: { data, timestamp: Date.now() } };
+      let validatedData = data;
+      if (key === 'products') {
+        validatedData = data.map((product) => {
+          const image = product.image && typeof product.image === 'string' && product.image.trim() !== '' && !product.image.includes('placeholder.com')
+            ? product.image
+            : DEFAULT_IMAGE;
+          if (!product.image || product.image.includes('placeholder.com')) {
+            console.warn(`Product ${product._id} has invalid or placeholder image, using default:`, product.image);
+          }
+          return { ...product, image };
+        });
+        // Only cache products with valid images
+        const validProducts = validatedData.filter(p => p.image !== DEFAULT_IMAGE);
+        if (validProducts.length < validatedData.length) {
+          console.warn(`Skipping caching of ${validatedData.length - validProducts.length} products with invalid images`);
+          validatedData = validProducts.length > 0 ? validProducts : validatedData;
+        }
+        console.log(`Updating cache for ${key}:`, validatedData.map(p => ({ _id: p._id, image: p.image })));
+      }
+      const newCache = { ...prev, [key]: { data: validatedData, timestamp: Date.now() } };
       try {
-        // Minimize stored product data
-        if (key === 'products') {
-          const slimData = data.map(({ _id, name, price, image, gender }) => ({
-            _id,
-            name,
-            price,
-            image,
-            gender,
-          }));
-          localStorage.setItem(`cache_${key}`, JSON.stringify({ data: slimData, timestamp: newCache[key].timestamp }));
-        } else {
-          localStorage.setItem(`cache_${key}`, JSON.stringify(newCache[key]));
+        if (key === 'products' || key === 'layout') {
+          const slimData = key === 'products'
+            ? validatedData.slice(0, 20).map(({ _id, name, price, image, gender }) => {
+                const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
+                  ? image
+                  : DEFAULT_IMAGE;
+                if (!image || image.includes('placeholder.com')) {
+                  console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
+                }
+                return { _id, name, price, image: validatedImage, gender };
+              })
+            : validatedData;
+          if (key === 'products' && slimData.every(p => p.image === DEFAULT_IMAGE)) {
+            console.warn('All slimmed products have default images, skipping localStorage save');
+            return newCache; // Skip saving to localStorage
+          }
+          const compressed = lzString.compressToUTF16(JSON.stringify({ data: slimData, timestamp: newCache[key].timestamp }));
+          localStorage.setItem(`cache_${key}`, compressed);
         }
       } catch (error) {
         console.warn(`Failed to save ${key} to localStorage:`, error);
-        // Continue with in-memory cache
       }
       return newCache;
     });
   }, []);
 
-  // Load from localStorage
   const loadFromStorage = useCallback((key) => {
     const stored = localStorage.getItem(`cache_${key}`);
-    return stored ? JSON.parse(stored) : null;
+    if (stored) {
+      try {
+        const decompressed = lzString.decompressFromUTF16(stored);
+        const parsed = JSON.parse(decompressed);
+        if (key === 'products') {
+          const hasInvalidImages = parsed.data.some(p => !p.image || p.image.includes('placeholder.com') || p.image === FALLBACK_IMAGE);
+          if (hasInvalidImages) {
+            console.warn(`Cached ${key} contains invalid or placeholder images, triggering refetch`);
+            localStorage.removeItem(`cache_${key}`);
+            return null; // Force refetch
+          }
+          parsed.data = parsed.data.map((product) => {
+            const image = product.image && typeof product.image === 'string' && product.image.trim() !== '' && !product.image.includes('placeholder.com')
+              ? product.image
+              : DEFAULT_IMAGE;
+            if (!product.image || product.image.includes('placeholder.com')) {
+              console.warn(`Loaded product ${product._id} with invalid or placeholder image, using default:`, product.image);
+            }
+            return { ...product, image };
+          });
+        }
+        console.log(`Loaded ${key} from storage:`, parsed.data.map(p => key === 'products' ? { _id: p._id, image: p.image } : p));
+        return parsed;
+      } catch (error) {
+        console.warn(`Failed to load ${key} from localStorage:`, error);
+        localStorage.removeItem(`cache_${key}`);
+      }
+    }
+    return null;
   }, []);
 
-  // Clear old cache on mount
   useEffect(() => {
     const keys = Object.keys(localStorage).filter((key) => key.startsWith('cache_'));
     keys.forEach((key) => {
-      const stored = JSON.parse(localStorage.getItem(key) || '{}');
-      if (!stored.timestamp || isDataStale(stored.timestamp)) {
+      const stored = loadFromStorage(key.replace('cache_', ''));
+      if (!stored || isDataStale(stored.timestamp)) {
         localStorage.removeItem(key);
       }
     });
-  }, [isDataStale]);
+  }, [loadFromStorage, isDataStale]);
 
-  // Track fetching to prevent duplicates
   const isFetchingRef = useRef(false);
 
-  // Fetch initial data
   const fetchInitialData = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
     const token = localStorage.getItem('token');
-    const endpoints = [
-      { key: 'products', url: '/api/user/auth/products', params: { limit: 2, page: 1 }, field: 'products', requiresAuth: false },
+    const criticalEndpoints = [
+      { key: 'layout', url: '/api/admin/auth/layout', params: {}, field: 'components', requiresAuth: false },
+      { key: 'products', url: '/api/user/auth/products', params: { limit: 20, page: 1 }, field: 'products', requiresAuth: false },
+    ];
+    const secondaryEndpoints = [
       { key: 'wishlist', url: '/api/user/auth/wishlist', params: {}, field: 'wishlist', requiresAuth: true },
       { key: 'cart', url: '/api/user/auth/cart', params: {}, field: 'cart', requiresAuth: true },
-      { key: 'layout', url: '/api/admin/auth/layout', params: {}, field: 'components', requiresAuth: false },
       { key: 'sellers', url: '/api/user/auth/sellers', params: { limit: 5 }, field: 'sellers', requiresAuth: false },
       { key: 'categories', url: '/api/categories', params: { limit: 8 }, field: 'categories', requiresAuth: false },
       { key: 'comboOffers', url: '/api/admin/auth/combo-offers/active', params: { limit: 3 }, field: 'comboOffers', requiresAuth: false },
@@ -117,46 +171,57 @@ const DataProvider = ({ children }) => {
       { key: 'ads', url: '/api/admin/auth/ads', params: {}, field: 'ads', requiresAuth: false },
     ];
 
-    // Load from storage first
     const cacheUpdates = {};
-    endpoints.forEach(({ key }) => {
+    [...criticalEndpoints, ...secondaryEndpoints].forEach(({ key }) => {
       const stored = loadFromStorage(key);
       if (stored && !isDataStale(stored.timestamp)) {
         cacheUpdates[key] = { data: stored.data, timestamp: stored.timestamp };
       }
     });
 
-    // Apply cached data
     if (Object.keys(cacheUpdates).length > 0) {
       setCache((prev) => ({ ...prev, ...cacheUpdates }));
     }
 
-    // Fetch only stale or missing data
-    const promises = endpoints
-      .filter(({ key, requiresAuth }) => {
-        if (requiresAuth && !token) {
-          cacheUpdates[key] = { data: [], timestamp: Date.now() }; // Default to empty for wishlist/cart
-          return false;
-        }
-        return !cache[key].data.length || isDataStale(cache[key].timestamp);
-      })
-      .map(({ url, params, field }) =>
-        axios.get(url, { params }).then((res) => ({ data: res.data[field] || res.data[field] || [], error: null }))
-          .catch((err) => ({ data: [], error: err }))
-      );
+    const fetchEndpoints = async (endpoints) => {
+      const promises = endpoints
+        .filter(({ key, requiresAuth }) => {
+          if (requiresAuth && !token) {
+            cacheUpdates[key] = { data: [], timestamp: Date.now() };
+            return false;
+          }
+          return !cache[key].data.length || isDataStale(cache[key].timestamp);
+        })
+        .map(({ url, params, field, key }) =>
+          axios.get(url, { params })
+            .then((res) => {
+              let data = res.data[field] || res.data[field] || [];
+              if (key === 'products') {
+                console.log(`Raw API response for ${key} (page=${params.page}, limit=${params.limit}):`, res.data[field]);
+                data = data.map((product) => {
+                  const image = product.image && typeof product.image === 'string' && product.image.trim() !== '' && !product.image.includes('placeholder.com')
+                    ? product.image
+                    : DEFAULT_IMAGE;
+                  if (!product.image || product.image.includes('placeholder.com')) {
+                    console.warn(`Fetched product ${product._id} with invalid or placeholder image, using default:`, product.image);
+                  }
+                  return { ...product, image };
+                });
+              }
+              console.log(`Processed ${key}:`, data.map(p => key === 'products' ? { _id: p._id, image: p.image } : p));
+              return { data, error: null };
+            })
+            .catch((err) => {
+              console.error(`Error fetching ${key}:`, err);
+              return { data: [], error: err };
+            })
+        );
 
-    // Apply defaults for wishlist/cart if no token
-    if (!token) {
-      cacheUpdates.wishlist = { data: [], timestamp: Date.now() };
-      cacheUpdates.cart = { data: [], timestamp: Date.now() };
-    }
-
-    try {
       const results = await Promise.all(promises);
       let resultIndex = 0;
 
       endpoints.forEach(({ key, field, requiresAuth }) => {
-        if (requiresAuth && !token) return; // Skip wishlist/cart if no token
+        if (requiresAuth && !token) return;
         if (!cache[key].data.length || isDataStale(cache[key].timestamp)) {
           const { data, error } = results[resultIndex];
           if (!error) {
@@ -170,50 +235,58 @@ const DataProvider = ({ children }) => {
               cacheUpdates[key] = { data, timestamp: Date.now() };
             }
           } else if (requiresAuth && error.response?.status === 401) {
-            cacheUpdates[key] = { data: [], timestamp: Date.now() }; // Default on 401
+            cacheUpdates[key] = { data: [], timestamp: Date.now() };
           }
           resultIndex++;
         }
       });
+    };
 
-      // Batch cache updates
+    try {
+      await fetchEndpoints(criticalEndpoints);
       if (Object.keys(cacheUpdates).length > 0) {
         setCache((prev) => ({ ...prev, ...cacheUpdates }));
         Object.entries(cacheUpdates).forEach(([key, value]) => {
-          try {
-            if (key === 'products') {
-              const slimData = value.data.map(({ _id, name, price, image, gender }) => ({
-                _id,
-                name,
-                price,
-                image,
-                gender,
-              }));
-              localStorage.setItem(`cache_${key}`, JSON.stringify({ data: slimData, timestamp: value.timestamp }));
-            } else {
-              localStorage.setItem(`cache_${key}`, JSON.stringify(value));
+          if (key === 'products' || key === 'layout') {
+            try {
+              const slimData = key === 'products'
+                ? value.data.slice(0, 20).map(({ _id, name, price, image, gender }) => {
+                    const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
+                      ? image
+                      : DEFAULT_IMAGE;
+                    if (!image || image.includes('placeholder.com')) {
+                      console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
+                    }
+                    return { _id, name, price, image: validatedImage, gender };
+                  })
+                : value.data;
+              if (key === 'products' && slimData.every(p => p.image === DEFAULT_IMAGE)) {
+                console.warn('All slimmed products have default images, skipping localStorage save');
+                return;
+              }
+              const compressed = lzString.compressToUTF16(JSON.stringify({ data: slimData, timestamp: value.timestamp }));
+              localStorage.setItem(`cache_${key}`, compressed);
+            } catch (error) {
+              console.warn(`Failed to save ${key} to localStorage:`, error);
             }
-          } catch (error) {
-            console.warn(`Failed to save ${key} to localStorage:`, error);
           }
         });
       }
+      fetchEndpoints(secondaryEndpoints); // Fetch secondary in background
     } finally {
       isFetchingRef.current = false;
     }
   }, [loadFromStorage, isDataStale]);
 
-  // Run fetchInitialData only once on mount
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache, updateCache, isDataStale]);
+  const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
 
-// Error Boundary
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
 
@@ -249,20 +322,19 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Memoized Layout Component
 const userRoutes = [
-  { path: '/', exact: true },
-  { path: '/cart', exact: true },
-  { path: '/wishlist', exact: true },
-  { path: '/dashboard', exact: true },
-  { path: '/category/:categoryName', exact: false },
-  { path: '/seller/:sellerId', exact: false },
-  { path: '/product/:productId', exact: false },
-  { path: '/seller/products', exact: true },
-  { path: '/seller/orders', exact: true },
-  { path: '/order/:orderId', exact: false },
-  { path: '/search', exact: true },
-  { path: '/combo/:id', exact: false },
+  { path: '/', end: true },
+  { path: '/cart', end: true },
+  { path: '/wishlist', end: true },
+  { path: '/dashboard', end: true },
+  { path: '/category/:categoryName', end: false },
+  { path: '/seller/:sellerId', end: false },
+  { path: '/product/:productId', end: false },
+  { path: '/seller/products', end: true },
+  { path: '/seller/orders', end: true },
+  { path: '/order/:orderId', end: false },
+  { path: '/search', end: true },
+  { path: '/combo/:id', end: false },
 ];
 
 const Layout = React.memo(({ children }) => {
@@ -270,8 +342,8 @@ const Layout = React.memo(({ children }) => {
 
   const showNavbar = useMemo(() => {
     if (typeof pathname !== 'string') return false;
-    return userRoutes.some(({ path, exact }) =>
-      matchPath({ path, end: exact }, pathname)
+    return userRoutes.some(({ path, end }) =>
+      matchPath({ path, end }, pathname)
     );
   }, [pathname]);
 
@@ -288,7 +360,6 @@ const Layout = React.memo(({ children }) => {
   );
 });
 
-// Route Configuration
 const routes = [
   { path: '/', element: <Home />, layout: true },
   { path: '/cart', element: <Cart />, layout: true },
@@ -314,18 +385,13 @@ const routes = [
 
 function App() {
   return (
-    <Router
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
+    <Router>
       <ErrorBoundary location={window.location.pathname}>
         <DataProvider>
           <Suspense
             fallback={
               <div className="flex justify-center items-center h-screen">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
               </div>
             }
           >

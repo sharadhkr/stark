@@ -1,24 +1,24 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext, Suspense, lazy } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import debounce from 'lodash.debounce';
 import logo from '../assets/slogooo.webp';
 import axios from '../useraxios';
 
-// Component imports
-import SearchBar from '../Components/home/SearchBar';
-import CategorySection from '../Components/home/CategorySection';
-import SellerSection from '../Components/home/SellerSection';
-import ProductSection from '../Components/home/ProductSection';
-import Topbox from '../Components/home/Topbox';
-import SingleAdd from '../Components/home/SingleAdd';
-import DoubleAdd from '../Components/home/DoubleAdd';
-import TripleAdd from '../Components/home/TripleAdd';
-import CategorySectionn from '../Components/home/CategorySectionn';
-import ComboOfferSection from '../Components/home/ComboOfferSection';
-import TrendingSection from '../Components/home/TrendingSection';
-import SponsoredSection from '../Components/home/SponsoredSection';
-import RecentlyViewedSection from '../Components/home/RecentlyViewedSection';
+// Lazy-loaded components
+const SearchBar = lazy(() => import('../Components/home/SearchBar'));
+const CategorySection = lazy(() => import('../Components/home/CategorySection'));
+const SellerSection = lazy(() => import('../Components/home/SellerSection'));
+const ProductSection = lazy(() => import('../Components/home/ProductSection'));
+const Topbox = lazy(() => import('../Components/home/Topbox'));
+const SingleAdd = lazy(() => import('../Components/home/SingleAdd'));
+const DoubleAdd = lazy(() => import('../Components/home/DoubleAdd'));
+const TripleAdd = lazy(() => import('../Components/home/TripleAdd'));
+const CategorySectionn = lazy(() => import('../Components/home/CategorySectionn'));
+const ComboOfferSection = lazy(() => import('../Components/home/ComboOfferSection'));
+const TrendingSection = lazy(() => import('../Components/home/TrendingSection'));
+const SponsoredSection = lazy(() => import('../Components/home/SponsoredSection'));
+const RecentlyViewedSection = lazy(() => import('../Components/home/RecentlyViewedSection'));
 
 // Data Context
 import { DataContext } from '../App';
@@ -49,27 +49,36 @@ const Home = React.memo(() => {
   const [errors, setErrors] = useState({});
   const location = useLocation();
 
+  // Memoize cache keys to stabilize hasValidCache
+  const cacheKeys = useMemo(() => ({
+    layout: cache.layout.data.length > 0 && !isDataStale(cache.layout.timestamp),
+    products: cache.products.data.length > 0 && !isDataStale(cache.products.timestamp),
+  }), [cache.layout, cache.products, isDataStale]);
+
   // Check for valid cache
   const hasValidCache = useMemo(
-    () => cache.layout.data.length > 0 && !isDataStale(cache.layout.timestamp),
-    [cache.layout, isDataStale]
+    () => cacheKeys.layout && cacheKeys.products,
+    [cacheKeys]
   );
 
   // Initialize filteredProducts
   useEffect(() => {
-    if (cache.products.data.length > 0 && !filteredProducts.length) {
+    if (cache.products.data.length > 0 && !filteredProducts.length && !searchQuery) {
       setFilteredProducts(cache.products.data);
     }
-    setLoading(!hasValidCache);
-  }, [cache.products.data, filteredProducts.length, hasValidCache]);
+  }, [cache.products.data, filteredProducts.length, searchQuery]);
 
-  // Fetch layout and secondary data
+  // Fetch data with prioritization
   const fetchData = useCallback(async () => {
     if (hasValidCache) return;
     setLoading(true);
 
-    const endpoints = [
+    const criticalEndpoints = [
       { key: 'layout', url: '/api/admin/auth/layout', params: {}, field: 'components' },
+      { key: 'products', url: '/api/user/auth/products', params: { limit: 20 }, field: 'products' },
+    ];
+
+    const secondaryEndpoints = [
       { key: 'sellers', url: '/api/user/auth/sellers', params: { limit: 5 }, field: 'sellers' },
       { key: 'categories', url: '/api/categories', params: { limit: 8 }, field: 'categories' },
       { key: 'comboOffers', url: '/api/admin/auth/combo-offers/active', params: { limit: 3 }, field: 'comboOffers' },
@@ -77,7 +86,8 @@ const Home = React.memo(() => {
       { key: 'ads', url: '/api/admin/auth/ads', params: {}, field: 'ads' },
     ];
 
-    const promises = endpoints
+    // Fetch critical endpoints first
+    const criticalPromises = criticalEndpoints
       .filter(({ key }) => !cache[key].data.length || isDataStale(cache[key].timestamp))
       .map(({ url, params }) =>
         axios.get(url, { params }).catch((err) => ({
@@ -86,18 +96,13 @@ const Home = React.memo(() => {
         }))
       );
 
-    if (promises.length === 0) {
-      setLoading(false);
-      return;
-    }
-
     try {
-      const results = await Promise.all(promises);
+      const criticalResults = await Promise.all(criticalPromises);
       let resultIndex = 0;
 
-      endpoints.forEach(({ key, field }) => {
+      criticalEndpoints.forEach(({ key, field }) => {
         if (!cache[key].data.length || isDataStale(cache[key].timestamp)) {
-          const res = results[resultIndex];
+          const res = criticalResults[resultIndex];
           if (res.error) {
             setErrors((prev) => ({ ...prev, [key]: res.error.message }));
             toast.error(`Failed to fetch ${key}`);
@@ -108,6 +113,34 @@ const Home = React.memo(() => {
           resultIndex++;
         }
       });
+
+      // Fetch secondary endpoints in background
+      const secondaryPromises = secondaryEndpoints
+        .filter(({ key }) => !cache[key].data.length || isDataStale(cache[key].timestamp))
+        .map(({ url, params }) =>
+          axios.get(url, { params }).catch((err) => ({
+            error: err,
+            data: {},
+          }))
+        );
+
+      if (secondaryPromises.length > 0) {
+        const secondaryResults = await Promise.all(secondaryPromises);
+        resultIndex = 0;
+
+        secondaryEndpoints.forEach(({ key, field }) => {
+          if (!cache[key].data.length || isDataStale(cache[key].timestamp)) {
+            const res = secondaryResults[resultIndex];
+            if (res.error) {
+              setErrors((prev) => ({ ...prev, [key]: res.error.message }));
+            } else {
+              const data = res.data[field] || res.data.layout?.[field] || [];
+              updateCache(key, data);
+            }
+            resultIndex++;
+          }
+        });
+      }
     } catch (error) {
       setErrors((prev) => ({ ...prev, general: error.message }));
       toast.error('An unexpected error occurred');
@@ -283,14 +316,9 @@ const Home = React.memo(() => {
   // Memoized loading UI
   const LoadingUI = useMemo(
     () => (
-      <div className="text-center flex flex-col min-h-screen relative justify-center items-center">
-        <img
-          className="drop-shadow-xl w-1/2 relative"
-          src={logo}
-          alt="Logo"
-          loading="lazy"
-        />
-        <p className="text-gray-500 text-lg z-10">Stark strips</p>
+      <div className="text-center flex flex-col min-h-screen justify-center items-center">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 text-lg mt-4">Loading...</p>
       </div>
     ),
     []
@@ -310,7 +338,7 @@ const Home = React.memo(() => {
 
   // Memoized layout rendering
   const renderedLayout = useMemo(() => {
-    if (loading) return LoadingUI;
+    if (loading) return <Suspense fallback={LoadingUI}>{LoadingUI}</Suspense>;
 
     if (errors.layout) {
       return (
@@ -327,7 +355,11 @@ const Home = React.memo(() => {
     }
 
     const effectiveLayout = cache.layout.data.length ? cache.layout.data : defaultLayout;
-    return effectiveLayout.map((component, index) => renderComponent(component, index));
+    return (
+      <Suspense fallback={LoadingUI}>
+        {effectiveLayout.map((component, index) => renderComponent(component, index))}
+      </Suspense>
+    );
   }, [cache.layout.data, loading, errors, renderComponent, LoadingUI, defaultLayout]);
 
   return (

@@ -13,6 +13,7 @@ const CategorySectionn = React.memo(({ category }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
+  const hasFetched = useRef(false);
 
   const cacheKey = `category_${category?._id || 'unknown'}`;
   const products = useMemo(() => cache[cacheKey]?.data || [], [cache, cacheKey]);
@@ -23,16 +24,19 @@ const CategorySectionn = React.memo(({ category }) => {
       setLoading(false);
       return;
     }
-    if (!isDataStale(cache[cacheKey]?.timestamp) && products.length > 0) {
+    if (cache[cacheKey]?.data?.length > 0 && !isDataStale(cache[cacheKey]?.timestamp)) {
+      console.log(`Using cached data for ${cacheKey}`);
       return; // Use cached data if fresh
     }
 
     setLoading(true);
     setError(null);
     try {
+      console.log(`Fetching products for category ${category._id}`);
       const response = await axios.get(`/api/user/auth/category/${category._id}`);
       const fetchedProducts = response.data.products || [];
       updateCache(cacheKey, fetchedProducts);
+      hasFetched.current = true;
     } catch (error) {
       console.error('Error fetching products:', error);
       const errorMsg = error.response?.data?.message || 'Failed to load products';
@@ -44,10 +48,11 @@ const CategorySectionn = React.memo(({ category }) => {
   };
 
   useEffect(() => {
-    if (category?._id) {
+    console.log('CategorySectionn rendered, category ID:', category?._id);
+    if (category?._id && !hasFetched.current) {
       fetchProducts();
     }
-  }, [category?._id, cache[cacheKey]?.timestamp, isDataStale, updateCache]);
+  }, [category?._id]); // Only depend on category._id
 
   const scrollLeft = () => {
     if (scrollRef.current) {
@@ -125,7 +130,7 @@ const CategorySectionn = React.memo(({ category }) => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
-                      d="M9 5l-7 7 7-7"
+                      d="M9 5l7 7-7 7"
                     />
                   </svg>
                 </button>
@@ -147,7 +152,7 @@ const CategorySectionn = React.memo(({ category }) => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M9 5l-7 7 7-7"
+                  d="M9 5l7 7-7 7"
                 />
               </svg>
             </Link>

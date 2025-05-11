@@ -6,6 +6,9 @@ import ProductCard from '../ProductCard';
 import GenderFilterBar from './GenderFilterBar';
 import { DataContext } from '../../App';
 
+// Default fallback image URL
+const FALLBACK_IMAGE = 'https://via.placeholder.com/150?text=No+Image';
+
 // Skeleton component
 const ProductSkeleton = () => (
   <div className="w-full h-64 bg-gray-200 rounded-lg animate-pulse" />
@@ -21,15 +24,22 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     rootMargin: '200px',
   });
 
-  // Deduplicate products
+  // Deduplicate and validate products
   const validFilteredProducts = useMemo(() => {
     const seenIds = new Set();
-    return filteredProducts.filter((product) => {
+    const validatedProducts = filteredProducts.filter((product) => {
       if (!product || !product._id) return false;
       if (seenIds.has(product._id)) return false;
       seenIds.add(product._id);
+      // Validate image
+      if (!product.image || typeof product.image !== 'string' || product.image.trim() === '') {
+        console.warn(`Product ${product._id} has invalid image:`, product.image);
+        product.image = FALLBACK_IMAGE;
+      }
       return true;
     });
+    console.log('Valid Filtered Products:', validatedProducts);
+    return validatedProducts;
   }, [filteredProducts]);
 
   // Infinite scroll
@@ -40,7 +50,13 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
       const response = await axios.get('/api/user/auth/products', {
         params: { page: page + 1, limit: 5 },
       });
-      const newProducts = response.data.products || [];
+      const newProducts = (response.data.products || []).map((product) => ({
+        ...product,
+        image: product.image && typeof product.image === 'string' && product.image.trim() !== ''
+          ? product.image
+          : FALLBACK_IMAGE,
+      }));
+      console.log('New Products Fetched:', newProducts);
       if (newProducts.length < 5) {
         setHasMore(false);
       }
@@ -52,6 +68,7 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
       });
       setPage((prev) => prev + 1);
     } catch (error) {
+      console.error('Error loading products:', error);
       toast.error('Failed to load more products');
     } finally {
       setIsFetching(false);

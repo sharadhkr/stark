@@ -1736,15 +1736,28 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/category/:categoryId', async (req, res) => {
+router.get('/category/:categoryId?', async (req, res) => {
   try {
     const { categoryId } = req.params;
 
+    // If no categoryId or it's "all", return all products
+    if (!categoryId || categoryId.toLowerCase() === 'all') {
+      const products = await Product.find().lean();
+      return res.status(200).json({ products });
+    }
+
+    // Check if categoryId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ message: 'Invalid category ID' });
+    }
+
+    // Check if category exists
     const category = await Category.findById(categoryId);
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });
     }
 
+    // Fetch products by category
     const products = await Product.find({ category: categoryId }).lean();
     res.status(200).json({ products });
   } catch (error) {
@@ -1752,6 +1765,7 @@ router.get('/category/:categoryId', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 router.get('/sponsored', async (req, res) => {
   try {

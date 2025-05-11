@@ -113,6 +113,16 @@ const CheckoutPage = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const otpRefs = useRef([]);
 
+  // Pre-fill phone number from userDetails
+  useEffect(() => {
+    if (userDetails.phoneNumber && !phoneNumber) {
+      const cleanedPhone = userDetails.phoneNumber.replace(/\D/g, '').slice(-10); // Extract last 10 digits
+      setPhoneNumber(cleanedPhone);
+      // Assume +91 for India if no country code is present
+      setCountryCode('+91');
+    }
+  }, [userDetails.phoneNumber, phoneNumber]);
+
   // Set showNewAddressForm for guest users
   useEffect(() => {
     if (!token) {
@@ -484,11 +494,40 @@ const CheckoutPage = () => {
         phoneNumber: fullPhoneNumber,
         otp: otpString,
       });
+      const token = res.data.token;
+      localStorage.setItem('token', token);
+
+      // Update user profile with name and email
+      if (userDetails.name || userDetails.email) {
+        try {
+          const updateData = {};
+          if (userDetails.name) {
+            const [firstName, ...lastName] = userDetails.name.trim().split(' ');
+            updateData.firstName = firstName;
+            updateData.lastName = lastName.join(' ') || '';
+          }
+          if (userDetails.email) updateData.email = userDetails.email;
+          await axios.patch('/api/user/auth/profile', updateData, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          // Update local userDetails with server response
+          setUserDetails((prev) => ({
+            ...prev,
+            phoneNumber: fullPhoneNumber,
+            name: userDetails.name,
+            email: userDetails.email,
+          }));
+          toast.success('Profile updated successfully!');
+        } catch (updateError) {
+          console.error('Profile Update Error:', updateError.response?.data || updateError.message);
+          toast.error('Failed to update profile details');
+        }
+      } else {
+        setUserDetails((prev) => ({ ...prev, phoneNumber: fullPhoneNumber }));
+      }
+
       toast.dismiss(loadingToast);
       toast.success(res.data.message || 'OTP verified successfully!');
-      localStorage.setItem('token', res.data.token);
-      // Update user details with phone number
-      setUserDetails((prev) => ({ ...prev, phoneNumber: fullPhoneNumber }));
       // Proceed to place order
       await handlePlaceOrder(true); // Pass flag to skip login step
     } catch (err) {
@@ -1252,14 +1291,16 @@ const CheckoutPage = () => {
                 className="space-y-6"
               >
                 <h2 className="text-2xl font-bold text-gray-900">Login to Place Order</h2>
-                <p className="text-sm text-gray-500">Sign in using your phone number to complete your order.</p>
+                <p className="text-sm text-gray-500">
+                  Sign in using the phone number you provided to complete your order.
+                </p>
                 <div className="space-y-4">
                   <div className="flex gap-2">
                     <select
                       className="w-24 border border-gray-200 rounded-lg px-3 py-3 text-sm bg-white focus:ring-2 focus:ring-teal-500 shadow-sm"
                       value={countryCode}
                       onChange={(e) => setCountryCode(e.target.value)}
-                      disabled={loginLoading}
+                      disabled={loginLoading || userDetails.phoneNumber}
                     >
                       {countryCodes.map((country) => (
                         <option key={country.code} value={country.code}>
@@ -1267,17 +1308,19 @@ const CheckoutPage = () => {
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        if (value.length <= 10) setPhoneNumber(value);
-                      }}
-                      placeholder="Enter phone number"
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-teal-500 shadow-sm"
-                      disabled={loginLoading || otpSent}
-                    />
+                    <div className="flex-1 relative">
+                      <input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          if (value.length <= 10) setPhoneNumber(value);
+                        }}
+                        placeholder="Enter phone number"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-teal-500 shadow-sm disabled:bg-gray-100"
+                        disabled={loginLoading || userDetails.phoneNumber}
+                      />
+                    </div>
                   </div>
                   {otpSent && (
                     <div className="flex justify-between gap-2">
