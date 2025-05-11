@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
-import { FaArrowLeft, FaBox, FaUser, FaStore, FaMoneyBillWave } from 'react-icons/fa';
+import { FaArrowLeft, FaBox, FaUser, FaStore, FaMoneyBillWave, FaClipboard, FaCheckCircle, FaHourglassHalf, FaShippingFast, FaTruck, FaBoxOpen } from 'react-icons/fa';
+import Confetti from 'react-confetti';
 import agroLogo from '../assets/logo.png';
 
 const dashboardVariants = {
@@ -16,19 +17,40 @@ const sectionVariants = {
   animate: { opacity: 1, scale: 1, transition: { duration: 0.4 } },
 };
 
+const statusNodeVariants = {
+  initial: { scale: 0, opacity: 0 },
+  animate: (index) => ({
+    scale: 1,
+    opacity: 1,
+    transition: { delay: index * 0.2, duration: 0.4, ease: 'easeOut' },
+  }),
+};
+
 const OrderDetails = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showConfetti, setShowConfetti] = useState(true);
+  const [selectedStatus, setSelectedStatus] = useState(null);
 
   const statusOrder = [
-    'order confirmed', // Replacing 'order placed' for Amazon-like terminology
-    'processing',
-    'shipped',
-    'out for delivery',
-    'delivered',
+    'Order Confirmed',
+    'Processing',
+    'Shipped',
+    'Out For Delivery',
+    'Delivered',
   ];
+
+  const statusDetails = {
+    'Order Confirmed': 'Your order has been successfully received.',
+    'Processing': 'Your order is being prepared for shipment.',
+    'Shipped': 'Your order has been shipped and is on its way.',
+    'Out For Delivery': 'Your order is out for delivery and will arrive soon.',
+    'Delivered': 'Your order has been delivered. Enjoy!',
+    'Cancelled': 'Your order has been cancelled.',
+    'Returned': 'Your order has been returned.',
+  };
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -51,6 +73,7 @@ const OrderDetails = () => {
         navigate('/dashboard');
       } finally {
         setLoading(false);
+        setTimeout(() => setShowConfetti(false), 3000);
       }
     };
     fetchOrder();
@@ -60,13 +83,6 @@ const OrderDetails = () => {
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please log in to cancel the order');
-      return;
-    }
-
-    const timeSincePlaced = Date.now() - new Date(order.createdAt).getTime();
-    const hoursSincePlaced = timeSincePlaced / (1000 * 60 * 60);
-    if (hoursSincePlaced > 24) {
-      toast.error('Order can only be cancelled within 24 hours of placement');
       return;
     }
 
@@ -83,35 +99,40 @@ const OrderDetails = () => {
     }
   };
 
-  const handleReturnOrder = async () => {
-    toast.error('Return functionality TBD'); // Placeholder for future implementation
-    // Add logic here when backend supports returns
+  const handleReturnOrder = () => {
+    toast.info('Return functionality is not yet available. Contact support for assistance.');
+  };
+
+  const handleCopyOrderId = () => {
+    navigator.clipboard.writeText(order.orderId)
+      .then(() => toast.success('Order ID copied to clipboard!'))
+      .catch(() => toast.error('Failed to copy order ID'));
   };
 
   const calculateTotal = (items) => {
     if (!items || !Array.isArray(items)) return 0;
-    return items.reduce((sum, item) => sum + (item.price * item.quantity || 0), 0);
+    return items.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 0)), 0);
   };
 
   const getCurrentStatusIndex = () => {
     if (!order) return -1;
-    return statusOrder.indexOf(order.status.toLowerCase());
+    return statusOrder.indexOf(order.status);
   };
 
   const canCancel = () => {
-    if (!order || ['delivered', 'cancelled', 'returned'].includes(order.status.toLowerCase())) return false;
+    if (!order || ['Delivered', 'Cancelled', 'Returned'].includes(order.status)) return false;
     const timeSincePlaced = Date.now() - new Date(order.createdAt).getTime();
-    return timeSincePlaced <= 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    return timeSincePlaced <= 24 * 60 * 60 * 1000; // 24 hours
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-blue-100 flex items-center justify-center">
         <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"
+          className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full"
         />
       </div>
     );
@@ -119,16 +140,22 @@ const OrderDetails = () => {
 
   if (!order) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <p className="text-gray-600">Order not found or failed to load.</p>
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-blue-100 flex items-center justify-center">
+        <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
+        <p className="text-gray-600 text-lg font-medium">Order not found or failed to load.</p>
       </div>
     );
   }
 
-  const totalAmount = order.total || calculateTotal(order.items);
+  const subtotal = calculateTotal(order.items);
+  const shipping = order.shipping || 20;
+  const totalMRP = order.items.reduce((sum, item) => sum + ((item.mrp || item.price * 1.2) * (item.quantity || 0)), 0);
+  const discount = totalMRP - subtotal;
+  const totalAmount = order.total || (subtotal + shipping);
 
   return (
-    <div className="min-h-screen bg-gray-100 px-4 pt-5 pb-10">
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-blue-100 px-4 pt-5 pb-10 font-poppins">
+      {showConfetti && <Confetti width={window.innerWidth} height={window.innerHeight} numberOfPieces={100} />}
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
       <motion.main
         initial="initial"
@@ -139,7 +166,7 @@ const OrderDetails = () => {
         <motion.div variants={dashboardVariants} className="mb-6">
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200 bg-white px-4 py-2 rounded-lg shadow-sm"
+            className="flex items-center gap-2 text-teal-600 hover:text-teal-700 font-medium transition-colors duration-200 bg-white px-4 py-2 rounded-lg shadow-sm"
           >
             <FaArrowLeft /> Back to Dashboard
           </button>
@@ -147,72 +174,94 @@ const OrderDetails = () => {
 
         <motion.div
           variants={sectionVariants}
-          className="bg-white rounded-lg shadow-md p-6 space-y-6"
+          className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b pb-4">
-            <h1 className="text-2xl font-semibold text-gray-800 flex items-center gap-3">
-              <FaBox className="text-gray-500" />
-              Order #{order.orderId.slice(-6)}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-semibold text-gray-800 flex items-center gap-3">
+                <FaBox className="text-teal-500" />
+                Order #{order.orderId.slice(-6)}
+              </h1>
+              <motion.button
+                onClick={handleCopyOrderId}
+                className="flex items-center gap-2 text-teal-600 hover:text-teal-700 text-sm font-medium"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <FaClipboard />
+                <span>Copy</span>
+              </motion.button>
+            </div>
             <p className="text-sm text-gray-600">
-              Placed on: {new Date(order.createdAt).toLocaleDateString()}
+              Placed on: {new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
           </div>
 
-          {/* Amazon-Style Progress Bar */}
+          {/* Order Status Tracker */}
           <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-gray-800">Order Progress</h2>
-            <div className="relative">
-              <div className="flex justify-between items-start">
-                {statusOrder.map((status, index) => {
-                  const isActive = getCurrentStatusIndex() >= index;
-                  const isCompleted = getCurrentStatusIndex() > index;
-                  const historyEntry = order.statusHistory?.find(h => h.status.toLowerCase() === status) || null;
-                  return (
-                    <div key={status} className="flex-1 text-center relative">
-                      {/* Step Indicator */}
-                      <div className="relative flex justify-center">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-                            isActive ? 'bg-green-500 border-green-500' : 'bg-white border-gray-300'
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <span className="text-white font-bold">✓</span>
-                          ) : (
-                            <span className="text-gray-500">{index + 1}</span>
-                          )}
-                        </div>
-                      </div>
-                      {/* Connecting Line */}
-                      {index > 0 && (
-                        <div
-                          className={`absolute top-4 left-[-50%] w-[100%] h-1 ${
-                            isActive ? 'bg-green-500' : 'bg-gray-300'
-                          }`}
-                          style={{ zIndex: -1 }}
-                        />
-                      )}
-                      {/* Status Label */}
-                      <p className={`mt-2 text-sm font-medium ${isActive ? 'text-green-600' : 'text-gray-600'}`}>
-                        {status.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                      </p>
-                      {/* Timestamp/Details */}
-                      {historyEntry && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(historyEntry.timestamp).toLocaleString()}
-                          {historyEntry.details && <span> - {historyEntry.details}</span>}
-                        </p>
-                      )}
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Order Progress</h2>
+            <div className="flex flex-col sm:flex-row justify-between items-center relative space-y-8 sm:space-y-0 sm:space-x-4">
+              {statusOrder.map((status, index) => {
+                const isActive = getCurrentStatusIndex() >= index;
+                const historyEntry = order.statusHistory?.find(h => h.status === status) || null;
+                return (
+                  <motion.div
+                    key={status}
+                    className="flex-1 flex flex-col items-center relative z-10"
+                    variants={statusNodeVariants}
+                    initial="initial"
+                    animate="animate"
+                    custom={index}
+                    onClick={() => setSelectedStatus(selectedStatus === status ? null : status)}
+                    whileHover={{ scale: 1.1 }}
+                  >
+                    <div
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 cursor-pointer relative group ${
+                        isActive ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white' : 'bg-gray-200 text-gray-400'
+                      } ${order.status === status ? 'animate-pulse' : ''}`}
+                    >
+                      {index === 0 ? <FaCheckCircle /> : index === 1 ? <FaHourglassHalf /> : index === 2 ? <FaShippingFast /> : index === 3 ? <FaTruck /> : <FaBoxOpen />}
+                      <span className="absolute -top-10 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2">
+                        {statusDetails[status]}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-              {['cancelled', 'returned'].includes(order.status.toLowerCase()) && (
+                    <p
+                      className={`mt-3 text-xs sm:text-sm text-center font-medium ${
+                        isActive ? 'text-teal-600' : 'text-gray-500'
+                      } ${order.status === status ? 'font-bold' : ''}`}
+                    >
+                      {status}
+                    </p>
+                    {historyEntry && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(historyEntry.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                        {historyEntry.details && <span> - {historyEntry.details}</span>}
+                      </p>
+                    )}
+                    {selectedStatus === status && (
+                      <motion.div
+                        className="mt-2 text-xs text-gray-600 bg-teal-50 p-2 rounded-lg"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        {statusDetails[status]}{historyEntry ? ` Updated: ${new Date(historyEntry.timestamp).toLocaleString('en-IN')}` : ''}
+                      </motion.div>
+                    )}
+                    {index < 4 && (
+                      <div
+                        className={`absolute top-6 sm:top-7 left-1/2 sm:left-[calc(50%+28px)] w-full sm:w-[calc(100%-56px)] h-1 z-0 ${
+                          isActive ? 'bg-gradient-to-r from-teal-500 to-blue-500' : 'bg-gray-200'
+                        }`}
+                      />
+                    )}
+                  </motion.div>
+                );
+              })}
+              {['Cancelled', 'Returned'].includes(order.status) && (
                 <p className="mt-4 text-sm text-red-600 text-center">
-                  Order {order.status.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} on{' '}
-                  {new Date(order.statusHistory?.find(h => h.status === order.status)?.timestamp || order.updatedAt).toLocaleString()}
+                  Order {order.status} on{' '}
+                  {new Date(order.statusHistory?.find(h => h.status === order.status)?.timestamp || order.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                 </p>
               )}
             </div>
@@ -221,12 +270,12 @@ const OrderDetails = () => {
           {/* Customer Info */}
           <div className="border-t pt-4">
             <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <FaUser className="text-gray-500" /> Shipping Details
+              <FaUser className="text-teal-500" /> Shipping Details
             </h2>
             <div className="mt-2 text-sm text-gray-600">
-              <p><span className="font-medium">Name:</span> {order.customer.name}</p>
-              <p><span className="font-medium">Email:</span> {order.customer.email}</p>
-              <p><span className="font-medium">Address:</span> {order.customer.address}</p>
+              <p><span className="font-medium">Name:</span> {order.customer?.name || 'N/A'}</p>
+              <p><span className="font-medium">Email:</span> {order.customer?.email || 'N/A'}</p>
+              <p><span className="font-medium">Address:</span> {order.customer?.address || 'N/A'}</p>
             </div>
           </div>
 
@@ -234,7 +283,7 @@ const OrderDetails = () => {
           {order.sellerId && (
             <div className="border-t pt-4">
               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                <FaStore className="text-gray-500" /> Sold By
+                <FaStore className="text-teal-500" /> Sold By
               </h2>
               <div className="mt-2 text-sm text-gray-600">
                 <p><span className="font-medium">Shop Name:</span> {order.sellerId.shopName || 'N/A'}</p>
@@ -245,15 +294,17 @@ const OrderDetails = () => {
 
           {/* Items */}
           <div className="border-t pt-4">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Items</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <FaBox className="text-teal-500" /> Items
+            </h2>
             {order.items.map((item, index) => (
               <motion.div
                 key={item.productId?._id || index}
                 whileHover={{ scale: 1.01 }}
-                className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg mb-2"
+                className="flex items-center gap-4 p-4 bg-teal-50 rounded-lg mb-2"
               >
                 <img
-                  src={item.productId?.image?.[0] || agroLogo}
+                  src={item.productId?.image?.[0] || item.image || agroLogo}
                   alt={item.productId?.name || item.name || 'Product'}
                   className="w-16 h-16 object-cover rounded-md"
                   onError={(e) => (e.target.src = agroLogo)}
@@ -264,40 +315,72 @@ const OrderDetails = () => {
                   </p>
                   <p className="text-sm text-gray-600">Quantity: {item.quantity || 0}</p>
                   <p className="text-sm text-gray-600">Price: ₹{(item.price || 0).toFixed(2)}</p>
+                  <p className="text-sm text-gray-600">MRP: ₹{(item.mrp || (item.price * 1.2)).toFixed(2)}</p>
                 </div>
-                <p className="text-sm font-medium text-gray-800">
-                  Subtotal: ₹{(item.price * item.quantity).toFixed(2)}
+                <p className="text-sm font-medium text-teal-600">
+                  Subtotal: ₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}
                 </p>
               </motion.div>
             ))}
           </div>
 
-          {/* Total */}
+          {/* Order Summary */}
           <div className="border-t pt-4">
             <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <FaMoneyBillWave className="text-gray-500" /> Order Total
+              <FaMoneyBillWave className="text-teal-500" /> Order Summary
             </h2>
-            <p className="text-xl font-bold text-gray-800 mt-2">₹{totalAmount.toFixed(2)}</p>
+            <div className="mt-2 text-sm text-gray-700 space-y-2">
+              <p className="flex justify-between">
+                <span>Total Quantity:</span>
+                <span>{order.items.reduce((sum, item) => sum + (item.quantity || 0), 0)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Total MRP:</span>
+                <span>₹{totalMRP.toFixed(2)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Discount:</span>
+                <span>-₹{discount.toFixed(2)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>₹{subtotal.toFixed(2)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>Shipping:</span>
+                <span>₹{shipping.toFixed(2)}</span>
+              </p>
+              <p className="flex justify-between font-semibold text-gray-800 pt-2 border-t border-gray-200">
+                <span>Total:</span>
+                <span className="text-teal-600">₹{totalAmount.toFixed(2)}</span>
+              </p>
+            </div>
           </div>
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t">
-            {canCancel() && (
-              <button
-                onClick={handleCancelOrder}
-                className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors duration-200 font-medium shadow-md"
-              >
-                Cancel Order
-              </button>
-            )}
-            {order.status === 'delivered' && (
-              <button
-                onClick={handleReturnOrder}
-                className="bg-yellow-500 text-white px-6 py-2 rounded-lg hover:bg-yellow-600 transition-colors duration-200 font-medium shadow-md"
-              >
-                Return Order
-              </button>
-            )}
+            <button
+              onClick={handleCancelOrder}
+              disabled={!canCancel()}
+              className={`flex-1 px-6 py-2 rounded-lg font-medium shadow-md transition-colors duration-200 ${
+                canCancel()
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              Cancel Order
+            </button>
+            <button
+              onClick={handleReturnOrder}
+              disabled={order.status !== 'Delivered'}
+              className={`flex-1 px-6 py-2 rounded-lg font-medium shadow-md transition-colors duration-200 ${
+                order.status === 'Delivered'
+                  ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              Return Order
+            </button>
           </div>
         </motion.div>
       </motion.main>

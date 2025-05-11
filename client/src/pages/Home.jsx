@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import debounce from 'lodash.debounce';
-import axios from '../useraxios';
 import logo from '../assets/slogooo.webp';
-// import Loding from '../assets/loadingg.mp4';
+import axios from '../useraxios';
 
 // Component imports
 import SearchBar from '../Components/home/SearchBar';
@@ -45,41 +44,36 @@ const Home = React.memo(() => {
   const { cache, updateCache, isDataStale } = useContext(DataContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState(cache.products.data || []);
+  const [selectedGender, setSelectedGender] = useState('all');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const location = useLocation();
-  const fetchRef = useRef(false);
-  const isInitialMount = useRef(true);
 
   // Check for valid cache
   const hasValidCache = useMemo(
-    () => cache.layout.data.length > 0 && cache.products.data.length > 0 && !isDataStale(cache.layout.timestamp) && !isDataStale(cache.products.timestamp),
-    [cache.layout, cache.products, isDataStale]
+    () => cache.layout.data.length > 0 && !isDataStale(cache.layout.timestamp),
+    [cache.layout, isDataStale]
   );
 
   // Initialize filteredProducts
   useEffect(() => {
-    if (hasValidCache && !filteredProducts.length) {
+    if (cache.products.data.length > 0 && !filteredProducts.length) {
       setFilteredProducts(cache.products.data);
     }
-    if (isInitialMount.current) {
-      setLoading(!hasValidCache);
-      isInitialMount.current = false;
-    }
+    setLoading(!hasValidCache);
   }, [cache.products.data, filteredProducts.length, hasValidCache]);
 
-  // Fetch data
+  // Fetch layout and secondary data
   const fetchData = useCallback(async () => {
-    if (fetchRef.current || hasValidCache) return;
-    fetchRef.current = true;
+    if (hasValidCache) return;
+    setLoading(true);
 
     const endpoints = [
-      { key: 'products', url: '/api/user/auth/products', params: { limit: 20, page: 1 }, field: 'products' },
       { key: 'layout', url: '/api/admin/auth/layout', params: {}, field: 'components' },
-      { key: 'sellers', url: '/api/user/auth/sellers', params: { limit: 10 }, field: 'sellers' },
-      { key: 'categories', url: '/api/categories', params: { limit: 10 }, field: 'categories' },
-      { key: 'comboOffers', url: '/api/admin/auth/combo-offers/active', params: { limit: 5 }, field: 'comboOffers' },
-      { key: 'sponsoredProducts', url: '/api/user/auth/sponsored', params: { limit: 10 }, field: 'products' },
+      { key: 'sellers', url: '/api/user/auth/sellers', params: { limit: 5 }, field: 'sellers' },
+      { key: 'categories', url: '/api/categories', params: { limit: 8 }, field: 'categories' },
+      { key: 'comboOffers', url: '/api/admin/auth/combo-offers/active', params: { limit: 3 }, field: 'comboOffers' },
+      { key: 'sponsoredProducts', url: '/api/user/auth/sponsored', params: { limit: 5 }, field: 'products' },
       { key: 'ads', url: '/api/admin/auth/ads', params: {}, field: 'ads' },
     ];
 
@@ -97,8 +91,6 @@ const Home = React.memo(() => {
       return;
     }
 
-    setLoading(true);
-
     try {
       const results = await Promise.all(promises);
       let resultIndex = 0;
@@ -112,9 +104,6 @@ const Home = React.memo(() => {
           } else {
             const data = res.data[field] || res.data.layout?.[field] || [];
             updateCache(key, data);
-            if (key === 'products' && !filteredProducts.length) {
-              setFilteredProducts(data);
-            }
           }
           resultIndex++;
         }
@@ -125,13 +114,10 @@ const Home = React.memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [cache, isDataStale, updateCache, filteredProducts.length, hasValidCache]);
+  }, [cache, isDataStale, updateCache, hasValidCache]);
 
   useEffect(() => {
     fetchData();
-    return () => {
-      fetchRef.current = false;
-    };
   }, [fetchData]);
 
   // Debounced server-side search
@@ -143,7 +129,7 @@ const Home = React.memo(() => {
       }
       try {
         const res = await axios.get('/api/user/auth/products', {
-          params: { q: query, limit: 20 },
+          params: { q: query, limit: 5 },
         });
         const filtered = res.data.products || [];
         setFilteredProducts(filtered);
@@ -206,7 +192,31 @@ const Home = React.memo(() => {
               products={cache.products.data}
               filteredProducts={filteredProducts}
               setFilteredProducts={setFilteredProducts}
-              {...props}
+              onGenderChange={(gender) => {
+                setSelectedGender(gender);
+                if (gender === 'all') {
+                  setFilteredProducts(cache.products.data);
+                } else {
+                  const normalizedGender = (g) => {
+                    const lower = g?.toLowerCase()?.trim() || 'unknown';
+                    if (['male', 'men', 'man'].includes(lower)) return 'men';
+                    if (['female', 'women', 'woman'].includes(lower)) return 'women';
+                    if (['kid', 'kids', 'child', 'children', 'kidz'].includes(lower)) return 'kids';
+                    return 'unknown';
+                  };
+                  const filtered = cache.products.data
+                    .filter((product) => normalizedGender(product.gender) === gender)
+                    .sort((a, b) => (a.price || 0) - (b.price || 0));
+                  const seenIds = new Set();
+                  const uniqueFiltered = filtered.filter((product) => {
+                    if (!product._id || seenIds.has(product._id)) return false;
+                    seenIds.add(product._id);
+                    return true;
+                  });
+                  setFilteredProducts(uniqueFiltered);
+                }
+              }}
+              selectedGender={selectedGender}
             />
           );
 
@@ -267,26 +277,15 @@ const Home = React.memo(() => {
           return <Component key={index} {...props} />;
       }
     },
-    [cache, filteredProducts, searchQuery, handleSearchChange, handleSearch]
+    [cache, filteredProducts, searchQuery, handleSearchChange, handleSearch, selectedGender]
   );
 
   // Memoized loading UI
   const LoadingUI = useMemo(
     () => (
       <div className="text-center flex flex-col min-h-screen relative justify-center items-center">
-        <div className="absolute w-full top-[45%] left-1/2 mix-blend-multiply -translate-x-1/2 -translate-y-1/2">
-          {/* <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full m-auto object-cover mix-blend-multiply"
-            src={Loding}
-            loading="lazy"
-          /> */}
-        </div>
         <img
-          className="drop-shadow-xl w-1/2 opacity-0 relative -z-10"
+          className="drop-shadow-xl w-1/2 relative"
           src={logo}
           alt="Logo"
           loading="lazy"
@@ -313,10 +312,10 @@ const Home = React.memo(() => {
   const renderedLayout = useMemo(() => {
     if (loading) return LoadingUI;
 
-    if (errors.layout || errors.products) {
+    if (errors.layout) {
       return (
         <div className="text-center py-8 text-red-500">
-          <p>Failed to load: {errors.layout || errors.products}</p>
+          <p>Failed to load: {errors.layout}</p>
           <button
             onClick={() => window.location.reload()}
             className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

@@ -1774,15 +1774,14 @@ router.get('/sponsored', async (req, res) => {
 });
 router.get('/trending', async (req, res) => {
   try {
-    // Extract query parameters
     const {
-      timeRange = 'today', // Default: today
-      startDate, // For custom range (ISO format)
-      endDate, // For custom range (ISO format)
-      sortBy = 'trendScore', // Default: trendScore
-      sortOrder = 'desc', // Default: descending
-      category, // Optional category filter
-      limit = 10, // Default: 10 products
+      timeRange = 'today',
+      startDate,
+      endDate,
+      sortBy = 'trendScore',
+      sortOrder = 'desc',
+      category,
+      limit = 10,
     } = req.query;
 
     // Validate limit

@@ -1,20 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FaArrowLeft,
-  FaTruck,
+  FaMapPin,
   FaCreditCard,
   FaCheckCircle,
   FaMapMarkerAlt,
   FaMoneyBillWave,
   FaWallet,
+  FaSearch,
+  FaLocationArrow,
+  FaEdit,
+  FaUser,
 } from 'react-icons/fa';
 import placeholderImage from '../assets/logo.png';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// Load Razorpay script with cache busting and error handling
+// Fix Leaflet marker icon issue
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+// Load Razorpay script
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     if (document.querySelector('script[src*="checkout.razorpay.com"]')) {
@@ -40,6 +54,26 @@ const stepVariants = {
   exit: { opacity: 0, y: -20, transition: { duration: 0.3 } },
 };
 
+const mapContainerVariants = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: 'auto', opacity: 1, transition: { duration: 0.5 } },
+  exit: { height: 0, opacity: 0, transition: { duration: 0.3 } },
+};
+
+const popupVariants = {
+  initial: { y: '100%', opacity: 0 },
+  animate: { y: 0, opacity: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+  exit: { y: '100%', opacity: 0, transition: { duration: 0.2 } },
+};
+
+// Country codes for login
+const countryCodes = [
+  { code: '+91', label: '+91 India' },
+  { code: '+1', label: '🇺🇸 USA' },
+  { code: '+44', label: '🇬🇧 UK' },
+  { code: '+61', label: '🇦🇺 AUS' },
+];
+
 const CheckoutPage = () => {
   const { state } = useLocation();
   const navigate = useNavigate();
@@ -52,6 +86,8 @@ const CheckoutPage = () => {
     state: '',
     postalCode: '',
     country: 'India',
+    lat: null,
+    lng: null,
   });
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState('');
@@ -60,13 +96,76 @@ const CheckoutPage = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const [showAddressPopup, setShowAddressPopup] = useState(false);
+  const [tempAddress, setTempAddress] = useState(address);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const mapContainerRef = useRef(null);
   const token = localStorage.getItem('token');
 
+  // Login state for guest users
+  const [countryCode, setCountryCode] = useState('+91');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpSent, setOtpSent] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const otpRefs = useRef([]);
+
+  // Set showNewAddressForm for guest users
+  useEffect(() => {
+    if (!token) {
+      setShowNewAddressForm(true);
+    }
+  }, [token]);
+
+  // Initialize map after animation completes
+  const initializeMap = () => {
+    if (mapContainerRef.current && !mapRef.current) {
+      const mapElement = mapContainerRef.current;
+      mapRef.current = L.map(mapElement, {
+        zoomControl: false,
+        scrollWheelZoom: false,
+        touchZoom: false,
+        doubleClickZoom: false,
+      }).setView([20.5937, 78.9629], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(mapRef.current);
+
+      mapRef.current.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        fetchAddressFromCoords(lat, lng);
+        if (markerRef.current) {
+          markerRef.current.setLatLng([lat, lng]);
+        } else {
+          markerRef.current = L.marker([lat, lng]).addTo(mapRef.current);
+        }
+      });
+
+      // Auto-fetch current location for guest users
+      if (!token) {
+        handleUseCurrentLocation();
+      }
+    }
+  };
+
+  // Clean up map on unmount
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  // Fetch checkout data
   useEffect(() => {
     const fetchCheckoutData = async () => {
       try {
         if (token) {
-          // Fetch user profile for authenticated users
           const userRes = await axios.get('/api/user/auth/profile', {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -80,63 +179,64 @@ const CheckoutPage = () => {
           });
           setSavedAddresses(user.addresses || []);
           if (user.addresses?.length > 0) setSelectedAddress(user.addresses[0]._id);
-        } else {
-          // For guest users, initialize empty user details and show address form
-          setShowNewAddressForm(true);
         }
 
-        // Fetch cart items
         let items = [];
         if (state?.cart?.length) {
           items = await Promise.all(
-            state.cart.map(async (item) => {
-              try {
-                const endpoint = token
-                  ? `/api/user/auth/products/${item.productId}`
-                  : `/api/user/auth/products/${item.productId}`;
-                const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-                const productRes = await axios.get(endpoint, config);
-                const product = productRes.data.product || productRes.data.data?.product;
-                if (!product) return null;
-                return {
-                  productId: item.productId,
-                  name: item.name,
-                  price: item.price,
-                  quantity: item.quantity,
-                  image: Array.isArray(item.image) ? item.image[0] : item.image,
-                  size: item.size,
-                  color: item.color,
-                  isCashOnDeliveryAvailable: product.isCashOnDeliveryAvailable ?? true,
-                  onlinePaymentPercentage: product.onlinePaymentPercentage ?? 100,
-                  sellerId: product.sellerId?._id || product.sellerId,
-                };
-              } catch (error) {
-                console.error(`Error fetching product ${item.productId}:`, error);
-                return null;
-              }
-            })
+            state.cart
+              .filter((item) => item && item.productId)
+              .map(async (item) => {
+                try {
+                  const endpoint = token
+                    ? `/api/user/auth/products/${item.productId}`
+                    : `/api/user/auth/products/${item.productId}`;
+                  const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+                  const productRes = await axios.get(endpoint, config);
+                  const product = productRes.data.product || productRes.data.data?.product;
+                  if (!product) return null;
+                  return {
+                    productId: item.productId,
+                    name: item.name,
+                    price: item.price,
+                    mrp: item.mrp || item.price * 1.2,
+                    quantity: item.quantity,
+                    image: Array.isArray(item.image) ? item.image[0] : item.image,
+                    size: item.size,
+                    color: item.color,
+                    isCashOnDeliveryAvailable: product.isCashOnDeliveryAvailable ?? true,
+                    onlinePaymentPercentage: product.onlinePaymentPercentage ?? 100,
+                    sellerId: product.sellerId?._id || product.sellerId,
+                  };
+                } catch (error) {
+                  console.error(`Error fetching product ${item.productId}:`, error);
+                  return null;
+                }
+              })
           ).then((items) => items.filter((item) => item !== null));
         } else if (token) {
-          // Fetch cart for authenticated users
           const cartRes = await axios.get('/api/user/auth/cart', {
             headers: { Authorization: `Bearer ${token}` },
           });
           const cart = cartRes.data.cart || cartRes.data.data?.cart;
           if (!cart) throw new Error('Cart data not found');
-          items = cart.map((item) => ({
-            productId: item.productId._id || item.productId,
-            name: item.productId.name,
-            price: item.priceAtAdd || item.productId.price,
-            quantity: item.quantity,
-            image: Array.isArray(item.productId.images)
-              ? item.productId.images[0]
-              : item.productId.images,
-            size: item.size,
-            color: item.color,
-            isCashOnDeliveryAvailable: item.productId.isCashOnDeliveryAvailable ?? true,
-            onlinePaymentPercentage: item.productId.onlinePaymentPercentage ?? 100,
-            sellerId: item.productId.sellerId?._id || item.productId.sellerId,
-          }));
+          items = cart
+            .filter((item) => item && item.productId)
+            .map((item) => ({
+              productId: item.productId._id || item.productId,
+              name: item.productId.name,
+              price: item.priceAtAdd || item.productId.price,
+              mrp: item.productId.mrp || item.productId.price * 1.2,
+              quantity: item.quantity,
+              image: Array.isArray(item.productId.images)
+                ? item.productId.images[0]
+                : item.productId.images,
+              size: item.size,
+              color: item.color,
+              isCashOnDeliveryAvailable: item.productId.isCashOnDeliveryAvailable ?? true,
+              onlinePaymentPercentage: item.productId.onlinePaymentPercentage ?? 100,
+              sellerId: item.productId.sellerId?._id || item.productId.sellerId,
+            }));
         }
 
         if (!items.length) {
@@ -150,7 +250,7 @@ const CheckoutPage = () => {
         if (token && error.response?.status === 401) {
           localStorage.removeItem('token');
           toast.error('Session expired, please login again');
-          navigate('/login');
+          setCurrentStep(4); // Guest login step
         } else {
           toast.error(
             error.response?.data?.message || error.message || 'Failed to load checkout details'
@@ -164,19 +264,140 @@ const CheckoutPage = () => {
     fetchCheckoutData();
   }, [navigate, state?.cart, token]);
 
-  const handleUserDetailsChange = (e) =>
-    setUserDetails({ ...userDetails, [e.target.name]: e.target.value });
-  const handleAddressChange = (e) => setAddress({ ...address, [e.target.name]: e.target.value });
+  // Fetch address from coordinates
+  const fetchAddressFromCoords = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+      );
+      const data = await response.json();
+      if (data.address) {
+        const newAddress = {
+          street: data.address.road || data.address.street || '',
+          city: data.address.city || data.address.town || data.address.village || '',
+          state: data.address.state || '',
+          postalCode: data.address.postcode || '',
+          country: data.address.country || 'India',
+          lat,
+          lng,
+        };
+        setAddress(newAddress);
+        setTempAddress(newAddress);
+        setShowAddressPopup(true);
+      } else {
+        toast.error('No address found for this location');
+      }
+    } catch (error) {
+      console.error('Error fetching address:', error);
+      toast.error('Failed to fetch address details');
+    }
+  };
 
-  const handleAddNewAddress = async () => {
-    if (!address.street || !address.city || !address.state || !address.postalCode) {
-      toast.error('Please fill in all address fields');
+  // Search address
+  const handleSearchAddress = async (e) => {
+    e.preventDefault();
+    if (!searchQuery) return;
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&addressdetails=1&countrycodes=IN`
+      );
+      const data = await response.json();
+      if (data.length > 0) {
+        const { lat, lon, address } = data[0];
+        const newAddress = {
+          street: address.road || address.street || '',
+          city: address.city || address.town || address.village || '',
+          state: address.state || '',
+          postalCode: address.postcode || '',
+          country: address.country || 'India',
+          lat: parseFloat(lat),
+          lng: parseFloat(lon),
+        };
+        setAddress(newAddress);
+        setTempAddress(newAddress);
+        setShowAddressPopup(true);
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lon], 15);
+          if (markerRef.current) {
+            markerRef.current.setLatLng([lat, lon]);
+          } else {
+            markerRef.current = L.marker([lat, lon]).addTo(mapRef.current);
+          }
+        }
+      } else {
+        toast.error('No results found for the address');
+      }
+    } catch (error) {
+      console.error('Error searching address:', error);
+      toast.error('Failed to search address');
+    }
+  };
+
+  // Use current location
+  const handleUseCurrentLocation = () => {
+    if (navigator.geolocation) {
+      setIsFetchingLocation(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          fetchAddressFromCoords(latitude, longitude);
+          if (mapRef.current) {
+            mapRef.current.setView([latitude, longitude], 15);
+            if (markerRef.current) {
+              markerRef.current.setLatLng([latitude, longitude]);
+            } else {
+              markerRef.current = L.marker([latitude, longitude]).addTo(mapRef.current);
+            }
+          }
+          setIsFetchingLocation(false);
+          toast.success('Location fetched successfully');
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setIsFetchingLocation(false);
+          toast.error('Unable to access your location. Please allow location access.');
+        }
+      );
+    } else {
+      toast.error('Geolocation is not supported by your browser');
+    }
+  };
+
+  // Handle manual address input
+  const handleAddressInputChange = (e) => {
+    setTempAddress({ ...tempAddress, [e.target.name]: e.target.value });
+  };
+
+  // Save address from pop-up
+  const handleSaveAddressFromPopup = () => {
+    if (!tempAddress.street || !tempAddress.city || !tempAddress.lat || !tempAddress.lng) {
+      toast.error('Street, city, and location (lat/lng) are required');
       return;
     }
+    setAddress(tempAddress);
+    setShowAddressPopup(false);
+    toast.success('Address updated successfully');
+  };
+
+  // Open manual address pop-up
+  const openManualAddressPopup = () => {
+    setTempAddress(address);
+    setShowAddressPopup(true);
+  };
+
+  const handleAddNewAddress = async () => {
+    if (!address.street || !address.city || !address.lat || !address.lng) {
+      const missingFields = [];
+      if (!address.street) missingFields.push('street');
+      if (!address.city) missingFields.push('city');
+      if (!address.lat || !address.lng) missingFields.push('location (select on map or use current location)');
+      toast.error(`Please provide: ${missingFields.join(', ')}`);
+      return;
+    }
+
     setIsProcessing(true);
     try {
       if (token) {
-        // Save address for authenticated users
         const res = await axios.post('/api/user/auth/add-address', address, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -186,13 +407,13 @@ const CheckoutPage = () => {
         setShowNewAddressForm(false);
         toast.success('Address added successfully');
       } else {
-        // For guest users, store address in state
         setSelectedAddress('guest_address');
         setShowNewAddressForm(false);
         toast.success('Address saved for this order');
       }
       setCurrentStep(2);
     } catch (error) {
+      console.error('Add Address Error:', error.response?.data || error.message);
       toast.error(error.response?.data?.message || 'Failed to add address');
     } finally {
       setIsProcessing(false);
@@ -201,10 +422,113 @@ const CheckoutPage = () => {
 
   const handleConfirmAddress = () => {
     if (!selectedAddress) {
-      toast.error('Please add a delivery address');
+      toast.error('Please select a delivery address');
       return;
     }
     setCurrentStep(2);
+  };
+
+  // Login Logic
+  const validatePhoneNumber = () => {
+    const num = phoneNumber.replace(/\D/g, '');
+    if (num.length < 6 || num.length > 15) return 'Phone number must be 6-15 digits';
+    if (countryCode === '+91' && (!/^[6-9]\d{9}$/.test(num) || num.length !== 10))
+      return 'Invalid India number (10 digits, starts with 6-9)';
+    if (countryCode === '+1' && num.length !== 10)
+      return 'Invalid USA number (10 digits)';
+    return '';
+  };
+
+  const handleSendOtp = async () => {
+    const error = validatePhoneNumber();
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setLoginLoading(true);
+    const loadingToast = toast.loading('Sending OTP...');
+    try {
+      const fullPhoneNumber = `${countryCode}${phoneNumber}`;
+      const res = await axios.post('/api/user/auth/send-otp', { phoneNumber: fullPhoneNumber });
+      toast.dismiss(loadingToast);
+      toast.success(res.data.message || 'OTP sent successfully!');
+      setOtpSent(true);
+      if (otpRefs.current[0]) otpRefs.current[0].focus();
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      const errorMessage =
+        err.response?.status === 404
+          ? 'User not found. Please register.'
+          : err.response?.status === 401
+          ? 'Invalid request.'
+          : err.code === 'ECONNABORTED'
+          ? 'Request timed out. Check your network.'
+          : err.response?.data?.message || 'Failed to send OTP';
+      toast.error(errorMessage);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const otpString = otp.join('');
+    if (otpString.length !== 6) {
+      toast.error('Please enter a 6-digit OTP');
+      return;
+    }
+    setLoginLoading(true);
+    const loadingToast = toast.loading('Verifying OTP...');
+    try {
+      const fullPhoneNumber = `${countryCode}${phoneNumber}`;
+      const res = await axios.post('/api/user/auth/verify-otp', {
+        phoneNumber: fullPhoneNumber,
+        otp: otpString,
+      });
+      toast.dismiss(loadingToast);
+      toast.success(res.data.message || 'OTP verified successfully!');
+      localStorage.setItem('token', res.data.token);
+      // Update user details with phone number
+      setUserDetails((prev) => ({ ...prev, phoneNumber: fullPhoneNumber }));
+      // Proceed to place order
+      await handlePlaceOrder(true); // Pass flag to skip login step
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      const errorMessage =
+        err.response?.status === 401
+          ? 'Invalid OTP or session expired.'
+          : err.response?.data?.message || 'Failed to verify OTP';
+      toast.error(errorMessage);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    const newOtp = [...otp];
+    newOtp[index] = value.replace(/\D/g, '').slice(0, 1);
+    setOtp(newOtp);
+    if (value && index < 5 && otpRefs.current[index + 1]) {
+      otpRefs.current[index + 1].focus();
+    }
+    if (!value && index > 0 && otpRefs.current[index - 1]) {
+      otpRefs.current[index - 1].focus();
+    }
+  };
+
+  const handleOtpPaste = (e, index) => {
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '');
+    if (pastedData.length === 6) {
+      const newOtp = pastedData.split('').slice(0, 6);
+      setOtp(newOtp);
+      otpRefs.current[5]?.focus();
+      e.preventDefault();
+    }
+  };
+
+  const handleKeyDown = (e, index) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1].focus();
+    }
   };
 
   const calculatePaymentSplit = () => {
@@ -227,8 +551,8 @@ const CheckoutPage = () => {
 
     const options = [];
     options.push({
-      method: 'Full Online Payment',
-      desc: 'Pay 100% online via Razorpay',
+      method: 'Online Payment',
+      desc: 'Pay securely via Razorpay',
       value: 'razorpay_full',
     });
 
@@ -241,8 +565,8 @@ const CheckoutPage = () => {
         });
       }
       options.push({
-        method: 'Full Cash on Delivery',
-        desc: 'Pay 100% on delivery',
+        method: 'Cash on Delivery',
+        desc: 'Pay on delivery',
         value: 'cod_full',
       });
     }
@@ -250,9 +574,10 @@ const CheckoutPage = () => {
     return options;
   };
 
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async (skipLogin = false) => {
     if (!paymentMethod) {
       toast.error('Please select a payment method');
+      setCurrentStep(2);
       return;
     }
     if (!userDetails.name || !userDetails.phoneNumber) {
@@ -265,13 +590,18 @@ const CheckoutPage = () => {
       setCurrentStep(1);
       return;
     }
+    if (!token && !skipLogin) {
+      setCurrentStep(4); // Go to login step for guest users
+      return;
+    }
 
     setIsProcessing(true);
     setPaymentError(null);
+
     const itemsWithPayment = calculatePaymentSplit();
     const totalOnlineAmount = itemsWithPayment.reduce((sum, item) => sum + item.onlineAmount, 0);
     const totalCODAmount = itemsWithPayment.reduce((sum, item) => sum + item.codAmount, 0);
-    const totalAmount = totalOnlineAmount + totalCODAmount + 50;
+    const totalAmount = subtotal + shipping;
 
     const orderData = {
       items: itemsWithPayment.map((item) => ({
@@ -279,6 +609,7 @@ const CheckoutPage = () => {
         name: item.name,
         quantity: item.quantity,
         price: item.price,
+        mrp: item.mrp,
         size: item.size,
         color: item.color,
         onlineAmount: item.onlineAmount,
@@ -286,12 +617,12 @@ const CheckoutPage = () => {
         sellerId: item.sellerId,
       })),
       totalAmount,
-      onlineAmount: totalOnlineAmount,
-      codAmount: totalCODAmount,
-      shipping: 50,
+      onlineAmount: paymentMethod === 'cod_full' ? 0 : totalAmount,
+      codAmount: paymentMethod === 'razorpay_full' ? 0 : totalCODAmount,
+      shipping,
       userDetails,
-      address: token ? undefined : address, // Include address for guest users
-      addressId: token ? selectedAddress : undefined, // Include addressId for authenticated users
+      address: token ? undefined : address,
+      addressId: token ? selectedAddress : undefined,
       paymentMethod: paymentMethod === 'cod_full' ? 'Cash on Delivery' : 'Razorpay',
       fromCart: true,
     };
@@ -311,7 +642,6 @@ const CheckoutPage = () => {
           throw new Error('Failed to load payment gateway. Please check your internet connection.');
         }
 
-        // Create order
         const endpoint = token ? '/api/user/auth/create-order' : '/api/create-order';
         const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
         const orderResponse = await axios.post(endpoint, orderData, config);
@@ -321,11 +651,11 @@ const CheckoutPage = () => {
           throw new Error('Razorpay order creation failed');
         }
 
-        const RAZORPAY_KEY = process.env.REACT_APP_RAZORPAY_KEY || 'rzp_live_q3VDcaCSe5gBVo';
+        const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY || 'rzp_live_q3VDcaCSe5gBVo';
         const options = {
           key: RAZORPAY_KEY,
-          amount: razorpay.amount,
-          currency: razorpay.currency,
+          amount: totalAmount * 100,
+          currency: razorpay.currency || 'INR',
           name: 'Stark Strips',
           description: 'Order Payment',
           order_id: razorpay.orderId,
@@ -354,11 +684,6 @@ const CheckoutPage = () => {
               }
             } catch (error) {
               const message = error.response?.data?.message || 'Payment verification error';
-              console.error('Payment Verification Error:', {
-                message,
-                response: response,
-                error: error.response?.data,
-              });
               setPaymentError(message);
               toast.error(message);
             }
@@ -368,25 +693,13 @@ const CheckoutPage = () => {
             contact: userDetails.phoneNumber,
             email: userDetails.email || 'customer@example.com',
           },
-          theme: { color: '#3B82F6' },
+          theme: { color: '#14B8A6' },
           modal: {
             ondismiss: () => {
               setIsProcessing(false);
               if (!paymentError) {
                 toast.error('Payment cancelled by user');
               }
-            },
-          },
-          config: {
-            display: {
-              blocks: {
-                banks: {
-                  name: 'Pay using UPI',
-                  instruments: [{ method: 'upi' }],
-                },
-              },
-              sequence: ['block.banks'],
-              preferences: { show_default_blocks: true },
             },
           },
           retry: {
@@ -401,19 +714,10 @@ const CheckoutPage = () => {
           const message = response.error.description || 'Payment failed';
           setPaymentError(message);
           toast.error(message);
-          console.error('Payment Failed:', response.error);
-        });
-        paymentObject.on('payment.error', (error) => {
-          setIsProcessing(false);
-          const message = error.description || 'An error occurred during payment';
-          setPaymentError(message);
-          toast.error(message);
-          console.error('Payment Error:', error);
         });
         paymentObject.open();
       }
     } catch (error) {
-      console.error('Order Error:', error);
       const message = error.response?.data?.message || error.message || 'Failed to process order';
       setPaymentError(message);
       toast.error(message);
@@ -424,11 +728,13 @@ const CheckoutPage = () => {
 
   const handleRetryPayment = () => {
     setPaymentError(null);
-    handlePlaceOrder();
+    handlePlaceOrder(token); // Pass current token state
   };
 
+  const totalMRP = cartItems.reduce((sum, item) => sum + item.mrp * item.quantity, 0);
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 50;
+  const discount = totalMRP - subtotal;
+  const shipping = 1;
   const total = subtotal + shipping;
 
   if (loading) {
@@ -438,7 +744,7 @@ const CheckoutPage = () => {
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full"
+          className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full"
         />
       </div>
     );
@@ -448,20 +754,22 @@ const CheckoutPage = () => {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-        <div className="text-gray-600 text-lg">Your cart is empty</div>
+        <div className="text-gray-600 text-lg font-medium">Your cart is empty</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-6 px-4 sm:py-8 sm:px-6">
+    <div className="min-h-screen bg-gray-100 py-6 px-4 sm:px-6 lg:px-8">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6 sm:mb-8 relative">
+        {/* Progress Bar */}
+        <div className="relative flex items-center justify-between mb-8">
           {[
-            { step: 1, label: 'Address', icon: <FaTruck className="w-5 h-5" /> },
-            { step: 2, label: 'Payment', icon: <FaCreditCard className="w-5 h-5" /> },
-            { step: 3, label: 'Confirm', icon: <FaCheckCircle className="w-5 h-5" /> },
+            { step: 1, label: 'Address', icon: <FaMapPin className="w-6 h-6" /> },
+            { step: 2, label: 'Payment', icon: <FaCreditCard className="w-6 h-6" /> },
+            { step: 3, label: 'Confirm', icon: <FaCheckCircle className="w-6 h-6" /> },
+            ...(token ? [] : [{ step: 4, label: 'Login', icon: <FaUser className="w-6 h-6" /> }]),
           ].map(({ step, label, icon }) => (
             <motion.div
               key={step}
@@ -471,52 +779,42 @@ const CheckoutPage = () => {
               transition={{ delay: step * 0.2, duration: 0.5 }}
             >
               <div
-                className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center transition-all duration-300 shadow-md ${
+                className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
                   currentStep >= step ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-400'
                 }`}
               >
                 {icon}
               </div>
               <p
-                className={`mt-2 text-xs sm:text-sm font-semibold uppercase tracking-wide ${
-                  currentStep >= step ? 'text-teal-600' : 'text-gray-500'
+                className={`mt-2 text-sm font-semibold uppercase tracking-wide ${
+                  currentStep >= step ? 'text-teal-500' : 'text-gray-500'
                 }`}
               >
                 {label}
               </p>
             </motion.div>
           ))}
-          <div className="absolute inset-x-0 top-5 h-1 bg-gray-200 z-0">
+          <div className="absolute inset-x-0 top-6 h-2 bg-gray-200 z-0 rounded-full">
             <motion.div
-              className="h-full bg-teal-500"
+              className="h-full bg-teal-500 rounded-full"
               initial={{ width: '0%' }}
-              animate={{ width: `${(currentStep - 1) * 50}%` }}
+              animate={{ width: `${((currentStep - 1) / (token ? 2 : 3)) * 100}%` }}
               transition={{ duration: 0.5, ease: 'easeInOut' }}
             />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
-          <motion.button
-            onClick={() => navigate('/cart')}
-            className="mb-4 sm:mb-6 flex items-center gap-2 text-teal-600 hover:text-teal-700 transition-colors font-medium bg-teal-50 px-4 py-2 rounded-xl shadow-sm"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <FaArrowLeft />
-            <span>Back to Cart</span>
-          </motion.button>
-
+        <div className="bg-white rounded-2xl shadow-xl p-6">
           {paymentError && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mb-4 p-4 bg-red-100 text-red-700 rounded-xl text-sm"
+              className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg text-sm"
             >
               <p>{paymentError}</p>
               <motion.button
                 onClick={handleRetryPayment}
-                className="mt-2 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+                className="mt-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -533,23 +831,23 @@ const CheckoutPage = () => {
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="space-y-4 sm:space-y-6"
+                className="space-y-6"
               >
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Delivery Address</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Select Delivery Address</h2>
                 {token && savedAddresses.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {savedAddresses.map((addr) => (
                       <motion.div
                         key={addr._id}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
+                        className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
                           selectedAddress === addr._id
-                            ? 'border-teal-500 bg-teal-50'
+                            ? 'border-teal-500 bg-teal-50 shadow-md'
                             : 'border-gray-200 hover:bg-gray-50'
                         }`}
                         whileHover={{ scale: 1.02 }}
                         onClick={() => setSelectedAddress(addr._id)}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start gap-3">
                           <input
                             type="radio"
                             id={addr._id}
@@ -557,13 +855,15 @@ const CheckoutPage = () => {
                             value={addr._id}
                             checked={selectedAddress === addr._id}
                             onChange={(e) => setSelectedAddress(e.target.value)}
-                            className="text-teal-600 focus:ring-teal-500 w-5 h-5"
+                            className="mt-1 text-teal-500 focus:ring-teal-500 w-5 h-5"
                           />
                           <label
                             htmlFor={addr._id}
                             className="text-sm text-gray-700 leading-tight"
                           >
-                            {`${addr.street}, ${addr.city}, ${addr.state}, ${addr.postalCode}, ${addr.country}`}
+                            <strong>{addr.street}</strong>
+                            <br />
+                            {`${addr.city}, ${addr.state}, ${addr.postalCode}, ${addr.country}`}
                           </label>
                         </div>
                       </motion.div>
@@ -571,13 +871,13 @@ const CheckoutPage = () => {
                   </div>
                 ) : (
                   <p className="text-gray-500 text-sm">
-                    {token ? 'No saved addresses. Please add one below.' : 'Please enter your delivery address below.'}
+                    {token ? 'No saved addresses. Add one below.' : 'Select your delivery address below.'}
                   </p>
                 )}
                 {token && (
                   <motion.button
                     onClick={() => setShowNewAddressForm(!showNewAddressForm)}
-                    className="text-teal-600 hover:text-teal-700 font-medium flex items-center gap-2"
+                    className="text-teal-500 hover:text-teal-600 font-semibold flex items-center gap-2"
                     whileHover={{ scale: 1.05 }}
                   >
                     <FaMapMarkerAlt /> {showNewAddressForm ? 'Cancel' : 'Add New Address'}
@@ -585,40 +885,78 @@ const CheckoutPage = () => {
                 )}
                 {(showNewAddressForm || !token) && (
                   <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="space-y-4 bg-teal-50 p-4 rounded-xl"
+                    variants={mapContainerVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    className="space-y-4"
+                    onAnimationComplete={initializeMap}
                   >
-                    {[
-                      { name: 'street', placeholder: 'Street Address' },
-                      { name: 'city', placeholder: 'City' },
-                      { name: 'state', placeholder: 'State' },
-                      { name: 'postalCode', placeholder: 'Postal Code' },
-                      { name: 'country', placeholder: 'Country', disabled: true },
-                    ].map((field) => (
-                      <input
-                        key={field.name}
-                        type="text"
-                        name={field.name}
-                        value={address[field.name]}
-                        onChange={handleAddressChange}
-                        className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-400 bg-white text-gray-700 text-sm shadow-sm"
-                        placeholder={field.placeholder}
-                        required={!field.disabled}
-                        disabled={field.disabled || isProcessing}
-                      />
-                    ))}
+                    <div className="relative z-0">
+                      <div
+                        ref={mapContainerRef}
+                        id="address-map"
+                        className="h-96 w-full rounded-lg shadow-md"
+                        style={{ height: '384px', width: '100%' }}
+                      ></div>
+                      <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-2">
+                        <form onSubmit={handleSearchAddress} className="flex-1">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder="Search for your address"
+                              className="w-full p-3 pr-10 bg-white border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-teal-500 text-sm"
+                            />
+                            <button
+                              type="submit"
+                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-teal-500"
+                            >
+                              <FaSearch />
+                            </button>
+                          </div>
+                        </form>
+                        <motion.button
+                          onClick={handleUseCurrentLocation}
+                          disabled={isFetchingLocation}
+                          className={`p-3 rounded-lg shadow-sm flex items-center gap-2 text-white ${
+                            isFetchingLocation ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600'
+                          }`}
+                          whileHover={isFetchingLocation ? {} : { scale: 1.05 }}
+                          whileTap={isFetchingLocation ? {} : { scale: 0.95 }}
+                        >
+                          <FaLocationArrow />
+                          <span>{isFetchingLocation ? 'Fetching...' : 'Use Current Location'}</span>
+                        </motion.button>
+                      </div>
+                    </div>
+                    <motion.button
+                      onClick={openManualAddressPopup}
+                      className="w-full py-3 bg-teal-100 text-teal-500 font-medium rounded-lg hover:bg-teal-200"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      Enter Address Manually
+                    </motion.button>
+                    <div className="bg-teal-50 p-4 rounded-lg">
+                      <p className="text-sm text-gray-700">
+                        <strong>Selected Address:</strong>{' '}
+                        {address.street
+                          ? `${address.street}, ${address.city}, ${address.state}, ${address.postalCode}, ${address.country}`
+                          : 'Click on the map, search, or use current location to select an address'}
+                      </p>
+                    </div>
                     <motion.button
                       onClick={handleAddNewAddress}
-                      disabled={isProcessing}
-                      className={`w-full px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                        isProcessing
+                      disabled={isProcessing || !address.street || !address.city}
+                      className={`w-full py-3 rounded-lg font-medium text-white ${
+                        isProcessing || !address.street || !address.city
                           ? 'bg-gray-400'
-                          : 'bg-teal-500 hover:bg-teal-600 text-white'
+                          : 'bg-teal-500 hover:bg-teal-600'
                       }`}
-                      whileHover={!isProcessing ? { scale: 1.05 } : {}}
-                      whileTap={!isProcessing ? { scale: 0.95 } : {}}
+                      whileHover={isProcessing || !address.street || !address.city ? {} : { scale: 1.05 }}
+                      whileTap={isProcessing || !address.street || !address.city ? {} : { scale: 0.95 }}
                     >
                       {isProcessing ? 'Saving...' : 'Save Address'}
                     </motion.button>
@@ -628,10 +966,8 @@ const CheckoutPage = () => {
                   <motion.button
                     onClick={handleConfirmAddress}
                     disabled={isProcessing}
-                    className={`w-full px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                      isProcessing
-                        ? 'bg-gray-400'
-                        : 'bg-teal-500 hover:bg-teal-600 text-white'
+                    className={`w-full py-3 rounded-lg font-medium text-white ${
+                      isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -649,16 +985,16 @@ const CheckoutPage = () => {
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="space-y-4 sm:space-y-6"
+                className="space-y-6"
               >
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Payment Method</h2>
-                <div className="space-y-3">
+                <h2 className="text-2xl font-bold text-gray-900">Payment Method</h2>
+                <div className="space-y-4">
                   {paymentOptions().map(({ method, desc, value }) => (
                     <motion.div
                       key={value}
-                      className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
+                      className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
                         paymentMethod === value
-                          ? 'border-teal-500 bg-teal-50'
+                          ? 'border-teal-500 bg-teal-50 shadow-md'
                           : 'border-gray-200 hover:bg-gray-50'
                       }`}
                       whileHover={{ scale: 1.02 }}
@@ -672,16 +1008,16 @@ const CheckoutPage = () => {
                           value={value}
                           checked={paymentMethod === value}
                           onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="text-teal-600 focus:ring-teal-500 w-5 h-5"
+                          className="text-teal-500 focus:ring-teal-500 w-5 h-5"
                         />
                         <div>
                           <label
                             htmlFor={value}
                             className="text-sm font-medium text-gray-700 flex items-center gap-2"
                           >
-                            {method === 'Full Online Payment' && <FaCreditCard />}
+                            {method === 'Online Payment' && <FaCreditCard />}
                             {method === 'Split Payment' && <FaWallet />}
-                            {method === 'Full Cash on Delivery' && <FaMoneyBillWave />}
+                            {method === 'Cash on Delivery' && <FaMoneyBillWave />}
                             {method}
                           </label>
                           <p className="text-xs text-gray-500">{desc}</p>
@@ -691,7 +1027,7 @@ const CheckoutPage = () => {
                   ))}
                 </div>
                 {paymentMethod === 'razorpay_split' && (
-                  <div className="bg-teal-50 p-4 rounded-xl text-sm text-gray-700">
+                  <div className="bg-teal-50 p-4 rounded-lg text-sm text-gray-700">
                     <p>
                       <strong>Payment Split Details:</strong>
                     </p>
@@ -700,16 +1036,15 @@ const CheckoutPage = () => {
                         {item.name}: ₹{item.onlineAmount} Online, ₹{item.codAmount} COD
                       </p>
                     ))}
+                    <p>Shipping: ₹{shipping.toFixed(2)} (Online)</p>
                   </div>
                 )}
-                <div className="flex gap-3">
+                <div className="flex gap-4">
                   <motion.button
                     onClick={() => setCurrentStep(1)}
                     disabled={isProcessing}
-                    className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium shadow-sm ${
-                      isProcessing
-                        ? 'bg-gray-400'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    className={`flex-1 py-3 rounded-lg font-medium ${
+                      isProcessing ? 'bg-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -719,10 +1054,8 @@ const CheckoutPage = () => {
                   <motion.button
                     onClick={() => setCurrentStep(3)}
                     disabled={!paymentMethod || isProcessing}
-                    className={`flex-1 px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                      !paymentMethod || isProcessing
-                        ? 'bg-gray-400'
-                        : 'bg-teal-500 hover:bg-teal-600 text-white'
+                    className={`flex-1 py-3 rounded-lg font-medium text-white ${
+                      !paymentMethod || isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600'
                     }`}
                     whileHover={paymentMethod && !isProcessing ? { scale: 1.05 } : {}}
                     whileTap={paymentMethod && !isProcessing ? { scale: 0.95 } : {}}
@@ -740,10 +1073,10 @@ const CheckoutPage = () => {
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="space-y-4 sm:space-y-6"
+                className="space-y-6"
               >
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Order Summary</h2>
-                <div className="space-y-4 bg-teal-50 p-4 rounded-xl">
+                <h2 className="text-2xl font-bold text-gray-900">Order Summary</h2>
+                <div className="space-y-4 bg-teal-50 p-6 rounded-lg">
                   {cartItems.map((item) => (
                     <motion.div
                       key={item.productId}
@@ -755,7 +1088,7 @@ const CheckoutPage = () => {
                       <img
                         src={item.image || placeholderImage}
                         alt={item.name}
-                        className="w-16 h-16 object-cover rounded-md shadow-sm"
+                        className="w-20 h-20 object-cover rounded-md shadow-sm"
                         onError={(e) => (e.target.src = placeholderImage)}
                       />
                       <div className="flex-1">
@@ -763,27 +1096,34 @@ const CheckoutPage = () => {
                         <p className="text-xs text-gray-600">
                           Qty: {item.quantity} | Size: {item.size} | Color: {item.color}
                         </p>
-                        <p className="text-sm text-teal-600 font-medium">
-                          ₹{(item.price * item.quantity).toFixed(2)}
+                        <p className="text-sm text-gray-600">
+                          MRP: ₹{(item.mrp * item.quantity).toFixed(2)}
+                        </p>
+                        <p className="text-sm text-teal-500 font-medium">
+                          Price: ₹{(item.price * item.quantity).toFixed(2)}
                         </p>
                         {paymentMethod === 'razorpay_split' && (
                           <p className="text-xs text-gray-500">
                             Online: ₹
-                            {
-                              calculatePaymentSplit().find((i) => i.productId === item.productId)
-                                ?.onlineAmount
-                            }{' '}
+                            {calculatePaymentSplit().find((i) => i.productId === item.productId)
+                              ?.onlineAmount}{' '}
                             | COD: ₹
-                            {
-                              calculatePaymentSplit().find((i) => i.productId === item.productId)
-                                ?.codAmount
-                            }
+                            {calculatePaymentSplit().find((i) => i.productId === item.productId)
+                              ?.codAmount}
                           </p>
                         )}
                       </div>
                     </motion.div>
                   ))}
-                  <div className="text-sm text-gray-700 space-y-2 pt-3 border-t border-gray-200">
+                  <div className="text-sm text-gray-700 space-y-2 pt-4 border-t border-gray-200">
+                    <p className="flex justify-between">
+                      <span>Total MRP:</span>
+                      <span>₹{totalMRP.toFixed(2)}</span>
+                    </p>
+                    <p className="flex justify-between">
+                      <span>Discount:</span>
+                      <span>-₹{discount.toFixed(2)}</span>
+                    </p>
                     <p className="flex justify-between">
                       <span>Subtotal:</span>
                       <span>₹{subtotal.toFixed(2)}</span>
@@ -795,12 +1135,7 @@ const CheckoutPage = () => {
                     {paymentMethod !== 'cod_full' && (
                       <p className="flex justify-between">
                         <span>Online Payment:</span>
-                        <span>
-                          ₹
-                          {calculatePaymentSplit()
-                            .reduce((sum, item) => sum + item.onlineAmount, 0)
-                            .toFixed(2)}
-                        </span>
+                        <span>₹{total.toFixed(2)}</span>
                       </p>
                     )}
                     {paymentMethod !== 'razorpay_full' && (
@@ -815,8 +1150,8 @@ const CheckoutPage = () => {
                       </p>
                     )}
                     <p className="flex justify-between font-semibold text-gray-800 pt-2">
-                      <span>Total:</span>
-                      <span className="text-teal-600">₹{total.toFixed(2)}</span>
+                      <span>Final Amount:</span>
+                      <span className="text-teal-500">₹{total.toFixed(2)}</span>
                     </p>
                   </div>
                 </div>
@@ -826,8 +1161,8 @@ const CheckoutPage = () => {
                     type="text"
                     name="name"
                     value={userDetails.name}
-                    onChange={handleUserDetailsChange}
-                    className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-400 bg-white text-gray-700 text-sm shadow-sm"
+                    onChange={(e) => setUserDetails({ ...userDetails, [e.target.name]: e.target.value })}
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-gray-700 text-sm shadow-sm"
                     placeholder="Full Name"
                     required
                     disabled={isProcessing}
@@ -836,8 +1171,8 @@ const CheckoutPage = () => {
                     type="tel"
                     name="phoneNumber"
                     value={userDetails.phoneNumber}
-                    onChange={handleUserDetailsChange}
-                    className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-400 bg-white text-gray-700 text-sm shadow-sm"
+                    onChange={(e) => setUserDetails({ ...userDetails, [e.target.name]: e.target.value })}
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-gray-700 text-sm shadow-sm"
                     placeholder="Phone Number"
                     required
                     disabled={isProcessing}
@@ -846,13 +1181,13 @@ const CheckoutPage = () => {
                     type="email"
                     name="email"
                     value={userDetails.email}
-                    onChange={handleUserDetailsChange}
-                    className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-400 bg-white text-gray-700 text-sm shadow-sm"
+                    onChange={(e) => setUserDetails({ ...userDetails, [e.target.name]: e.target.value })}
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-gray-700 text-sm shadow-sm"
                     placeholder="Email (optional)"
                     disabled={isProcessing}
                   />
                 </div>
-                <div className="space-y-2 text-sm text-gray-700 bg-teal-50 p-4 rounded-xl">
+                <div className="space-y-2 text-sm text-gray-700 bg-teal-50 p-4 rounded-lg">
                   <p>
                     <strong>Address:</strong>{' '}
                     {token && savedAddresses.find((addr) => addr._id === selectedAddress)
@@ -868,20 +1203,18 @@ const CheckoutPage = () => {
                   <p>
                     <strong>Payment Method:</strong>{' '}
                     {paymentMethod === 'razorpay_full'
-                      ? 'Full Online Payment'
+                      ? 'Online Payment'
                       : paymentMethod === 'razorpay_split'
                       ? 'Split Payment'
-                      : 'Full Cash on Delivery'}
+                      : 'Cash on Delivery'}
                   </p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-4">
                   <motion.button
                     onClick={() => setCurrentStep(2)}
                     disabled={isProcessing}
-                    className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium shadow-sm ${
-                      isProcessing
-                        ? 'bg-gray-400'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    className={`flex-1 py-3 rounded-lg font-medium ${
+                      isProcessing ? 'bg-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
@@ -889,27 +1222,190 @@ const CheckoutPage = () => {
                     Back
                   </motion.button>
                   <motion.button
-                    onClick={handlePlaceOrder}
+                    onClick={() => handlePlaceOrder()}
                     disabled={isProcessing}
-                    className={`flex-1 px-4 py-3 rounded-xl shadow-md text-sm font-medium ${
-                      isProcessing
-                        ? 'bg-gray-400'
-                        : 'bg-teal-500 hover:bg-teal-600 text-white'
+                    className={`flex-1 py-3 rounded-lg font-medium text-white ${
+                      isProcessing ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600'
                     }`}
                     whileHover={!isProcessing ? { scale: 1.05 } : {}}
                     whileTap={!isProcessing ? { scale: 0.95 } : {}}
                   >
                     {isProcessing
                       ? 'Processing...'
-                      : paymentMethod === 'cod_full'
-                      ? 'Place Order'
-                      : 'Pay Now'}
+                      : token
+                      ? paymentMethod === 'cod_full'
+                        ? 'Place Order'
+                        : 'Pay Now'
+                      : 'Continue to Login'}
                   </motion.button>
                 </div>
               </motion.div>
             )}
+
+            {currentStep === 4 && !token && (
+              <motion.div
+                key="step4"
+                variants={stepVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <h2 className="text-2xl font-bold text-gray-900">Login to Place Order</h2>
+                <p className="text-sm text-gray-500">Sign in using your phone number to complete your order.</p>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <select
+                      className="w-24 border border-gray-200 rounded-lg px-3 py-3 text-sm bg-white focus:ring-2 focus:ring-teal-500 shadow-sm"
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                      disabled={loginLoading}
+                    >
+                      {countryCodes.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        if (value.length <= 10) setPhoneNumber(value);
+                      }}
+                      placeholder="Enter phone number"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-teal-500 shadow-sm"
+                      disabled={loginLoading || otpSent}
+                    />
+                  </div>
+                  {otpSent && (
+                    <div className="flex justify-between gap-2">
+                      {otp.map((digit, index) => (
+                        <input
+                          key={index}
+                          ref={(el) => (otpRefs.current[index] = el)}
+                          type="text"
+                          value={digit}
+                          onChange={(e) => handleOtpChange(index, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, index)}
+                          onPaste={(e) => handleOtpPaste(e, index)}
+                          maxLength={1}
+                          className="w-12 h-12 border border-gray-200 rounded-lg text-center text-xl font-mono focus:ring-2 focus:ring-teal-500 shadow-sm"
+                          aria-label={`OTP digit ${index + 1}`}
+                          disabled={loginLoading}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <motion.button
+                    onClick={otpSent ? handleVerifyOtp : handleSendOtp}
+                    disabled={loginLoading}
+                    className={`w-full py-3 rounded-lg font-medium text-white ${
+                      loginLoading ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600'
+                    }`}
+                    whileHover={!loginLoading ? { scale: 1.05 } : {}}
+                    whileTap={!loginLoading ? { scale: 0.95 } : {}}
+                  >
+                    {loginLoading ? 'Processing...' : otpSent ? 'Verify OTP' : 'Send OTP'}
+                  </motion.button>
+                </div>
+                <motion.button
+                  onClick={() => setCurrentStep(3)}
+                  disabled={loginLoading}
+                  className={`w-full py-3 rounded-lg font-medium ${
+                    loginLoading ? 'bg-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                  whileHover={!loginLoading ? { scale: 1.05 } : {}}
+                  whileTap={!loginLoading ? { scale: 0.95 } : {}}
+                >
+                  Back
+                </motion.button>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
+
+        {/* Address Pop-up */}
+        <AnimatePresence>
+          {showAddressPopup && (
+            <motion.div
+              variants={popupVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-lg p-6 max-w-4xl mx-auto z-[2000]"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Enter Address Details</h3>
+                <motion.button
+                  onClick={() => setShowAddressPopup(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  ✕
+                </motion.button>
+              </div>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  name="street"
+                  value={tempAddress.street}
+                  onChange={handleAddressInputChange}
+                  placeholder="Street Address *"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"
+                  required
+                />
+                <input
+                  type="text"
+                  name="city"
+                  value={tempAddress.city}
+                  onChange={handleAddressInputChange}
+                  placeholder="City *"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"
+                  required
+                />
+                <input
+                  type="text"
+                  name="state"
+                  value={tempAddress.state}
+                  onChange={handleAddressInputChange}
+                  placeholder="State"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"
+                />
+                <input
+                  type="text"
+                  name="postalCode"
+                  value={tempAddress.postalCode}
+                  onChange={handleAddressInputChange}
+                  placeholder="Postal Code"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"
+                />
+                <input
+                  type="text"
+                  name="country"
+                  value={tempAddress.country}
+                  onChange={handleAddressInputChange}
+                  placeholder="Country"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"
+                />
+                <p className="text-xs text-gray-500">* Required fields</p>
+              </div>
+              <motion.button
+                onClick={handleSaveAddressFromPopup}
+                disabled={!tempAddress.street || !tempAddress.city}
+                className={`w-full mt-6 py-3 rounded-lg font-medium text-white ${
+                  !tempAddress.street || !tempAddress.city ? 'bg-gray-400' : 'bg-teal-500 hover:bg-teal-600'
+                }`}
+                whileHover={tempAddress.street && tempAddress.city ? { scale: 1.05 } : {}}
+                whileTap={tempAddress.street && tempAddress.city ? { scale: 0.95 } : {}}
+              >
+                Confirm Address
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

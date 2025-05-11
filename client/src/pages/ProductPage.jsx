@@ -96,7 +96,7 @@ const ProductPage = () => {
       // Add to server-side cart for authenticated users
       try {
         await axios.post(
-          '/api/user/auth/cart',
+          '/api/user/auth/cart/add',
           { productId, quantity, price: product.price, name: product.name, size: selectedSize, color: selectedColor },
           { headers: { Authorization: `Bearer ${token}` } }
         );
