@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, User, ShoppingCart, Heart } from 'lucide-react';
 import { TbCategory } from 'react-icons/tb';
-import AIAssistantModal from './AIAssistantModal';
+import AIAssistantModal from './Category';
 
 const BottomNavbar = () => {
   const location = useLocation();
@@ -50,7 +50,7 @@ const BottomNavbar = () => {
 
   return (
     <>
-      <div className="fixed bottom-4 left-0 w-screen flex justify-center z-50 px-4">
+      <div className="fixed bottom-4 left-0 w-screen flex justify-center z-40 px-4">
         <div className="relative w-[98%] max-w-md h-[67px] bg-violet-50/80 backdrop-blur-md rounded-3xl shadow-[0px_0px_20px_-15px_rgba(0,0,0,1)] px-4 flex justify-between items-center overflow-visible border border-violet-300">
           {tabs.map((tab, index) => {
             const isActive = index === activeIndex;
@@ -87,7 +87,6 @@ const BottomNavbar = () => {
         </div>
       </div>
 
-      {/* Category Modal */}
       <AIAssistantModal
         isOpen={isCategoryModalOpen}
         onClose={() => {
