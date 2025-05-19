@@ -1,6 +1,6 @@
-const dotenv = require('dotenv')
-dotenv.config()
-const express = require("express");
+const dotenv = require('dotenv');
+dotenv.config();
+const express = require('express');
 const cors = require('cors');
 const app = express();
 const connectDB = require('./config/db');
@@ -9,8 +9,8 @@ const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
 app.use(cors({
-  // origin: process.env.CLIENT_URL, // Your frontend URL
-  // credentials: true
+  origin: '*', // Allow requests from any URL
+  credentials: true // Allow credentials (e.g., cookies) if needed
 }));
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -25,7 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 
 connectDB();
 const categoryRoutes = require('./routes/category');
-const userr = require("./routes/userrr")
+const userr = require('./routes/userrr');
 app.use('/api/user', userAuthRoutes);
 app.use('/api/user/auth', userr);
 app.use('/', userr);
