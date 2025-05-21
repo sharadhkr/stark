@@ -10,7 +10,9 @@ const AdminAuthRoutes = require('./routes/adminRouter');
 
 const allowedOrigins = [
   'https://starkk.shop',
+  'https://stark-gamma.vercel.app',
   'http://localhost:3000'
+
 ];
 
 app.use(cors({
