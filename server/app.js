@@ -9,8 +9,8 @@ const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
 app.use(cors({
-  // origin: process.env.CLIENT_URL, // Your frontend URL
-  // credentials: true
+  origin: process.env.CLIENT_URL, // Your frontend URL
+  credentials: true
 }));
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {

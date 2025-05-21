@@ -6,6 +6,7 @@ import Bottom from './Components/botttommm';
 import 'leaflet/dist/leaflet.css';
 import axios from './useraxios';
 import lzString from 'lz-string';
+import ComboPage from './pages/ComboPage.jsx';
 
 // Lazy-loaded page components
 const Home = lazy(() => import('./pages/Home.jsx'));
@@ -26,7 +27,7 @@ const OrderDetails = lazy(() => import('./pages/OrderDetails.jsx'));
 const SellerProducts = lazy(() => import('./pages/SellerProducts.jsx'));
 const SellerOrders = lazy(() => import('./pages/SellerOrders.jsx'));
 const SearchResults = lazy(() => import('./pages/SearchResults.jsx'));
-const ComboOfferPage = lazy(() => import('./pages/ComboOfferPage.jsx'));
+const ComboOfferPage = lazy(() => import('./pages/ComboPage.jsx'));
 
 // Default images
 const FALLBACK_IMAGE = 'https://via.placeholder.com/150?text=No+Image';
@@ -84,14 +85,14 @@ const DataProvider = ({ children }) => {
         if (key === 'products' || key === 'layout') {
           const slimData = key === 'products'
             ? validatedData.slice(0, 20).map(({ _id, name, price, image, gender }) => {
-                const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
-                  ? image
-                  : DEFAULT_IMAGE;
-                if (!image || image.includes('placeholder.com')) {
-                  console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
-                }
-                return { _id, name, price, image: validatedImage, gender };
-              })
+              const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
+                ? image
+                : DEFAULT_IMAGE;
+              if (!image || image.includes('placeholder.com')) {
+                console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
+              }
+              return { _id, name, price, image: validatedImage, gender };
+            })
             : validatedData;
           if (key === 'products' && slimData.every(p => p.image === DEFAULT_IMAGE)) {
             console.warn('All slimmed products have default images, skipping localStorage save');
@@ -251,14 +252,14 @@ const DataProvider = ({ children }) => {
             try {
               const slimData = key === 'products'
                 ? value.data.slice(0, 20).map(({ _id, name, price, image, gender }) => {
-                    const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
-                      ? image
-                      : DEFAULT_IMAGE;
-                    if (!image || image.includes('placeholder.com')) {
-                      console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
-                    }
-                    return { _id, name, price, image: validatedImage, gender };
-                  })
+                  const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
+                    ? image
+                    : DEFAULT_IMAGE;
+                  if (!image || image.includes('placeholder.com')) {
+                    console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
+                  }
+                  return { _id, name, price, image: validatedImage, gender };
+                })
                 : value.data;
               if (key === 'products' && slimData.every(p => p.image === DEFAULT_IMAGE)) {
                 console.warn('All slimmed products have default images, skipping localStorage save');
@@ -380,7 +381,8 @@ const routes = [
   { path: '/seller/dashboard', element: <SellerDashboard />, layout: false },
   { path: '/admin/login', element: <AdminAuth />, layout: false },
   { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
-  { path: '/combo/:id', element: <ComboOfferPage />, layout: true },
+  { path: '/combo/:comboId', element: <ComboPage />, layout: false },
+  // { path: '/combo/:id', element: <ComboOfferPage />, layout: true },
 ];
 
 function App() {
