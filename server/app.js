@@ -42,7 +42,7 @@ const categoryRoutes = require('./routes/category');
 const userr = require("./routes/userrr")
 app.use('/api/user', userAuthRoutes);
 app.use('/api/user/auth', userr);
-app.use('/', userr);
+// app.use('/', userr);
 app.use('/api/admin/auth', AdminAuthRoutes);
 app.use('/api/seller/auth', sellerAuthRoutes);
 app.use('/api/categories', categoryRoutes);
