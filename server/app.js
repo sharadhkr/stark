@@ -8,10 +8,22 @@ const userAuthRoutes = require('./routes/userRouter');
 const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
+const allowedOrigins = [
+  'https://starkk.shop',
+  'http://localhost:3000'
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
+
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: `Multer error: ${err.message}` });
