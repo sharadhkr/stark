@@ -6,7 +6,7 @@ import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import PropTypes from 'prop-types';
 import { DataContext } from '../../App';
-import logo from '../../assets/slogo.png';
+import logo from '../../assets/slogo.webp';
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },

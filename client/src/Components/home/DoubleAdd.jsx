@@ -2,47 +2,60 @@ import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import { DataContext } from '../../App';
 
-const DEFAULT_IMAGE = 'https://your-server.com/generic-ad-placeholder.jpg';
+const DEFAULT_IMAGE = 'https://via.placeholder.com/300x150?text=Ad+Placeholder';
 
 const DoubleAdd = React.memo(() => {
   const { cache } = useContext(DataContext);
-  const ads = cache.ads?.data || [];
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Extract Double Ad images from ads array
+  const ads = useMemo(() => {
+    const doubleAd = (cache.ads?.data || []).find((ad) => ad.type === 'Double Ad');
+    return doubleAd?.images || [];
+  }, [cache.ads?.data]);
+  const [currentIndex, setCurrentIndex] = useState(1);
 
+  // Normalize and validate ad images
   const normalizedImages = useMemo(() => {
     return ads
-      .filter((ad) => ad && ad.url && !ad.disabled)
+      .filter((ad) => ad?.url && typeof ad.url === 'string')
       .map((ad) => ({
-        url: ad.url.replace(/^http:/, 'https:'),
-        alt: `Ad ${ad._id || ad.url.split('/').pop()}`,
+        url: ad.url && ad.url.trim() !== '' && !ad.disabled ? ad.url : DEFAULT_IMAGE,
+        alt: ad._id ? `Ad ${ad._id}` : `Ad ${ad.url.split('/').pop()}`,
       }));
   }, [ads]);
 
+  // Create pairs with padding for seamless looping
   const pairs = useMemo(() => {
     if (normalizedImages.length === 0) return [];
     const groups = [];
     for (let i = 0; i < normalizedImages.length; i += 2) {
       groups.push(normalizedImages.slice(i, i + 2));
     }
-    return [groups[groups.length - 1] || groups[0], ...groups, groups[0]];
+    if (groups.length === 0) return [];
+    return [groups[groups.length - 1], ...groups, groups[0]];
   }, [normalizedImages]);
 
-  const displayIndex = currentIndex + 1;
+  // Debug ad data
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('DoubleAdd Ads:', {
+        rawAds: cache.ads?.data?.length,
+        doubleAdImages: ads.length,
+        normalizedImages: normalizedImages.length,
+        pairs: pairs.length,
+      });
+    }
+  }, [cache.ads?.data, ads, normalizedImages, pairs]);
 
+  // Auto-rotation
   useEffect(() => {
     if (normalizedImages.length <= 2) return;
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => {
-        if (prev === pairs.length - 2) {
-          setTimeout(() => setCurrentIndex(1), 0);
-          return prev + 1;
-        }
-        return prev + 1;
-      });
+      setCurrentIndex((prev) => (prev === pairs.length - 2 ? 1 : prev + 1));
     }, 6000);
     return () => clearInterval(timer);
   }, [pairs.length, normalizedImages.length]);
 
+  // Seamless looping
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(pairs.length - 2), 0);
@@ -51,24 +64,13 @@ const DoubleAdd = React.memo(() => {
     }
   }, [currentIndex, pairs.length]);
 
+  // Swipe handlers
   const handlers = useSwipeable({
     onSwipedLeft: () => {
-      setCurrentIndex((prev) => {
-        if (prev === pairs.length - 2) {
-          setTimeout(() => setCurrentIndex(1), 0);
-          return prev + 1;
-        }
-        return prev + 1;
-      });
+      setCurrentIndex((prev) => (prev === pairs.length - 2 ? 1 : prev + 1));
     },
     onSwipedRight: () => {
-      setCurrentIndex((prev) => {
-        if (prev === 1) {
-          setTimeout(() => setCurrentIndex(pairs.length - 2), 0);
-          return prev - 1;
-        }
-        return prev - 1;
-      });
+      setCurrentIndex((prev) => (prev === 1 ? pairs.length - 2 : prev - 1));
     },
     trackMouse: true,
     delta: 10,
@@ -79,6 +81,17 @@ const DoubleAdd = React.memo(() => {
     setCurrentIndex(index + 1);
   };
 
+  // Loading state
+  if (normalizedImages.length === 0 && ads.length > 0) {
+    return (
+      <div className="w-full px-2 mb-5 flex gap-2">
+        <div className="w-1/2 h-32 bg-gray-200 rounded-lg animate-pulse" />
+        <div className="w-1/2 h-32 bg-gray-200 rounded-lg animate-pulse" />
+      </div>
+    );
+  }
+
+  // No ads fallback
   if (normalizedImages.length === 0) {
     return (
       <div className="w-full px-2 mb-5 text-center">
@@ -93,7 +106,7 @@ const DoubleAdd = React.memo(() => {
     <div className="w-full mb-5">
       <div className="relative w-full bg-transparent overflow-hidden drop-shadow-lg">
         <div
-          className="flex h-full transition-transform duration-500 ease-in-out will-change-transform"
+          className="flex h-full transition-transform duration-500 ease-in-out will-change-transform touch-pan-x"
           style={{
             transform: `translateX(-${currentIndex * 100}%)`,
           }}
@@ -114,10 +127,9 @@ const DoubleAdd = React.memo(() => {
                     src={image.url}
                     alt={image.alt}
                     loading="lazy"
-                    fetchpriority={pairIndex === currentIndex + 1 ? 'high' : 'auto'}
+                    fetchpriority={pairIndex === currentIndex ? 'high' : 'auto'}
                     onError={(e) => {
                       if (e.target.src !== DEFAULT_IMAGE) {
-                        console.warn(`Failed to load ad image: ${e.target.src}`);
                         e.target.src = DEFAULT_IMAGE;
                       }
                     }}
@@ -138,7 +150,7 @@ const DoubleAdd = React.memo(() => {
               key={index}
               onClick={() => goToPair(index)}
               className={`w-2 h-2 rounded-full transition-all duration-300 shadow-sm hover:scale-125 ${
-                displayIndex - 1 === index
+                currentIndex - 1 === index
                   ? 'bg-purple-400 scale-125'
                   : 'bg-gray-300 hover:bg-gray-500/50'
               }`}

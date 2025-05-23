@@ -1941,14 +1941,14 @@ router.get('/sponsored', async (req, res) => {
 });
 
 
-// Default image placeholders
-const DEFAULT_PRODUCT_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-product.jpg';
-const DEFAULT_COMBO_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-combo.jpg';
-const DEFAULT_AD_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-ad.jpg';
-const DEFAULT_BANNER_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-banner.jpg';
-const DEFAULT_CATEGORY_ICON = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-category-icon.jpg';
+// Default images
+const DEFAULT_PRODUCT_IMAGE = 'https://via.placeholder.com/150?text=Product';
+const DEFAULT_COMBO_IMAGE = 'https://via.placeholder.com/150?text=Combo';
+const DEFAULT_AD_IMAGE = 'https://via.placeholder.com/150?text=Ad';
+const DEFAULT_BANNER_IMAGE = 'https://via.placeholder.com/150?text=Banner';
+const DEFAULT_CATEGORY_ICON = 'https://via.placeholder.com/50?text=Category';
+const DEFAULT_PROFILE_PICTURE = 'https://via.placeholder.com/80x80?text=No+Image';
 
-// /api/user/auth/initial-data endpoint
 router.get('/initial-data', async (req, res) => {
   try {
     const { limit = 20, page = 1 } = req.query;
@@ -1967,8 +1967,8 @@ router.get('/initial-data', async (req, res) => {
       trendingProducts,
       userData,
       trendingSearches,
+      categoryProducts,
     ] = await Promise.all([
-      // Layout
       Layout.findOne()
         .sort({ updatedAt: -1 })
         .lean()
@@ -1978,7 +1978,6 @@ router.get('/initial-data', async (req, res) => {
           return layout || { components: [] };
         }),
 
-      // Products
       Product.find()
         .limit(Number(limit))
         .skip(Number(skip))
@@ -1989,10 +1988,9 @@ router.get('/initial-data', async (req, res) => {
           if (prods.some((p) => !p.images || !p.images.length)) {
             console.warn(`Found ${prods.filter((p) => !p.images || !p.images.length).length} products with missing images`);
           }
-          return prods;
+          return prods || [];
         }),
 
-      // Combo Offers
       ComboOffer.find()
         .limit(3)
         .lean()
@@ -2003,10 +2001,9 @@ router.get('/initial-data', async (req, res) => {
           if (offers.some((o) => !o || !o.images || !o.images.length)) {
             console.warn(`Found ${offers.filter((o) => !o || !o.images || !o.images.length).length} combo offers with missing or invalid data`);
           }
-          return offers.filter((o) => o && o._id && o.name);
+          return offers.filter((o) => o && o._id && o.name) || [];
         }),
 
-      // Categories
       Category.find()
         .limit(8)
         .lean()
@@ -2016,20 +2013,21 @@ router.get('/initial-data', async (req, res) => {
           if (cats.some((c) => !c.icon)) {
             console.warn(`Found ${cats.filter((c) => !c.icon).length} categories with missing icons`);
           }
-          return cats;
+          return cats || [];
         }),
 
-      // Sellers
       Seller.find()
         .limit(5)
         .lean()
-        .select('_id name shopName')
+        .select('_id name shopName profilePicture')
         .then((sells) => {
           if (!sells.length) console.warn('No sellers found');
-          return sells;
+          if (sells.some((s) => !s.profilePicture || s.profilePicture.trim() === '')) {
+            console.warn(`Found ${sells.filter((s) => !s.profilePicture || s.profilePicture.trim() === '').length} sellers with missing/empty profilePicture`);
+          }
+          return sells || [];
         }),
 
-      // Sponsored Products
       SponsoredProduct.find()
         .limit(5)
         .lean()
@@ -2040,12 +2038,12 @@ router.get('/initial-data', async (req, res) => {
             return Product.find()
               .limit(5)
               .lean()
-              .select('_id name price images');
+              .select('_id name price images')
+              .then((prods) => prods || []);
           }
-          return sponsored.map((sp) => sp.productId).filter((p) => p);
+          return sponsored.map((sp) => sp.productId).filter((p) => p) || [];
         }),
 
-      // Ads from Admin
       Admin.findOne()
         .lean()
         .select('singleadd doubleadd tripleadd')
@@ -2058,7 +2056,6 @@ router.get('/initial-data', async (req, res) => {
           };
         }),
 
-      // Trending Products
       Product.find()
         .sort({ viewCount: -1 })
         .limit(5)
@@ -2069,10 +2066,9 @@ router.get('/initial-data', async (req, res) => {
           if (trending.some((p) => !p.images || !p.images.length)) {
             console.warn(`Found ${trending.filter((p) => !p.images || !p.images.length).length} trending products with missing images`);
           }
-          return trending;
+          return trending || [];
         }),
 
-      // User Data
       userId
         ? User.findById(userId)
             .lean()
@@ -2086,52 +2082,76 @@ router.get('/initial-data', async (req, res) => {
             })
         : Promise.resolve({ recentSearches: [], recentlyViewed: [] }),
 
-      // Trending Searches
       User.aggregate([
         { $unwind: '$recentSearches' },
         { $match: { recentSearches: { $ne: '' } } },
         { $group: { _id: '$recentSearches', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 5 },
-        { $project: { _id: 0, query: '$_id' } }, // Fixed typo: '$_id' instead of '$id'
+        { $project: { _id: 0, query: '$_id' } },
       ])
         .then((searches) => ({
-          trendingSearches: searches.map((s) => s.query),
-          topSellers: Seller.find().sort({ totalOrders: -1 }).limit(3).lean().select('_id name shopName'),
+          trendingSearches: searches.map((s) => s.query) || [],
+          topSellers: Seller.find().sort({ totalOrders: -1 }).limit(3).lean().select('_id name shopName profilePicture'),
           topCategories: Category.find().sort({ productCount: -1 }).limit(3).lean().select('_id name icon'),
           topProducts: Product.find().sort({ viewCount: -1 }).limit(3).lean().select('_id name images'),
         }))
         .then(async (trending) => {
           const result = {
             trendingSearches: trending.trendingSearches,
-            topSellers: await trending.topSellers,
-            topCategories: await trending.topCategories,
-            topProducts: await trending.topProducts,
+            topSellers: (await trending.topSellers) || [],
+            topCategories: (await trending.topCategories) || [],
+            topProducts: (await trending.topProducts) || [],
           };
           if (!result.trendingSearches.length) console.warn('No trending searches found');
           return result;
         }),
+
+      Category.find()
+        .lean()
+        .select('_id')
+        .then(async (cats) => {
+          if (!cats.length) {
+            console.warn('No categories found for categoryProducts, using fallback');
+            return { 'fallbackCategory': [] };
+          }
+          const categoryProducts = {};
+          for (const cat of cats) {
+            const prods = await Product.find({ category: cat._id })
+              .limit(10)
+              .lean()
+              .select('_id name price images gender category')
+              .then((p) => {
+                if (!p?.length) console.warn(`No products found for category ${cat._id}`);
+                return p || [];
+              });
+            categoryProducts[cat._id] = prods;
+          }
+          if (Object.keys(categoryProducts).length === 0) {
+            console.warn('No category products found, using fallback');
+            return { 'fallbackCategory': [] };
+          }
+          return categoryProducts;
+        }),
     ]);
 
-    // Sanitize images with logging
+    // Sanitize images
     const sanitizeImage = (image, defaultImage, context = 'unknown') => {
-      if (!image || !image.trim() || image.includes('placeholder')) {
-        console.warn(`Invalid image in ${context}: ${image || 'null'}, using default: ${defaultImage}`);
+      if (!image || image.trim() === '' || image.includes('placeholder')) {
+        console.warn(`Invalid or empty image in ${context}: ${image || 'null'}, using default: ${defaultImage}`);
         return defaultImage;
       }
-      console.log(`Valid image in ${context}: ${image}`);
       return image;
     };
 
-    // Get first valid image from array
     const getFirstValidImage = (images, defaultImage, context) => {
-      if (!images || !Array.isArray(images)) {
+      if (!Array.isArray(images)) {
         console.warn(`Invalid images array in ${context}: ${images}, using default: ${defaultImage}`);
         return defaultImage;
       }
       const validImage = images.find(
-        (img) => (typeof img === 'string' && img && !img.includes('placeholder')) ||
-                 (img?.url && !img.disabled && !img.url.includes('placeholder'))
+        (img) => (typeof img === 'string' && img && img.trim() !== '' && !img.includes('placeholder')) ||
+                 (img?.url && !img.disabled && img.url.trim() !== '' && !img.url.includes('placeholder'))
       );
       return sanitizeImage(validImage?.url || validImage, defaultImage, context);
     };
@@ -2171,57 +2191,69 @@ router.get('/initial-data', async (req, res) => {
       icon: sanitizeImage(category.icon, DEFAULT_CATEGORY_ICON, `category ${category._id}`),
     }));
 
-    // Structure ads with detailed logging
+    const sanitizedSellers = sellers.map((seller) => ({
+      ...seller,
+      profilePicture: seller.profilePicture && seller.profilePicture.trim() !== ''
+        ? seller.profilePicture
+        : DEFAULT_PROFILE_PICTURE,
+    }));
+
+    const sanitizedCategoryProducts = {};
+    for (const [catId, prods] of Object.entries(categoryProducts)) {
+      sanitizedCategoryProducts[catId] = Array.isArray(prods)
+        ? prods.map((product) => ({
+            ...product,
+            image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `categoryProduct ${product._id}`),
+          }))
+        : [];
+      if (!sanitizedCategoryProducts[catId].length) {
+        console.warn(`No valid products for category ${catId}`);
+      }
+    }
+
     const sanitizedAds = [
       {
         type: 'Single Ad',
-        images: adminData.singleadd.images
-          .filter((img) => !img.disabled && img.url)
-          .map((img) => {
-            const imageData = {
-              _id: img._id || new mongoose.Types.ObjectId().toString(),
-              url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `singleAd ${img._id || 'new'}`),
-              disabled: img.disabled,
-            };
-            console.log(`Single Ad image: ${JSON.stringify(imageData)}`);
-            return imageData;
-          }),
+        images: Array.isArray(adminData.singleadd?.images)
+          ? adminData.singleadd.images
+              .filter((img) => !img.disabled && img.url && img.url.trim() !== '')
+              .map((img) => ({
+                _id: img._id || new mongoose.Types.ObjectId().toString(),
+                url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `singleAd ${img._id || 'new'}`),
+                disabled: img.disabled,
+              }))
+          : [],
       },
       {
         type: 'Double Ad',
-        images: adminData.doubleadd.images
-          .filter((img) => !img.disabled && img.url)
-          .map((img) => {
-            const imageData = {
-              _id: img._id || new mongoose.Types.ObjectId().toString(),
-              url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `doubleAd ${img._id || 'new'}`),
-              disabled: img.disabled,
-            };
-            console.log(`Double Ad image: ${JSON.stringify(imageData)}`);
-            return imageData;
-          }),
+        images: Array.isArray(adminData.doubleadd?.images)
+          ? adminData.doubleadd.images
+              .filter((img) => !img.disabled && img.url && img.url.trim() !== '')
+              .map((img) => ({
+                _id: img._id || new mongoose.Types.ObjectId().toString(),
+                url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `doubleAd ${img._id || 'new'}`),
+                disabled: img.disabled,
+              }))
+          : [],
       },
       {
         type: 'Triple Ad',
-        images: adminData.tripleadd.images
-          .filter((img) => !img.disabled && img.url)
-          .map((img) => {
-            const imageData = {
-              _id: img._id || new mongoose.Types.ObjectId().toString(),
-              url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `tripleAd ${img._id || 'new'}`),
-              disabled: img.disabled,
-            };
-            console.log(`Triple Ad image: ${JSON.stringify(imageData)}`);
-            return imageData;
-          }),
+        images: Array.isArray(adminData.tripleadd?.images)
+          ? adminData.tripleadd.images
+              .filter((img) => !img.disabled && img.url && img.url.trim() !== '')
+              .map((img) => ({
+                _id: img._id || new mongoose.Types.ObjectId().toString(),
+                url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `tripleAd ${img._id || 'new'}`),
+                disabled: img.disabled,
+              }))
+          : [],
       },
     ];
 
-    // Use first non-disabled image from singleadd as banner
     const banner = {
-      url: adminData.singleadd.images.find((img) => !img.disabled && img.url)?.url
+      url: adminData.singleadd?.images?.find((img) => !img.disabled && img.url && img.url.trim() !== '')?.url
         ? sanitizeImage(
-            adminData.singleadd.images.find((img) => !img.disabled && img.url).url,
+            adminData.singleadd.images.find((img) => !img.disabled && img.url && img.url.trim() !== '').url,
             DEFAULT_BANNER_IMAGE,
             'banner'
           )
@@ -2236,7 +2268,18 @@ router.get('/initial-data', async (req, res) => {
           icon: sanitizeImage(c.icon, DEFAULT_CATEGORY_ICON, `searchCategory ${c._id}`),
         }))
       ),
-      sellers: await Seller.find().limit(3).lean().select('_id name shopName'),
+      sellers: await Seller.find()
+        .limit(3)
+        .lean()
+        .select('_id name shopName profilePicture')
+        .then((sells) =>
+          sells.map((s) => ({
+            ...s,
+            profilePicture: s.profilePicture && s.profilePicture.trim() !== ''
+              ? s.profilePicture
+              : DEFAULT_PROFILE_PICTURE,
+          }))
+        ),
       products: await Product.find()
         .limit(3)
         .lean()
@@ -2251,7 +2294,12 @@ router.get('/initial-data', async (req, res) => {
 
     const sanitizedTrendingSearches = {
       trendingSearches: trendingSearches.trendingSearches,
-      topSellers: trendingSearches.topSellers,
+      topSellers: trendingSearches.topSellers.map((seller) => ({
+        ...seller,
+        profilePicture: seller.profilePicture && seller.profilePicture.trim() !== ''
+          ? seller.profilePicture
+          : DEFAULT_PROFILE_PICTURE,
+      })),
       topCategories: trendingSearches.topCategories.map((category) => ({
         ...category,
         icon: sanitizeImage(category.icon, DEFAULT_CATEGORY_ICON, `topCategory ${category._id}`),
@@ -2262,23 +2310,23 @@ router.get('/initial-data', async (req, res) => {
       })),
     };
 
-    // Structure response
     const response = {
-      layout: { components: layoutResult.components || [] },
+      layout: { components: layoutResult.components },
       products: sanitizedProducts,
       comboOffers: sanitizedComboOffers,
       categories: sanitizedCategories,
-      sellers: sellers || [],
+      sellers: sanitizedSellers,
       sponsoredProducts: sanitizedSponsoredProducts,
       ads: sanitizedAds,
+      tripleAds: sanitizedAds.filter((ad) => ad.type === 'Triple Ad'),
       trendingProducts: sanitizedTrendingProducts,
       banner,
       searchSuggestions: sanitizedSearchSuggestions,
       trendingSearches: sanitizedTrendingSearches,
       recentlyViewed: userData.recentlyViewed.slice(0, 10),
+      categoryProducts: sanitizedCategoryProducts,
     };
 
-    // Log response summary
     console.log('API response summary:', {
       products: response.products.length,
       comboOffers: response.comboOffers.length,
@@ -2286,8 +2334,13 @@ router.get('/initial-data', async (req, res) => {
       categories: response.categories.length,
       sellers: response.sellers.length,
       ads: response.ads.map((ad) => ({ type: ad.type, images: ad.images.length })),
+      tripleAds: response.tripleAds.length,
       banner: response.banner.url,
       recentlyViewed: response.recentlyViewed.length,
+      categoryProducts: Object.entries(response.categoryProducts).map(([catId, prods]) => ({
+        category: catId,
+        productCount: prods.length,
+      })),
     });
 
     res.json(response);
