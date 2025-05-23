@@ -10,7 +10,7 @@ const AdminAuthRoutes = require('./routes/adminRouter');
 
 const allowedOrigins = [
   'https://starkk.shop',
- 'https://stark-sharadhkrs-projects.vercel.app/',
+//  'https://stark-sharadhkrs-projects.vercel.app/',
  'http://localhost:5173'
 ];
 

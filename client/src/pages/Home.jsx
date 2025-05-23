@@ -4,6 +4,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import debounce from 'lodash.debounce';
 import axios from '../useraxios';
 import { DataContext } from '../App';
+import Loading from '../assets/loading.gif';
 
 // Lazy-loaded components
 const SearchBar = lazy(() => import('../Components/home/SearchBar'));
@@ -311,7 +312,8 @@ const Home = React.memo(() => {
   const LoadingUI = useMemo(
     () => (
       <div className="text-center flex flex-col min-h-screen justify-center items-center" aria-live="polite">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        {/* <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /> */}
+        <img className='w-1/2' src={Loading} alt="" />
         <p className="text-gray-500 text-lg mt-4">Loading...</p>
       </div>
     ),
@@ -366,7 +368,7 @@ const Home = React.memo(() => {
   }, [cache.layout?.data, loading, errors, renderComponent, LoadingUI, defaultLayout, fetchData]);
 
   return (
-    <div className="min-h-screen bg-gray-100/80">
+    <div className="min-h-screen bg-white">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
       <main className="container mx-auto px-1">{renderedLayout}</main>
     </div>
