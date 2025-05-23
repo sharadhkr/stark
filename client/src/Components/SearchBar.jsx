@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import agroLogo from '../assets/logo.png';
-import slogo from '../assets/slogo.png';
+import slogo from '../assets/slogo.webp';
 
 // Animation variants
 const fadeIn = {
