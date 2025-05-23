@@ -1,21 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useSwipeable } from 'react-swipeable';
+import { DataContext } from '../../App';
 
-// Memoize to prevent unnecessary re-renders
-const SingleAdd = React.memo(({ images = [] }) => {
+const DEFAULT_IMAGE = 'https://your-server.com/generic-ad-placeholder.jpg';
+
+const SingleAdd = React.memo(() => {
+  const { cache } = useContext(DataContext);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Normalize images
   const normalizedImages = useMemo(() => {
-    return images
+    const ads = cache.singleAds?.data || [];
+    return ads
       .filter((img) => img && img.url && !img.disabled)
       .map((img) => ({
         url: img.url.replace(/^http:/, 'https:'),
         alt: `Single Ad ${img._id || img.url.split('/').pop()}`,
       }));
-  }, [images]);
+  }, [cache.singleAds]);
 
-  // Infinite sliding effect
   const extendedImages = useMemo(() => {
     if (normalizedImages.length === 0) return [];
     return [normalizedImages[normalizedImages.length - 1], ...normalizedImages, normalizedImages[0]];
@@ -23,10 +25,8 @@ const SingleAdd = React.memo(({ images = [] }) => {
 
   const displayIndex = currentIndex + 1;
 
-  // Automatic sliding
   useEffect(() => {
     if (normalizedImages.length <= 1) return;
-
     const timer = setInterval(() => {
       setCurrentIndex((prev) => {
         if (prev === extendedImages.length - 2) {
@@ -36,11 +36,9 @@ const SingleAdd = React.memo(({ images = [] }) => {
         return prev + 1;
       });
     }, 6000);
-
     return () => clearInterval(timer);
   }, [extendedImages.length, normalizedImages.length]);
 
-  // Reset index
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(extendedImages.length - 2), 0);
@@ -49,7 +47,6 @@ const SingleAdd = React.memo(({ images = [] }) => {
     }
   }, [currentIndex, extendedImages.length]);
 
-  // Swipe handlers
   const handlers = useSwipeable({
     onSwipedLeft: () => {
       setCurrentIndex((prev) => {
@@ -74,16 +71,16 @@ const SingleAdd = React.memo(({ images = [] }) => {
     preventDefaultTouchmoveEvent: true,
   });
 
-  // Jump to specific image
   const goToImage = (index) => {
     setCurrentIndex(index + 1);
   };
 
-  // Handle no images
   if (normalizedImages.length === 0) {
     return (
       <div className="w-full mb-5 text-center">
-        <p className="text-muted-foreground">No single ad images available</p>
+        <p className="text-gray-500" aria-live="polite">
+          No single ad images available
+        </p>
       </div>
     );
   }
@@ -109,6 +106,12 @@ const SingleAdd = React.memo(({ images = [] }) => {
                 alt={image.alt}
                 loading="lazy"
                 fetchpriority={index === currentIndex + 1 ? 'high' : 'auto'}
+                onError={(e) => {
+                  if (e.target.src !== DEFAULT_IMAGE) {
+                    console.warn(`Failed to load ad image: ${e.target.src}`);
+                    e.target.src = DEFAULT_IMAGE;
+                  }
+                }}
               />
             </div>
           ))}
@@ -123,9 +126,9 @@ const SingleAdd = React.memo(({ images = [] }) => {
               className={`w-2 h-2 rounded-full transition-all duration-300 shadow-sm hover:scale-125 ${
                 displayIndex - 1 === index
                   ? 'bg-purple-400 scale-125'
-                  : 'bg-gray-300 hover:bg-muted-foreground/50'
+                  : 'bg-gray-300 hover:bg-gray-500/50'
               }`}
-              aria-label={`Go to image ${index + 1}`}
+              aria-label={`Go to ad image ${index + 1}`}
             />
           ))}
         </div>

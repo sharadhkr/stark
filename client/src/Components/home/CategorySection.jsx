@@ -1,16 +1,21 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { motion } from 'framer-motion';
 import CategoryCard from '../CategoryCard';
+import { DataContext } from '../../App';
 
-const CategorySection = ({ categories, loading }) => {
-  const fadeIn = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-  };
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+};
 
-  const CategorySkeleton = () => (
-    <div className="min-w-[60px] h-15 rounded-full bg-gray-200 animate-pulse m-2"></div>
-  );
+const CategorySkeleton = () => (
+  <div className="min-w-[60px] h-15 rounded-full bg-gray-200 animate-pulse m-2"></div>
+);
+
+const CategorySection = React.memo(() => {
+  const { cache } = useContext(DataContext);
+  const categories = cache.categories?.data || [];
+  const loading = cache.categories?.isLoading || false;
 
   return (
     <div className="w-full px-2 relative">
@@ -27,11 +32,13 @@ const CategorySection = ({ categories, loading }) => {
         </div>
         <div className="w-full justify-around overflow-x-auto scrollbar-hide items-center scroll-smooth flex snap-x">
           {loading ? (
-            Array(5)
+            Array(3)
               .fill()
               .map((_, i) => <CategorySkeleton key={i} />)
-          ) : categories?.length === 0 ? (
-            <p className="text-gray-600">No categories available.</p>
+          ) : categories.length === 0 ? (
+            <p className="text-gray-600" aria-live="polite">
+              No categories available.
+            </p>
           ) : (
             categories.map((category) => (
               <div key={category._id} className="snap-start min-w-fit flex-shrink-0 opacity-70 px-4">
@@ -49,6 +56,6 @@ const CategorySection = ({ categories, loading }) => {
       </div>
     </div>
   );
-};
+});
 
 export default CategorySection;

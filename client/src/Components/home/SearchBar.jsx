@@ -5,10 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import PropTypes from 'prop-types';
-import agroLogo from '../../assets/slogo.webp';
 import { DataContext } from '../../App';
-
-// Animation variants
+import logo from '../../assets/slogo.png';
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
@@ -16,128 +14,40 @@ const fadeIn = {
 
 const slideDown = {
   hidden: { opacity: 0, y: -20, height: 0 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    height: 'auto',
-    transition: { duration: 0.3, ease: 'easeOut' },
-  },
+  visible: { opacity: 1, y: 0, height: 'auto', transition: { duration: 0.3, ease: 'easeOut' } },
   exit: { opacity: 0, y: -20, height: 0, transition: { duration: 0.2, ease: 'easeIn' } },
 };
 
+const DEFAULT_IMAGE = logo;
+
 const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or categories..." }) => {
-  const { cache, updateCache, isDataStale } = useContext(DataContext);
+  const { cache, updateCache } = useContext(DataContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [suggestions, setSuggestions] = useState({
-    recentSearches: [],
-    categories: [],
-    sellers: [],
-    products: [],
-  });
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const searchRef = useRef(null);
   const inputRef = useRef(null);
   const token = localStorage.getItem('token');
 
-  // Validate search arrays
+  const suggestions = useMemo(() => cache.searchSuggestions?.data || {
+    recentSearches: [],
+    categories: [],
+    sellers: [],
+    products: [],
+  }, [cache.searchSuggestions]);
+
+  const trending = useMemo(() => cache.trendingSearches?.data || {
+    trendingSearches: [],
+    topSellers: [],
+    topCategories: [],
+    topProducts: [],
+  }, [cache.trendingSearches]);
+
   const validateSearches = useCallback((searches) => {
     if (!Array.isArray(searches)) return [];
     return searches
       .map((item) => (typeof item === 'string' ? item : item?.query))
       .filter((item) => typeof item === 'string');
-  }, []);
-
-  // Fetch trending data
-  const fetchTrending = useCallback(async () => {
-    if (!isDataStale(cache.trendingSearches?.timestamp) && cache.trendingSearches?.data?.trendingSearches?.length > 0) {
-      return; // Use cached data if fresh
-    }
-
-    try {
-      const endpoint = token ? '/api/user/auth/search/trending' : '/api/user/auth/search/trending';
-      const config = {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        params: { limit: 8 }, // Reduced limit for performance
-      };
-      const res = await axios.get(endpoint, config);
-      const trendingData = {
-        trendingSearches: validateSearches(res.data.trendingSearches),
-        topSellers: res.data.topSellers?.slice(0, 4) || [],
-        topCategories: res.data.topCategories?.slice(0, 4) || [],
-        topProducts: res.data.topProducts?.slice(0, 4) || [],
-      };
-      updateCache('trendingSearches', trendingData);
-    } catch (error) {
-      console.error('Fetch Trending Error:', error);
-      updateCache('trendingSearches', { trendingSearches: [], topSellers: [], topCategories: [], topProducts: [] });
-    }
-  }, [token, cache.trendingSearches?.timestamp, isDataStale, updateCache, validateSearches]);
-
-  // Fetch suggestions
-  const fetchSuggestions = useCallback(async () => {
-    if (!isDataStale(cache.searchSuggestions?.timestamp) && cache.searchSuggestions?.data?.products?.length > 0 && searchQuery.trim()) {
-      return; // Use cached data if fresh
-    }
-
-    setLoading(true);
-    try {
-      const endpoint = searchQuery.trim()
-        ? (token ? '/api/user/auth/search/suggestions' : '/api/search/suggestions')
-        : (token ? '/api/user/auth/search/recent' : '/api/user/auth/search/trending');
-      const config = {
-        params: searchQuery.trim() ? { q: searchQuery, limit: 8 } : { limit: 8 },
-        ...(token && { headers: { Authorization: `Bearer ${token}` } }),
-      };
-      const res = await axios.get(endpoint, config);
-      const suggestionData = {
-        recentSearches: token ? validateSearches(res.data.recentSearches) : [],
-        categories: res.data.categories?.slice(0, 4) || [],
-        sellers: res.data.sellers?.slice(0, 4) || [],
-        products: res.data.products?.slice(0, 4) || [],
-      };
-      updateCache('searchSuggestions', suggestionData);
-      setSuggestions(suggestionData);
-    } catch (error) {
-      console.error('Fetch Suggestions Error:', error);
-      toast.error('Search suggestions unavailable');
-      setSuggestions({ recentSearches: [], categories: [], sellers: [], products: [] });
-    } finally {
-      setLoading(false);
-    }
-  }, [searchQuery, token, cache.searchSuggestions?.timestamp, isDataStale, updateCache, validateSearches]);
-
-  // Debounced suggestions fetch
-  useEffect(() => {
-    const debounce = setTimeout(() => {
-      if (isExpanded) fetchSuggestions();
-    }, 300); // Reduced debounce for responsiveness
-
-    return () => clearTimeout(debounce);
-  }, [searchQuery, isExpanded, fetchSuggestions]);
-
-  // Fetch trending on mount
-  useEffect(() => {
-    fetchTrending();
-  }, [fetchTrending]);
-
-  // Handle outside clicks and keyboard
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setIsExpanded(false);
-      }
-    };
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') setIsExpanded(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
   }, []);
 
   const handleSearch = useCallback((e) => {
@@ -152,7 +62,11 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
     if (!token || !searchQuery.trim()) return;
     axios
       .post('/api/user/auth/search/recent', { query: searchQuery }, { headers: { Authorization: `Bearer ${token}` } })
-      .catch((err) => console.error('Save Search Error:', err));
+      .catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Save Search Error:', err);
+        }
+      });
   }, [searchQuery, token]);
 
   const handleQuickSearch = useCallback((type, item) => {
@@ -190,25 +104,45 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
     axios
       .post('/api/user/auth/search/recent', { query: '' }, { headers: { Authorization: `Bearer ${token}` } })
       .then(() => {
-        setSuggestions((prev) => ({ ...prev, recentSearches: [] }));
         updateCache('searchSuggestions', { ...suggestions, recentSearches: [] });
         toast.success('Recent searches cleared');
       })
-      .catch((err) => console.error('Clear Recent Error:', err));
+      .catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Clear Recent Error:', err);
+        }
+      });
   }, [token, suggestions, updateCache]);
 
-  const removeRecentSearch = useCallback(
-    (search) => {
-      if (!token) return;
-      const updatedSearches = suggestions.recentSearches.filter((item) => item !== search);
-      setSuggestions((prev) => ({ ...prev, recentSearches: updatedSearches }));
-      updateCache('searchSuggestions', { ...suggestions, recentSearches: updatedSearches });
-      axios
-        .post('/api/user/auth/search/recent', { query: search }, { headers: { Authorization: `Bearer ${token}` } })
-        .catch((err) => console.error('Remove Recent Error:', err));
-    },
-    [token, suggestions, updateCache]
-  );
+  const removeRecentSearch = useCallback((search) => {
+    if (!token) return;
+    const updatedSearches = suggestions.recentSearches.filter((item) => item !== search);
+    updateCache('searchSuggestions', { ...suggestions, recentSearches: updatedSearches });
+    axios
+      .post('/api/user/auth/search/recent', { query: search }, { headers: { Authorization: `Bearer ${token}` } })
+      .catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Remove Recent Error:', err);
+        }
+      });
+  }, [token, suggestions, updateCache]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setIsExpanded(false);
+      }
+    };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setIsExpanded(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   const TagItem = React.memo(({ text, onRemove, onClick }) => {
     if (typeof text !== 'string') return null;
@@ -225,6 +159,7 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
               e.stopPropagation();
               onRemove();
             }}
+            aria-label={`Remove ${text} from recent searches`}
           />
         )}
       </div>
@@ -241,6 +176,8 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
     <div
       className="flex items-center bg-gray-50 rounded-lg p-2 mb-2 cursor-pointer hover:bg-gray-100 transition-colors"
       onClick={onClick}
+      role="button"
+      aria-label={`Select ${text}`}
     >
       <div className="w-8 h-8 flex items-center justify-center bg-white rounded-md mr-2">{icon}</div>
       <span className="text-sm text-gray-700 truncate">{text}</span>
@@ -252,13 +189,6 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
     text: PropTypes.string.isRequired,
     onClick: PropTypes.func.isRequired,
   };
-
-  const trending = useMemo(() => cache.trendingSearches?.data || {
-    trendingSearches: [],
-    topSellers: [],
-    topCategories: [],
-    topProducts: [],
-  }, [cache.trendingSearches]);
 
   const hasResults = useMemo(
     () =>
@@ -281,7 +211,18 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
           <div className="flex w-full items-center">
             <div className="relative w-15 flex h-full rounded-full shadow-inner">
               <div className="-top-[14px] z-10 -left-8 w-32 absolute">
-                <img className="drop-shadow-lg w-full" src={agroLogo} alt="Logo" loading="lazy" />
+                <img
+                  className="drop-shadow-lg w-full"
+                  src={DEFAULT_IMAGE}
+                  alt="Logo"
+                  loading="lazy"
+                  onError={(e) => {
+                    if (e.target.src !== DEFAULT_IMAGE) {
+                      console.warn(`Failed to load logo image: ${e.target.src}`);
+                      e.target.src = DEFAULT_IMAGE;
+                    }
+                  }}
+                />
               </div>
             </div>
             <input
@@ -292,15 +233,21 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setIsExpanded(true)}
+              aria-label="Search input"
             />
             {searchQuery && (
               <FaTimes
                 className="text-gray-500 cursor-pointer mr-3 hover:text-gray-700 transition-colors"
                 onClick={clearSearch}
+                aria-label="Clear search"
               />
             )}
           </div>
-          <button type="submit" className="text-purple-400 text-xl drop-shadow-lg hover:text-purple-500 transition-colors">
+          <button
+            type="submit"
+            className="text-purple-400 text-xl drop-shadow-lg hover:text-purple-500 transition-colors"
+            aria-label="Submit search"
+          >
             <FaArrowRight />
           </button>
         </motion.form>
@@ -314,11 +261,7 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
               variants={slideDown}
               className="absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-xl mx-2 z-20 p-6 max-h-[500px] overflow-y-auto border border-gray-100"
             >
-              {loading && searchQuery.trim() ? (
-                <div className="flex justify-center items-center h-24">
-                  <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : searchQuery.trim() ? (
+              {searchQuery.trim() ? (
                 <>
                   {suggestions.products?.length > 0 && (
                     <div className="mb-6">
@@ -335,11 +278,16 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
                           transition={{ duration: 0.2 }}
                         >
                           <img
-                            src={product.image?.[0] || agroLogo}
+                            src={product.image?.[0] || DEFAULT_IMAGE}
                             alt={product.name}
                             className="w-10 h-10 object-cover rounded-md"
                             loading="lazy"
-                            onError={(e) => (e.target.src = agroLogo)}
+                            onError={(e) => {
+                              if (e.target.src !== DEFAULT_IMAGE) {
+                                console.warn(`Failed to load product image: ${e.target.src}`);
+                                e.target.src = DEFAULT_IMAGE;
+                              }
+                            }}
                           />
                           <span className="text-sm text-gray-700">{product.name}</span>
                         </motion.div>
@@ -379,8 +327,10 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
                     </div>
                   )}
 
-                  {!hasResults && !loading && (
-                    <p className="text-gray-500 text-center py-4">No results found</p>
+                  {!hasResults && (
+                    <p className="text-gray-500 text-center py-4" aria-live="polite">
+                      No results found
+                    </p>
                   )}
 
                   {hasResults && (
@@ -394,6 +344,7 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
                             <button
                               className="text-xs text-red-500 hover:text-red-600 flex items-center transition-colors"
                               onClick={clearAllRecent}
+                              aria-label="Clear all recent searches"
                             >
                               <FaTrash className="mr-1" /> Clear All
                             </button>
@@ -441,6 +392,7 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
                         <button
                           className="text-xs text-red-500 hover:text-red-600 flex items-center transition-colors"
                           onClick={clearAllRecent}
+                          aria-label="Clear all recent searches"
                         >
                           <FaTrash className="mr-1" /> Clear All
                         </button>
@@ -522,11 +474,16 @@ const SearchBar = React.memo(({ placeholder = "Search for products, sellers, or 
                           transition={{ duration: 0.2 }}
                         >
                           <img
-                            src={product.image?.[0] || agroLogo}
+                            src={product.image?.[0] || DEFAULT_IMAGE}
                             alt={product.name}
                             className="w-10 h-10 object-cover rounded-md"
                             loading="lazy"
-                            onError={(e) => (e.target.src = agroLogo)}
+                            onError={(e) => {
+                              if (e.target.src !== DEFAULT_IMAGE) {
+                                console.warn(`Failed to load product image: ${e.target.src}`);
+                                e.target.src = DEFAULT_IMAGE;
+                              }
+                            }}
                           />
                           <span className="text-sm text-gray-700">{product.name}</span>
                         </motion.div>

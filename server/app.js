@@ -9,8 +9,9 @@ const sellerAuthRoutes = require('./routes/sellerRouter');
 const AdminAuthRoutes = require('./routes/adminRouter');
 
 const allowedOrigins = [
-  // 'https://starkk.shop',
- 'https://stark-sharadhkrs-projects.vercel.app/'
+  'https://starkk.shop',
+ 'https://stark-sharadhkrs-projects.vercel.app/',
+ 'http://localhost:5173'
 ];
 
 app.use(cors({

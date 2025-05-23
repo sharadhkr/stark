@@ -1,126 +1,62 @@
-import React, { useState, useEffect, useMemo, useRef, useContext, useCallback } from 'react';
+import React, { useMemo, useRef, useContext, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { FaEye } from 'react-icons/fa';
-import axios from '../useraxios'; // Custom axios instance
+import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import Cookies from 'js-cookie';
 import ProductCard from '../ProductCard';
 import { DataContext } from '../../App';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
+const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';
 
 const RecentlyViewedSection = React.memo(() => {
-  const { cache, updateCache, isDataStale } = useContext(DataContext);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { cache, updateCache } = useContext(DataContext);
+  const products = useMemo(() => {
+    const recent = cache.recentlyViewed?.data || [];
+    return recent.map((product) => ({
+      ...product,
+      image: product.image && product.image !== 'https://via.placeholder.com/150' ? product.image : DEFAULT_IMAGE,
+    }));
+  }, [cache.recentlyViewed]);
   const scrollRef = useRef(null);
-  const isMounted = useRef(true);
-  const retryCount = useRef(0);
   const debounceTimeout = useRef(null);
-  const MAX_RETRIES = 3;
-  const BASE_RETRY_DELAY = 1000; // 1 second
 
-  const products = useMemo(() => cache.recentlyViewed?.data || [], [cache.recentlyViewed]);
-
-  const delay = useCallback((ms) => new Promise((resolve) => setTimeout(resolve, ms)), []);
-
-  const fetchRecentlyViewed = useCallback(async () => {
-    if (!isMounted.current) return;
-    if (!isDataStale(cache.recentlyViewed?.timestamp) && cache.recentlyViewed?.data) {
-      return; // Skip if data is fresh (even if empty)
-    }
-    if (retryCount.current >= MAX_RETRIES) {
-      setError('Unable to load recently viewed products');
-      setLoading(false);
-      toast.error('Failed to load recently viewed products');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      let fetchedProducts = [];
-      const userToken = localStorage.getItem('token');
-
-      if (userToken) {
-        // Try authenticated endpoint
-        const response = await axios.get('/api/user/auth/recently-viewed');
-        fetchedProducts = response.data.products || [];
-      } else {
-        // Use cookie-based products for unauthenticated users
-        const cookieViews = Cookies.get('recentlyViewed')
-          ? JSON.parse(Cookies.get('recentlyViewed'))
-          : [];
-        if (cookieViews.length > 0) {
-          const response = await axios.post('/api/public/products-by-ids', {
-            productIds: cookieViews,
-          });
-          fetchedProducts = response.data.products || [];
-          fetchedProducts.sort((a, b) => cookieViews.indexOf(a._id) - cookieViews.indexOf(b._id));
+  const trackProductView = useCallback(
+    async (productId) => {
+      try {
+        const userToken = localStorage.getItem('token');
+        let updatedRecent = [...(cache.recentlyViewed?.data || [])];
+        if (userToken) {
+          await axios.post('/api/user/auth/recently-viewed', { productId });
+          updatedRecent = [productId, ...updatedRecent.filter((id) => id !== productId)].slice(0, 10);
+        } else {
+          let cookieViews = Cookies.get('recentlyViewed')
+            ? JSON.parse(Cookies.get('recentlyViewed'))
+            : [];
+          if (!cookieViews.includes(productId)) {
+            cookieViews = [productId, ...cookieViews].slice(0, 10);
+            Cookies.set('recentlyViewed', JSON.stringify(cookieViews), { expires: 7 });
+          }
+          updatedRecent = cookieViews;
+        }
+        updateCache('recentlyViewed', updatedRecent);
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error tracking product view:', error);
         }
       }
-
-      updateCache('recentlyViewed', fetchedProducts);
-      retryCount.current = 0; // Reset on success, even if empty
-      setLoading(false); // Ensure loading stops for empty response
-    } catch (error) {
-      console.error('Error fetching recently viewed products:', error);
-      const status = error.response?.status;
-      const errorMsg = status === 401 ? 'Please log in to view recently viewed products' : error.response?.data?.message || 'Failed to load recently viewed products';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      if (status !== 401) {
-        retryCount.current += 1;
-        if (retryCount.current < MAX_RETRIES) {
-          const delayMs = BASE_RETRY_DELAY * Math.pow(2, retryCount.current);
-          console.log(`Retrying fetch after ${delayMs}ms (attempt ${retryCount.current + 1})`);
-          await delay(delayMs);
-          fetchRecentlyViewed(); // Retry
-        }
-      }
-    } finally {
-      if (isMounted.current && (retryCount.current >= MAX_RETRIES || error?.includes('log in'))) {
-        setLoading(false);
-      }
-    }
-  }, [isDataStale, updateCache, delay]);
-
-  const debouncedFetchRecentlyViewed = useCallback(() => {
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
-    debounceTimeout.current = setTimeout(() => {
-      fetchRecentlyViewed();
-    }, 500); // 500ms debounce
-  }, [fetchRecentlyViewed]);
-
-  const trackProductView = useCallback(async (productId) => {
-    try {
-      const userToken = localStorage.getItem('token');
-      if (userToken) {
-        await axios.post('/api/user/auth/recently-viewed', { productId });
-      } else {
-        let cookieViews = Cookies.get('recentlyViewed')
-          ? JSON.parse(Cookies.get('recentlyViewed'))
-          : [];
-        if (!cookieViews.includes(productId)) {
-          cookieViews = [productId, ...cookieViews].slice(0, 10);
-          Cookies.set('recentlyViewed', JSON.stringify(cookieViews), { expires: 7 });
-        }
-      }
-      debouncedFetchRecentlyViewed(); // Debounced refresh
-    } catch (error) {
-      console.error('Error tracking product view:', error);
-    }
-  }, [debouncedFetchRecentlyViewed]);
+    },
+    [cache.recentlyViewed, updateCache]
+  );
 
   const addToCart = useCallback(async (productId) => {
+    const userToken = localStorage.getItem('token');
+    if (!userToken) {
+      toast.error('Please log in to add items to cart');
+      return;
+    }
     try {
-      const userToken = localStorage.getItem('token');
-      if (!userToken) {
-        toast.error('Please log in to add items to cart');
-        return;
-      }
       await axios.post('/api/user/auth/cart', {
         productId,
         quantity: 1,
@@ -132,17 +68,6 @@ const RecentlyViewedSection = React.memo(() => {
       toast.error(error.response?.data?.message || 'Failed to add to cart');
     }
   }, []);
-
-  useEffect(() => {
-    isMounted.current = true;
-    fetchRecentlyViewed();
-    return () => {
-      isMounted.current = false;
-      if (debounceTimeout.current) {
-        clearTimeout(debounceTimeout.current);
-      }
-    };
-  }, [fetchRecentlyViewed]);
 
   const scrollLeft = useCallback(() => {
     if (scrollRef.current) {
@@ -156,8 +81,8 @@ const RecentlyViewedSection = React.memo(() => {
     }
   }, []);
 
-  if (!loading && products.length === 0 && !error) {
-    return null; // Hide component if no products
+  if (products.length === 0) {
+    return null;
   }
 
   return (
@@ -170,7 +95,7 @@ const RecentlyViewedSection = React.memo(() => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
-            <FaEye className="text-blue-500" /> Checkout Again
+            <FaEye className="text-blue-500" aria-hidden="true" /> Checkout Again
           </h2>
           {products.length > 1 && (
             <div className="flex gap-2">
@@ -217,41 +142,21 @@ const RecentlyViewedSection = React.memo(() => {
             </div>
           )}
         </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center h-48">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : error ? (
-          <div className="text-center py-8">
-            <p className="text-red-500">{error}</p>
-            <button
-              onClick={() => {
-                retryCount.current = 0;
-                fetchRecentlyViewed();
-              }}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <motion.div
-            ref={scrollRef}
-            className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
-            style={{ scrollBehavior: 'smooth' }}
-          >
-            {products.map((product) => (
-              <div key={product._id} className="flex-shrink-0">
-                <ProductCard
-                  product={product}
-                  onClick={() => trackProductView(product._id)}
-                  onAddToCart={() => addToCart(product._id)}
-                />
-              </div>
-            ))}
-          </motion.div>
-        )}
+        <motion.div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
+          style={{ scrollBehavior: 'smooth' }}
+        >
+          {products.map((product) => (
+            <div key={product._id} className="flex-shrink-0">
+              <ProductCard
+                product={product}
+                onClick={() => trackProductView(product._id)}
+                onAddToCart={() => addToCart(product._id)}
+              />
+            </div>
+          ))}
+        </motion.div>
       </div>
     </motion.section>
   );

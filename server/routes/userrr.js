@@ -17,6 +17,12 @@ const { uploadSingle } = require('../config/multerConfig');
 const { uploadToCloudinary } = require('../config/cloudinaryConfig');
 const SponsoredProduct = require('../models/SponsoredProductModel');
 
+
+const Layout = require('../models/layoutModel'); // Import Layout model
+const ComboOffer = require('../models/ComboOfferModel'); // Import ComboOffer model
+const Admin = require('../models/adminModel'); // Import Admin model
+
+
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
@@ -1931,6 +1937,363 @@ router.get('/sponsored', async (req, res) => {
   } catch (error) {
     console.error('List Sponsored Products Error:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch sponsored products', error: error.message });
+  }
+});
+
+
+// Default image placeholders
+const DEFAULT_PRODUCT_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-product.jpg';
+const DEFAULT_COMBO_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-combo.jpg';
+const DEFAULT_AD_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-ad.jpg';
+const DEFAULT_BANNER_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-banner.jpg';
+const DEFAULT_CATEGORY_ICON = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-category-icon.jpg';
+
+// /api/user/auth/initial-data endpoint
+router.get('/initial-data', async (req, res) => {
+  try {
+    const { limit = 20, page = 1 } = req.query;
+    const skip = (page - 1) * limit;
+    const userId = req.user?._id;
+
+    // Fetch all data in parallel
+    const [
+      layoutResult,
+      products,
+      comboOffers,
+      categories,
+      sellers,
+      sponsoredProducts,
+      adminData,
+      trendingProducts,
+      userData,
+      trendingSearches,
+    ] = await Promise.all([
+      // Layout
+      Layout.findOne()
+        .sort({ updatedAt: -1 })
+        .lean()
+        .select('components')
+        .then((layout) => {
+          if (!layout) console.warn('No Layout document found');
+          return layout || { components: [] };
+        }),
+
+      // Products
+      Product.find()
+        .limit(Number(limit))
+        .skip(Number(skip))
+        .lean()
+        .select('_id name price images gender category')
+        .then((prods) => {
+          if (!prods.length) console.warn('No products found');
+          if (prods.some((p) => !p.images || !p.images.length)) {
+            console.warn(`Found ${prods.filter((p) => !p.images || !p.images.length).length} products with missing images`);
+          }
+          return prods;
+        }),
+
+      // Combo Offers
+      ComboOffer.find()
+        .limit(3)
+        .lean()
+        .select('_id name images products price discount isActive')
+        .populate('products', '_id name images price')
+        .then((offers) => {
+          if (!offers.length) console.warn('No combo offers found');
+          if (offers.some((o) => !o || !o.images || !o.images.length)) {
+            console.warn(`Found ${offers.filter((o) => !o || !o.images || !o.images.length).length} combo offers with missing or invalid data`);
+          }
+          return offers.filter((o) => o && o._id && o.name);
+        }),
+
+      // Categories
+      Category.find()
+        .limit(8)
+        .lean()
+        .select('_id name icon productCount')
+        .then((cats) => {
+          if (!cats.length) console.warn('No categories found');
+          if (cats.some((c) => !c.icon)) {
+            console.warn(`Found ${cats.filter((c) => !c.icon).length} categories with missing icons`);
+          }
+          return cats;
+        }),
+
+      // Sellers
+      Seller.find()
+        .limit(5)
+        .lean()
+        .select('_id name shopName')
+        .then((sells) => {
+          if (!sells.length) console.warn('No sellers found');
+          return sells;
+        }),
+
+      // Sponsored Products
+      SponsoredProduct.find()
+        .limit(5)
+        .lean()
+        .populate('productId', '_id name price images')
+        .then((sponsored) => {
+          if (!sponsored.length) {
+            console.warn('No sponsored products found, falling back to regular products');
+            return Product.find()
+              .limit(5)
+              .lean()
+              .select('_id name price images');
+          }
+          return sponsored.map((sp) => sp.productId).filter((p) => p);
+        }),
+
+      // Ads from Admin
+      Admin.findOne()
+        .lean()
+        .select('singleadd doubleadd tripleadd')
+        .then((admin) => {
+          if (!admin) console.warn('No admin document found');
+          return {
+            singleadd: admin?.singleadd || { images: [] },
+            doubleadd: admin?.doubleadd || { images: [] },
+            tripleadd: admin?.tripleadd || { images: [] },
+          };
+        }),
+
+      // Trending Products
+      Product.find()
+        .sort({ viewCount: -1 })
+        .limit(5)
+        .lean()
+        .select('_id name price images')
+        .then((trending) => {
+          if (!trending.length) console.warn('No trending products found');
+          if (trending.some((p) => !p.images || !p.images.length)) {
+            console.warn(`Found ${trending.filter((p) => !p.images || !p.images.length).length} trending products with missing images`);
+          }
+          return trending;
+        }),
+
+      // User Data
+      userId
+        ? User.findById(userId)
+            .lean()
+            .select('recentSearches recentlyViewed')
+            .then((user) => {
+              if (!user) console.warn(`No user found for ID: ${userId}`);
+              return {
+                recentSearches: user?.recentSearches || [],
+                recentlyViewed: user?.recentlyViewed || [],
+              };
+            })
+        : Promise.resolve({ recentSearches: [], recentlyViewed: [] }),
+
+      // Trending Searches
+      User.aggregate([
+        { $unwind: '$recentSearches' },
+        { $match: { recentSearches: { $ne: '' } } },
+        { $group: { _id: '$recentSearches', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 5 },
+        { $project: { _id: 0, query: '$_id' } }, // Fixed typo: '$_id' instead of '$id'
+      ])
+        .then((searches) => ({
+          trendingSearches: searches.map((s) => s.query),
+          topSellers: Seller.find().sort({ totalOrders: -1 }).limit(3).lean().select('_id name shopName'),
+          topCategories: Category.find().sort({ productCount: -1 }).limit(3).lean().select('_id name icon'),
+          topProducts: Product.find().sort({ viewCount: -1 }).limit(3).lean().select('_id name images'),
+        }))
+        .then(async (trending) => {
+          const result = {
+            trendingSearches: trending.trendingSearches,
+            topSellers: await trending.topSellers,
+            topCategories: await trending.topCategories,
+            topProducts: await trending.topProducts,
+          };
+          if (!result.trendingSearches.length) console.warn('No trending searches found');
+          return result;
+        }),
+    ]);
+
+    // Sanitize images with logging
+    const sanitizeImage = (image, defaultImage, context = 'unknown') => {
+      if (!image || !image.trim() || image.includes('placeholder')) {
+        console.warn(`Invalid image in ${context}: ${image || 'null'}, using default: ${defaultImage}`);
+        return defaultImage;
+      }
+      console.log(`Valid image in ${context}: ${image}`);
+      return image;
+    };
+
+    // Get first valid image from array
+    const getFirstValidImage = (images, defaultImage, context) => {
+      if (!images || !Array.isArray(images)) {
+        console.warn(`Invalid images array in ${context}: ${images}, using default: ${defaultImage}`);
+        return defaultImage;
+      }
+      const validImage = images.find(
+        (img) => (typeof img === 'string' && img && !img.includes('placeholder')) ||
+                 (img?.url && !img.disabled && !img.url.includes('placeholder'))
+      );
+      return sanitizeImage(validImage?.url || validImage, defaultImage, context);
+    };
+
+    const sanitizedProducts = products.map((product) => ({
+      ...product,
+      image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `product ${product._id}`),
+    }));
+
+    const sanitizedComboOffers = comboOffers.map((offer) => {
+      if (!offer || !offer._id || !offer.name) {
+        console.warn(`Skipping invalid combo offer: ${JSON.stringify(offer)}`);
+        return null;
+      }
+      return {
+        ...offer,
+        image: getFirstValidImage(offer.images, DEFAULT_COMBO_IMAGE, `comboOffer ${offer._id}`),
+        products: (offer.products || []).map((p) => ({
+          ...p,
+          image: getFirstValidImage(p.images, DEFAULT_PRODUCT_IMAGE, `comboProduct ${p._id}`),
+        })),
+      };
+    }).filter((offer) => offer);
+
+    const sanitizedSponsoredProducts = sponsoredProducts.map((product) => ({
+      ...product,
+      image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `sponsoredProduct ${product._id}`),
+    }));
+
+    const sanitizedTrendingProducts = trendingProducts.map((product) => ({
+      ...product,
+      image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `trendingProduct ${product._id}`),
+    }));
+
+    const sanitizedCategories = categories.map((category) => ({
+      ...category,
+      icon: sanitizeImage(category.icon, DEFAULT_CATEGORY_ICON, `category ${category._id}`),
+    }));
+
+    // Structure ads with detailed logging
+    const sanitizedAds = [
+      {
+        type: 'Single Ad',
+        images: adminData.singleadd.images
+          .filter((img) => !img.disabled && img.url)
+          .map((img) => {
+            const imageData = {
+              _id: img._id || new mongoose.Types.ObjectId().toString(),
+              url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `singleAd ${img._id || 'new'}`),
+              disabled: img.disabled,
+            };
+            console.log(`Single Ad image: ${JSON.stringify(imageData)}`);
+            return imageData;
+          }),
+      },
+      {
+        type: 'Double Ad',
+        images: adminData.doubleadd.images
+          .filter((img) => !img.disabled && img.url)
+          .map((img) => {
+            const imageData = {
+              _id: img._id || new mongoose.Types.ObjectId().toString(),
+              url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `doubleAd ${img._id || 'new'}`),
+              disabled: img.disabled,
+            };
+            console.log(`Double Ad image: ${JSON.stringify(imageData)}`);
+            return imageData;
+          }),
+      },
+      {
+        type: 'Triple Ad',
+        images: adminData.tripleadd.images
+          .filter((img) => !img.disabled && img.url)
+          .map((img) => {
+            const imageData = {
+              _id: img._id || new mongoose.Types.ObjectId().toString(),
+              url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `tripleAd ${img._id || 'new'}`),
+              disabled: img.disabled,
+            };
+            console.log(`Triple Ad image: ${JSON.stringify(imageData)}`);
+            return imageData;
+          }),
+      },
+    ];
+
+    // Use first non-disabled image from singleadd as banner
+    const banner = {
+      url: adminData.singleadd.images.find((img) => !img.disabled && img.url)?.url
+        ? sanitizeImage(
+            adminData.singleadd.images.find((img) => !img.disabled && img.url).url,
+            DEFAULT_BANNER_IMAGE,
+            'banner'
+          )
+        : DEFAULT_BANNER_IMAGE,
+    };
+
+    const sanitizedSearchSuggestions = {
+      recentSearches: userData.recentSearches.slice(0, 5),
+      categories: await Category.find().limit(3).lean().select('_id name icon').then((cats) =>
+        cats.map((c) => ({
+          ...c,
+          icon: sanitizeImage(c.icon, DEFAULT_CATEGORY_ICON, `searchCategory ${c._id}`),
+        }))
+      ),
+      sellers: await Seller.find().limit(3).lean().select('_id name shopName'),
+      products: await Product.find()
+        .limit(3)
+        .lean()
+        .select('_id name images')
+        .then((prods) =>
+          prods.map((p) => ({
+            ...p,
+            image: getFirstValidImage(p.images, DEFAULT_PRODUCT_IMAGE, `searchSuggestion ${p._id}`),
+          }))
+        ),
+    };
+
+    const sanitizedTrendingSearches = {
+      trendingSearches: trendingSearches.trendingSearches,
+      topSellers: trendingSearches.topSellers,
+      topCategories: trendingSearches.topCategories.map((category) => ({
+        ...category,
+        icon: sanitizeImage(category.icon, DEFAULT_CATEGORY_ICON, `topCategory ${category._id}`),
+      })),
+      topProducts: trendingSearches.topProducts.map((product) => ({
+        ...product,
+        image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `topProduct ${product._id}`),
+      })),
+    };
+
+    // Structure response
+    const response = {
+      layout: { components: layoutResult.components || [] },
+      products: sanitizedProducts,
+      comboOffers: sanitizedComboOffers,
+      categories: sanitizedCategories,
+      sellers: sellers || [],
+      sponsoredProducts: sanitizedSponsoredProducts,
+      ads: sanitizedAds,
+      trendingProducts: sanitizedTrendingProducts,
+      banner,
+      searchSuggestions: sanitizedSearchSuggestions,
+      trendingSearches: sanitizedTrendingSearches,
+      recentlyViewed: userData.recentlyViewed.slice(0, 10),
+    };
+
+    // Log response summary
+    console.log('API response summary:', {
+      products: response.products.length,
+      comboOffers: response.comboOffers.length,
+      sponsoredProducts: response.sponsoredProducts.length,
+      categories: response.categories.length,
+      sellers: response.sellers.length,
+      ads: response.ads.map((ad) => ({ type: ad.type, images: ad.images.length })),
+      banner: response.banner.url,
+      recentlyViewed: response.recentlyViewed.length,
+    });
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching initial data:', error);
+    res.status(500).json({ error: 'Failed to fetch initial data', details: error.message });
   }
 });
 

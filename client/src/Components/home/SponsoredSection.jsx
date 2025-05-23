@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
+import React, { useMemo, useRef, useContext, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { FaStar } from 'react-icons/fa';
 import axios from '../useraxios';
@@ -7,41 +7,21 @@ import ProductCard from '../ProductCard';
 import { DataContext } from '../../App';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
+const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';
 
 const SponsoredSection = React.memo(() => {
-  const { cache, updateCache, isDataStale } = useContext(DataContext);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { cache } = useContext(DataContext);
   const scrollRef = useRef(null);
+  const products = useMemo(() => {
+    const sponsored = cache.sponsoredProducts?.data || [];
+    return sponsored.map((product) => ({
+      ...product,
+      image: product.image && product.image !== 'https://via.placeholder.com/150' ? product.image : DEFAULT_IMAGE,
+    }));
+  }, [cache.sponsoredProducts]);
+  const loading = cache.sponsoredProducts?.isLoading || false;
 
-  const products = useMemo(() => cache.sponsoredProducts?.data || [], [cache.sponsoredProducts]);
-
-  const fetchSponsoredProducts = async () => {
-    if (!isDataStale(cache.sponsoredProducts?.timestamp) && products.length > 0) {
-      return; // Use cached data if fresh
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.get('/api/user/auth/sponsored');
-      const fetchedProducts = response.data.products || [];
-      updateCache('sponsoredProducts', fetchedProducts);
-    } catch (error) {
-      console.error('Error fetching sponsored products:', error);
-      const errorMsg = error.response?.data?.message || 'Failed to load sponsored products';
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSponsoredProducts();
-  }, [cache.sponsoredProducts?.timestamp, isDataStale, updateCache]);
-
-  const addToCart = async (productId) => {
+  const addToCart = useCallback(async (productId) => {
     try {
       const userToken = localStorage.getItem('token');
       if (!userToken) {
@@ -57,21 +37,21 @@ const SponsoredSection = React.memo(() => {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to add to cart');
     }
-  };
+  }, []);
 
-  const scrollLeft = () => {
+  const scrollLeft = useCallback(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: -224, behavior: 'smooth' }); // Adjust based on card width
+      scrollRef.current.scrollBy({ left: -224, behavior: 'smooth' });
     }
-  };
+  }, []);
 
-  const scrollRight = () => {
+  const scrollRight = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollBy({ left: 224, behavior: 'smooth' });
     }
-  };
+  }, []);
 
-  if (!loading && products.length === 0 && !error) {
+  if (!loading && products.length === 0) {
     return (
       <motion.section
         initial="hidden"
@@ -80,7 +60,9 @@ const SponsoredSection = React.memo(() => {
         className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50"
       >
         <div className="max-w-7xl mx-auto text-center">
-          <p className="text-gray-500">No sponsored products available</p>
+          <p className="text-gray-500" aria-live="polite">
+            No sponsored products available
+          </p>
         </div>
       </motion.section>
     );
@@ -92,11 +74,13 @@ const SponsoredSection = React.memo(() => {
       animate="visible"
       variants={fadeIn}
       className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50"
+      role="region"
+      aria-label="Sponsored Products"
     >
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
-            <FaStar className="text-yellow-500" /> Top Sponsored Products
+            <FaStar className="text-yellow-500" aria-hidden="true" /> Top Sponsored Products
           </h2>
           {products.length > 1 && (
             <div className="flex gap-2">
@@ -136,7 +120,7 @@ const SponsoredSection = React.memo(() => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M9 5l-7 7 7-7"
+                    d="M9 5l7 7-7 7"
                   />
                 </svg>
               </button>
@@ -147,16 +131,6 @@ const SponsoredSection = React.memo(() => {
         {loading ? (
           <div className="flex justify-center items-center h-48">
             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : error ? (
-          <div className="text-center py-8">
-            <p className="text-red-500">{error}</p>
-            <button
-              onClick={fetchSponsoredProducts}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-            >
-              Retry
-            </button>
           </div>
         ) : (
           <motion.div

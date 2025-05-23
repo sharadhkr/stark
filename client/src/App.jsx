@@ -6,7 +6,6 @@ import Bottom from './Components/botttommm';
 import 'leaflet/dist/leaflet.css';
 import axios from './useraxios';
 import lzString from 'lz-string';
-import ComboPage from './pages/ComboPage.jsx';
 
 // Lazy-loaded page components
 const Home = lazy(() => import('./pages/Home.jsx'));
@@ -27,14 +26,21 @@ const OrderDetails = lazy(() => import('./pages/OrderDetails.jsx'));
 const SellerProducts = lazy(() => import('./pages/SellerProducts.jsx'));
 const SellerOrders = lazy(() => import('./pages/SellerOrders.jsx'));
 const SearchResults = lazy(() => import('./pages/SearchResults.jsx'));
-const ComboOfferPage = lazy(() => import('./pages/ComboPage.jsx'));
+const ComboPage = lazy(() => import('./pages/ComboPage.jsx'));
 
 // Default images
 const FALLBACK_IMAGE = 'https://via.placeholder.com/150?text=No+Image';
-const DEFAULT_IMAGE = 'http://your-server.com/images/default-product.jpg'; // Replace with your actual default image URL
+const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg'; // Replace with your actual placeholder
 
 // Data Context
 export const DataContext = createContext();
+
+// Simple URL validation
+const isValidUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  const urlPattern = /^(https?:\/\/[^\s$.?#].[^\s]*)$/i;
+  return urlPattern.test(url) && !url.includes('placeholder.com');
+};
 
 const DataProvider = ({ children }) => {
   const [cache, setCache] = useState({
@@ -62,41 +68,50 @@ const DataProvider = ({ children }) => {
   const updateCache = useCallback((key, data) => {
     setCache((prev) => {
       let validatedData = data;
-      if (key === 'products') {
+      let invalidImageCount = 0;
+      if (key === 'products' || key === 'sponsoredProducts') {
         validatedData = data.map((product) => {
-          const image = product.image && typeof product.image === 'string' && product.image.trim() !== '' && !product.image.includes('placeholder.com')
-            ? product.image
-            : DEFAULT_IMAGE;
-          if (!product.image || product.image.includes('placeholder.com')) {
-            console.warn(`Product ${product._id} has invalid or placeholder image, using default:`, product.image);
+          const image = product.image && isValidUrl(product.image) ? product.image : DEFAULT_IMAGE;
+          if (!product.image || !isValidUrl(product.image)) {
+            invalidImageCount++;
           }
           return { ...product, image };
         });
-        // Only cache products with valid images
+        if (invalidImageCount > 0 && process.env.NODE_ENV === 'development') {
+          console.warn(`Found ${invalidImageCount} ${key} with invalid or placeholder images, using default image.`);
+        }
         const validProducts = validatedData.filter(p => p.image !== DEFAULT_IMAGE);
         if (validProducts.length < validatedData.length) {
-          console.warn(`Skipping caching of ${validatedData.length - validProducts.length} products with invalid images`);
+          console.warn(`Skipping caching of ${validatedData.length - validProducts.length} ${key} with invalid images`);
           validatedData = validProducts.length > 0 ? validProducts : validatedData;
         }
-        console.log(`Updating cache for ${key}:`, validatedData.map(p => ({ _id: p._id, image: p.image })));
+      } else if (key === 'comboOffers') {
+        validatedData = data.map((offer) => {
+          const image = offer.image && isValidUrl(offer.image) ? offer.image : DEFAULT_IMAGE;
+          if (!offer.image || !isValidUrl(offer.image)) {
+            invalidImageCount++;
+          }
+          return { ...offer, image };
+        });
+        if (invalidImageCount > 0 && process.env.NODE_ENV === 'development') {
+          console.warn(`Found ${invalidImageCount} combo offers with invalid or placeholder images, using default image.`);
+        }
       }
       const newCache = { ...prev, [key]: { data: validatedData, timestamp: Date.now() } };
       try {
-        if (key === 'products' || key === 'layout') {
-          const slimData = key === 'products'
-            ? validatedData.slice(0, 20).map(({ _id, name, price, image, gender }) => {
-              const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
-                ? image
-                : DEFAULT_IMAGE;
-              if (!image || image.includes('placeholder.com')) {
-                console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
-              }
-              return { _id, name, price, image: validatedImage, gender };
-            })
+        if (key === 'products' || key === 'layout' || key === 'comboOffers' || key === 'sponsoredProducts') {
+          const slimData = key === 'products' || key === 'sponsoredProducts'
+            ? validatedData.slice(0, 20).map(({ _id, name, price, image, gender }) => ({
+                _id,
+                name,
+                price,
+                image: image && isValidUrl(image) ? image : DEFAULT_IMAGE,
+                gender,
+              }))
             : validatedData;
-          if (key === 'products' && slimData.every(p => p.image === DEFAULT_IMAGE)) {
-            console.warn('All slimmed products have default images, skipping localStorage save');
-            return newCache; // Skip saving to localStorage
+          if ((key === 'products' || key === 'sponsoredProducts') && slimData.every(p => p.image === DEFAULT_IMAGE)) {
+            console.warn(`All slimmed ${key} have default images, skipping localStorage save`);
+            return newCache;
           }
           const compressed = lzString.compressToUTF16(JSON.stringify({ data: slimData, timestamp: newCache[key].timestamp }));
           localStorage.setItem(`cache_${key}`, compressed);
@@ -114,24 +129,22 @@ const DataProvider = ({ children }) => {
       try {
         const decompressed = lzString.decompressFromUTF16(stored);
         const parsed = JSON.parse(decompressed);
-        if (key === 'products') {
-          const hasInvalidImages = parsed.data.some(p => !p.image || p.image.includes('placeholder.com') || p.image === FALLBACK_IMAGE);
+        if (key === 'products' || key === 'sponsoredProducts' || key === 'comboOffers') {
+          const hasInvalidImages = parsed.data.some(p => !p.image || !isValidUrl(p.image));
           if (hasInvalidImages) {
-            console.warn(`Cached ${key} contains invalid or placeholder images, triggering refetch`);
+            console.warn(`Cached ${key} contains invalid images, triggering refetch`);
             localStorage.removeItem(`cache_${key}`);
-            return null; // Force refetch
+            return null;
           }
-          parsed.data = parsed.data.map((product) => {
-            const image = product.image && typeof product.image === 'string' && product.image.trim() !== '' && !product.image.includes('placeholder.com')
-              ? product.image
-              : DEFAULT_IMAGE;
-            if (!product.image || product.image.includes('placeholder.com')) {
-              console.warn(`Loaded product ${product._id} with invalid or placeholder image, using default:`, product.image);
+          parsed.data = parsed.data.map((item) => {
+            const image = item.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE;
+            if (!item.image || !isValidUrl(item.image)) {
+              console.warn(`Loaded ${key} item with invalid image, using default:`, item.image);
             }
-            return { ...product, image };
+            return { ...item, image };
           });
         }
-        console.log(`Loaded ${key} from storage:`, parsed.data.map(p => key === 'products' ? { _id: p._id, image: p.image } : p));
+        console.log(`Loaded ${key} from storage:`, parsed.data.map(p => (key === 'products' || key === 'sponsoredProducts') ? { _id: p._id, image: p.image } : p));
         return parsed;
       } catch (error) {
         console.warn(`Failed to load ${key} from localStorage:`, error);
@@ -141,16 +154,6 @@ const DataProvider = ({ children }) => {
     return null;
   }, []);
 
-  useEffect(() => {
-    const keys = Object.keys(localStorage).filter((key) => key.startsWith('cache_'));
-    keys.forEach((key) => {
-      const stored = loadFromStorage(key.replace('cache_', ''));
-      if (!stored || isDataStale(stored.timestamp)) {
-        localStorage.removeItem(key);
-      }
-    });
-  }, [loadFromStorage, isDataStale]);
-
   const isFetchingRef = useRef(false);
 
   const fetchInitialData = useCallback(async () => {
@@ -158,22 +161,12 @@ const DataProvider = ({ children }) => {
     isFetchingRef.current = true;
 
     const token = localStorage.getItem('token');
-    const criticalEndpoints = [
-      { key: 'layout', url: '/api/admin/auth/layout', params: {}, field: 'components', requiresAuth: false },
-      { key: 'products', url: '/api/user/auth/products', params: { limit: 20, page: 1 }, field: 'products', requiresAuth: false },
-    ];
-    const secondaryEndpoints = [
-      { key: 'wishlist', url: '/api/user/auth/wishlist', params: {}, field: 'wishlist', requiresAuth: true },
-      { key: 'cart', url: '/api/user/auth/cart', params: {}, field: 'cart', requiresAuth: true },
-      { key: 'sellers', url: '/api/user/auth/sellers', params: { limit: 5 }, field: 'sellers', requiresAuth: false },
-      { key: 'categories', url: '/api/categories', params: { limit: 8 }, field: 'categories', requiresAuth: false },
-      { key: 'comboOffers', url: '/api/admin/auth/combo-offers/active', params: { limit: 3 }, field: 'comboOffers', requiresAuth: false },
-      { key: 'sponsoredProducts', url: '/api/user/auth/sponsored', params: { limit: 5 }, field: 'products', requiresAuth: false },
-      { key: 'ads', url: '/api/admin/auth/ads', params: {}, field: 'ads', requiresAuth: false },
-    ];
+    const params = { limit: 20, page: 1 };
 
+    // Load cached data
     const cacheUpdates = {};
-    [...criticalEndpoints, ...secondaryEndpoints].forEach(({ key }) => {
+    const keys = ['layout', 'products', 'comboOffers', 'categories', 'sellers', 'sponsoredProducts', 'ads'];
+    keys.forEach((key) => {
       const stored = loadFromStorage(key);
       if (stored && !isDataStale(stored.timestamp)) {
         cacheUpdates[key] = { data: stored.data, timestamp: stored.timestamp };
@@ -184,106 +177,62 @@ const DataProvider = ({ children }) => {
       setCache((prev) => ({ ...prev, ...cacheUpdates }));
     }
 
-    const fetchEndpoints = async (endpoints) => {
-      const promises = endpoints
-        .filter(({ key, requiresAuth }) => {
-          if (requiresAuth && !token) {
-            cacheUpdates[key] = { data: [], timestamp: Date.now() };
-            return false;
-          }
-          return !cache[key].data.length || isDataStale(cache[key].timestamp);
-        })
-        .map(({ url, params, field, key }) =>
-          axios.get(url, { params })
-            .then((res) => {
-              let data = res.data[field] || res.data[field] || [];
-              if (key === 'products') {
-                console.log(`Raw API response for ${key} (page=${params.page}, limit=${params.limit}):`, res.data[field]);
-                data = data.map((product) => {
-                  const image = product.image && typeof product.image === 'string' && product.image.trim() !== '' && !product.image.includes('placeholder.com')
-                    ? product.image
-                    : DEFAULT_IMAGE;
-                  if (!product.image || product.image.includes('placeholder.com')) {
-                    console.warn(`Fetched product ${product._id} with invalid or placeholder image, using default:`, product.image);
-                  }
-                  return { ...product, image };
-                });
-              }
-              console.log(`Processed ${key}:`, data.map(p => key === 'products' ? { _id: p._id, image: p.image } : p));
-              return { data, error: null };
-            })
-            .catch((err) => {
-              console.error(`Error fetching ${key}:`, err);
-              return { data: [], error: err };
-            })
-        );
-
-      const results = await Promise.all(promises);
-      let resultIndex = 0;
-
-      endpoints.forEach(({ key, field, requiresAuth }) => {
-        if (requiresAuth && !token) return;
-        if (!cache[key].data.length || isDataStale(cache[key].timestamp)) {
-          const { data, error } = results[resultIndex];
-          if (!error) {
-            if (key === 'wishlist') {
-              const wishlistIds = Array.isArray(data) ? data.map((item) => item._id?.toString() || item.productId?.toString()) : [];
-              cacheUpdates[key] = { data: wishlistIds, timestamp: Date.now() };
-            } else if (key === 'cart') {
-              const cartIds = data?.items ? data.items.map((item) => item.product?._id?.toString() || item.productId?.toString()) : [];
-              cacheUpdates[key] = { data: cartIds, timestamp: Date.now() };
-            } else {
-              cacheUpdates[key] = { data, timestamp: Date.now() };
-            }
-          } else if (requiresAuth && error.response?.status === 401) {
-            cacheUpdates[key] = { data: [], timestamp: Date.now() };
-          }
-          resultIndex++;
-        }
-      });
-    };
-
     try {
-      await fetchEndpoints(criticalEndpoints);
-      if (Object.keys(cacheUpdates).length > 0) {
-        setCache((prev) => ({ ...prev, ...cacheUpdates }));
-        Object.entries(cacheUpdates).forEach(([key, value]) => {
-          if (key === 'products' || key === 'layout') {
-            try {
-              const slimData = key === 'products'
-                ? value.data.slice(0, 20).map(({ _id, name, price, image, gender }) => {
-                  const validatedImage = image && typeof image === 'string' && image.trim() !== '' && !image.includes('placeholder.com')
-                    ? image
-                    : DEFAULT_IMAGE;
-                  if (!image || image.includes('placeholder.com')) {
-                    console.warn(`Slimming product ${_id} with invalid or placeholder image, using default:`, image);
-                  }
-                  return { _id, name, price, image: validatedImage, gender };
-                })
-                : value.data;
-              if (key === 'products' && slimData.every(p => p.image === DEFAULT_IMAGE)) {
-                console.warn('All slimmed products have default images, skipping localStorage save');
-                return;
-              }
-              const compressed = lzString.compressToUTF16(JSON.stringify({ data: slimData, timestamp: value.timestamp }));
-              localStorage.setItem(`cache_${key}`, compressed);
-            } catch (error) {
-              console.warn(`Failed to save ${key} to localStorage:`, error);
-            }
-          }
-        });
+      // Fetch all data from single endpoint
+      const response = await axios.get('/api/user/auth/initial-data', { params });
+      const {
+        layout,
+        products,
+        comboOffers,
+        categories,
+        sellers,
+        sponsoredProducts,
+        ads,
+      } = response.data;
+
+      console.log('Raw API response:', { layout, products, comboOffers, categories, sellers, sponsoredProducts, ads });
+
+      // Update cache for each data type
+      updateCache('layout', layout || []);
+      updateCache('products', products || []);
+      updateCache('comboOffers', comboOffers || []);
+      updateCache('categories', categories || []);
+      updateCache('sellers', sellers || []);
+      updateCache('sponsoredProducts', sponsoredProducts || []);
+      updateCache('ads', ads || []);
+
+      // Fetch auth-dependent data (wishlist, cart)
+      if (token) {
+        const [wishlistRes, cartRes] = await Promise.all([
+          axios.get('/api/user/auth/wishlist').catch(err => ({ data: { wishlist: [] }, error: err })),
+          axios.get('/api/user/auth/cart').catch(err => ({ data: { items: [] }, error: err })),
+        ]);
+
+        if (!wishlistRes.error) {
+          const wishlistIds = Array.isArray(wishlistRes.data.wishlist)
+            ? wishlistRes.data.wishlist.map(item => item._id?.toString() || item.productId?.toString())
+            : [];
+          updateCache('wishlist', wishlistIds);
+        }
+        if (!cartRes.error) {
+          const cartIds = cartRes.data.items
+            ? cartRes.data.items.map(item => item.product?._id?.toString() || item.productId?.toString())
+            : [];
+          updateCache('cart', cartIds);
+        }
       }
-      fetchEndpoints(secondaryEndpoints); // Fetch secondary in background
+    } catch (error) {
+      console.error('Failed to fetch initial data:', error);
     } finally {
       isFetchingRef.current = false;
     }
-  }, [loadFromStorage, isDataStale]);
+  }, [loadFromStorage, isDataStale, updateCache]);
 
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache]);
+  const value = useMemo(() => ({ cache, updateCache, isDataStale }), [cache, updateCache, isDataStale]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
@@ -335,7 +284,7 @@ const userRoutes = [
   { path: '/seller/orders', end: true },
   { path: '/order/:orderId', end: false },
   { path: '/search', end: true },
-  { path: '/combo/:id', end: false },
+  { path: '/combo/:comboId', end: false },
 ];
 
 const Layout = React.memo(({ children }) => {
@@ -381,8 +330,7 @@ const routes = [
   { path: '/seller/dashboard', element: <SellerDashboard />, layout: false },
   { path: '/admin/login', element: <AdminAuth />, layout: false },
   { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
-  { path: '/combo/:comboId', element: <ComboPage />, layout: false },
-  // { path: '/combo/:id', element: <ComboOfferPage />, layout: true },
+  { path: '/combo/:comboId', element: <ComboPage />, layout: true },
 ];
 
 function App() {

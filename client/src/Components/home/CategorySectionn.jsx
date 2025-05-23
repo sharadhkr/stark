@@ -1,58 +1,23 @@
-import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
+import React, { useMemo, useRef, useContext } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import axios from '../useraxios';
-import toast from 'react-hot-toast';
 import ProductCard from '../ProductCard';
 import { DataContext } from '../../App';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
+const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';
 
 const CategorySectionn = React.memo(({ category }) => {
-  const { cache, updateCache, isDataStale } = useContext(DataContext);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { cache } = useContext(DataContext);
   const scrollRef = useRef(null);
-  const hasFetched = useRef(false);
-
   const cacheKey = `category_${category?._id || 'unknown'}`;
-  const products = useMemo(() => cache[cacheKey]?.data || [], [cache, cacheKey]);
-
-  const fetchProducts = async () => {
-    if (!category?._id) {
-      setError('Invalid category ID');
-      setLoading(false);
-      return;
-    }
-    if (cache[cacheKey]?.data?.length > 0 && !isDataStale(cache[cacheKey]?.timestamp)) {
-      console.log(`Using cached data for ${cacheKey}`);
-      return; // Use cached data if fresh
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      console.log(`Fetching products for category ${category._id}`);
-      const response = await axios.get(`/api/user/auth/category/${category._id}`);
-      const fetchedProducts = response.data.products || [];
-      updateCache(cacheKey, fetchedProducts);
-      hasFetched.current = true;
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      const errorMsg = error.response?.data?.message || 'Failed to load products';
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    console.log('CategorySectionn rendered, category ID:', category?._id);
-    if (category?._id && !hasFetched.current) {
-      fetchProducts();
-    }
-  }, [category?._id]); // Only depend on category._id
+  const products = useMemo(() => {
+    const categoryProducts = cache[cacheKey]?.data || [];
+    return categoryProducts.map((product) => ({
+      ...product,
+      image: product.image && product.image !== 'https://via.placeholder.com/150' ? product.image : DEFAULT_IMAGE,
+    }));
+  }, [cache, cacheKey]);
 
   const scrollLeft = () => {
     if (scrollRef.current) {
@@ -66,7 +31,7 @@ const CategorySectionn = React.memo(({ category }) => {
     }
   };
 
-  if (!loading && products.length === 0 && !error && category?._id) {
+  if (products.length === 0 && category?._id) {
     return (
       <motion.div
         initial="hidden"
@@ -75,7 +40,9 @@ const CategorySectionn = React.memo(({ category }) => {
         className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50"
       >
         <div className="max-w-7xl mx-auto text-center">
-          <p className="text-gray-500">No products found in this category</p>
+          <p className="text-gray-500" aria-live="polite">
+            No products found in this category
+          </p>
         </div>
       </motion.div>
     );
@@ -115,7 +82,9 @@ const CategorySectionn = React.memo(({ category }) => {
                   </svg>
                 </button>
                 <button
-                  onClick={scrollRight}
+                 
+
+System: onClick={scrollRight}
                   className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
                   aria-label="Scroll right"
                 >
@@ -139,7 +108,7 @@ const CategorySectionn = React.memo(({ category }) => {
             <Link
               to={`/category/${category?.name}`}
               className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors duration-200"
-              aria-label="View All Products"
+              aria-label={`View all products in ${category?.name}`}
             >
               <svg
                 className="w-5 h-5 text-gray-600"
@@ -158,34 +127,17 @@ const CategorySectionn = React.memo(({ category }) => {
             </Link>
           </div>
         </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center h-48">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : error ? (
-          <div className="text-center py-8">
-            <p className="text-red-500">{error}</p>
-            <button
-              onClick={fetchProducts}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <motion.div
-            ref={scrollRef}
-            className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
-            style={{ scrollBehavior: 'smooth' }}
-          >
-            {products.map((product) => (
-              <div key={product._id} className="flex-shrink-0">
-                <ProductCard product={product} />
-              </div>
-            ))}
-          </motion.div>
-        )}
+        <motion.div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
+          style={{ scrollBehavior: 'smooth' }}
+        >
+          {products.map((product) => (
+            <div key={product._id} className="flex-shrink-0">
+              <ProductCard product={product} />
+            </div>
+          ))}
+        </motion.div>
       </div>
     </motion.div>
   );

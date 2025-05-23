@@ -1,21 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useSwipeable } from 'react-swipeable';
+import { DataContext } from '../../App';
 
-// Memoize to prevent unnecessary re-renders
-const DoubleAdd = React.memo(({ images = [] }) => {
+const DEFAULT_IMAGE = 'https://your-server.com/generic-ad-placeholder.jpg';
+
+const DoubleAdd = React.memo(() => {
+  const { cache } = useContext(DataContext);
+  const ads = cache.ads?.data || [];
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Normalize images
   const normalizedImages = useMemo(() => {
-    return images
-      .filter((img) => img && img.url && !img.disabled)
-      .map((img) => ({
-        url: img.url.replace(/^http:/, 'https:'),
-        alt: `Double Ad ${img._id || img.url.split('/').pop()}`,
+    return ads
+      .filter((ad) => ad && ad.url && !ad.disabled)
+      .map((ad) => ({
+        url: ad.url.replace(/^http:/, 'https:'),
+        alt: `Ad ${ad._id || ad.url.split('/').pop()}`,
       }));
-  }, [images]);
+  }, [ads]);
 
-  // Group images into pairs
   const pairs = useMemo(() => {
     if (normalizedImages.length === 0) return [];
     const groups = [];
@@ -27,10 +29,8 @@ const DoubleAdd = React.memo(({ images = [] }) => {
 
   const displayIndex = currentIndex + 1;
 
-  // Automatic sliding
   useEffect(() => {
     if (normalizedImages.length <= 2) return;
-
     const timer = setInterval(() => {
       setCurrentIndex((prev) => {
         if (prev === pairs.length - 2) {
@@ -40,11 +40,9 @@ const DoubleAdd = React.memo(({ images = [] }) => {
         return prev + 1;
       });
     }, 6000);
-
     return () => clearInterval(timer);
   }, [pairs.length, normalizedImages.length]);
 
-  // Reset index
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(pairs.length - 2), 0);
@@ -53,7 +51,6 @@ const DoubleAdd = React.memo(({ images = [] }) => {
     }
   }, [currentIndex, pairs.length]);
 
-  // Swipe handlers
   const handlers = useSwipeable({
     onSwipedLeft: () => {
       setCurrentIndex((prev) => {
@@ -78,16 +75,16 @@ const DoubleAdd = React.memo(({ images = [] }) => {
     preventDefaultTouchmoveEvent: true,
   });
 
-  // Jump to specific pair
   const goToPair = (index) => {
     setCurrentIndex(index + 1);
   };
 
-  // Handle no images
   if (normalizedImages.length === 0) {
     return (
       <div className="w-full px-2 mb-5 text-center">
-        <p className="text-muted-foreground">No double ad images available</p>
+        <p className="text-gray-500" aria-live="polite">
+          No ad images available
+        </p>
       </div>
     );
   }
@@ -118,11 +115,17 @@ const DoubleAdd = React.memo(({ images = [] }) => {
                     alt={image.alt}
                     loading="lazy"
                     fetchpriority={pairIndex === currentIndex + 1 ? 'high' : 'auto'}
+                    onError={(e) => {
+                      if (e.target.src !== DEFAULT_IMAGE) {
+                        console.warn(`Failed to load ad image: ${e.target.src}`);
+                        e.target.src = DEFAULT_IMAGE;
+                      }
+                    }}
                   />
                 </div>
               ))}
               {pair.length < 2 && (
-                <div className="w-1/2 h-full flex items-center justify-center bg-background rounded-lg" />
+                <div className="w-1/2 h-full flex items-center justify-center bg-gray-100 rounded-lg" />
               )}
             </div>
           ))}
@@ -137,9 +140,9 @@ const DoubleAdd = React.memo(({ images = [] }) => {
               className={`w-2 h-2 rounded-full transition-all duration-300 shadow-sm hover:scale-125 ${
                 displayIndex - 1 === index
                   ? 'bg-purple-400 scale-125'
-                  : 'bg-gray-300 hover:bg-muted-foreground/50'
+                  : 'bg-gray-300 hover:bg-gray-500/50'
               }`}
-              aria-label={`Go to pair ${index + 1}`}
+              aria-label={`Go to ad pair ${index + 1}`}
             />
           ))}
         </div>

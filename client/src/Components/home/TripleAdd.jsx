@@ -1,37 +1,36 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useSwipeable } from 'react-swipeable';
+import { DataContext } from '../../App';
 
-// Memoize to prevent unnecessary re-renders
-const TripleAdd = React.memo(({ images = [] }) => {
+const DEFAULT_IMAGE = 'https://your-server.com/generic-ad-placeholder.jpg';
+
+const TripleAdd = React.memo(() => {
+  const { cache } = useContext(DataContext);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Normalize images (already done in Home.jsx, but ensure format)
   const normalizedImages = useMemo(() => {
-    return images
+    const ads = cache.tripleAds?.data || [];
+    return ads
       .filter((img) => img && img.url && !img.disabled)
       .map((img) => ({
         url: img.url.replace(/^http:/, 'https:'),
         alt: `Triple Ad ${img._id || img.url.split('/').pop()}`,
       }));
-  }, [images]);
+  }, [cache.tripleAds]);
 
-  // Group images into triplets for sliding
   const triplets = useMemo(() => {
     if (normalizedImages.length === 0) return [];
     const groups = [];
     for (let i = 0; i < normalizedImages.length; i += 3) {
       groups.push(normalizedImages.slice(i, i + 3));
     }
-    // Duplicate for infinite effect
     return [groups[groups.length - 1] || groups[0], ...groups, groups[0]];
   }, [normalizedImages]);
 
   const displayIndex = currentIndex + 1;
 
-  // Automatic sliding
   useEffect(() => {
     if (normalizedImages.length <= 3) return;
-
     const timer = setInterval(() => {
       setCurrentIndex((prev) => {
         if (prev === triplets.length - 2) {
@@ -41,11 +40,9 @@ const TripleAdd = React.memo(({ images = [] }) => {
         return prev + 1;
       });
     }, 6000);
-
     return () => clearInterval(timer);
   }, [triplets.length, normalizedImages.length]);
 
-  // Reset index for infinite effect
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(triplets.length - 2), 0);
@@ -54,7 +51,6 @@ const TripleAdd = React.memo(({ images = [] }) => {
     }
   }, [currentIndex, triplets.length]);
 
-  // Swipe handlers
   const handlers = useSwipeable({
     onSwipedLeft: () => {
       setCurrentIndex((prev) => {
@@ -76,19 +72,19 @@ const TripleAdd = React.memo(({ images = [] }) => {
     },
     trackMouse: true,
     delta: 10,
-    preventDefaultTouchmoveEvent: true, // Improve touch responsiveness
+    preventDefaultTouchmoveEvent: true,
   });
 
-  // Jump to specific triplet
   const goToTriplet = (index) => {
     setCurrentIndex(index + 1);
   };
 
-  // Handle no images
   if (normalizedImages.length === 0) {
     return (
       <div className="w-full px-2 mb-5 text-center">
-        <p className="text-muted-foreground">No triple ad images available</p>
+        <p className="text-gray-500" aria-live="polite">
+          No triple ad images available
+        </p>
       </div>
     );
   }
@@ -118,8 +114,13 @@ const TripleAdd = React.memo(({ images = [] }) => {
                     src={image.url}
                     alt={image.alt}
                     loading="lazy"
-                    // Preload next images
                     fetchpriority={tripletIndex === currentIndex + 1 ? 'high' : 'auto'}
+                    onError={(e) => {
+                      if (e.target.src !== DEFAULT_IMAGE) {
+                        console.warn(`Failed to load ad image: ${e.target.src}`);
+                        e.target.src = DEFAULT_IMAGE;
+                      }
+                    }}
                   />
                 </div>
               ))}
@@ -127,7 +128,7 @@ const TripleAdd = React.memo(({ images = [] }) => {
                 Array.from({ length: 3 - triplet.length }).map((_, i) => (
                   <div
                     key={`empty-${i}`}
-                    className="w-1/3 h-full flex items-center justify-center bg-background rounded-lg"
+                    className="w-1/3 h-full flex items-center justify-center bg-gray-100 rounded-lg"
                   />
                 ))}
             </div>
@@ -143,9 +144,9 @@ const TripleAdd = React.memo(({ images = [] }) => {
               className={`w-2 h-2 rounded-full transition-all duration-300 shadow-sm hover:scale-125 ${
                 displayIndex - 1 === index
                   ? 'bg-purple-400 scale-125'
-                  : 'bg-gray-300 hover:bg-muted-foreground/50'
+                  : 'bg-gray-300 hover:bg-gray-500/50'
               }`}
-              aria-label={`Go to triplet ${index + 1}`}
+              aria-label={`Go to ad triplet ${index + 1}`}
             />
           ))}
         </div>
