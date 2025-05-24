@@ -25,13 +25,13 @@ const ComboOfferCard = React.memo(({ offer }) => {
         className="flex flex-col items-center w-52 bg-slate-200 rounded-2xl hover:scale-105 transition-transform duration-300"
         whileHover={{ scale: 1.05 }}
       >
-        <div className="flex justify-center -space-x-2 mt-2 mb-1">
+        <div className="flex justify-center -space-x-2 mt-2 -mb-4">
           {offer.products.slice(0, 2).map((product, idx) => (
             <img
               key={product._id || idx}
               src={product.images?.[0] || DEFAULT_IMAGE}
               alt={product.name || 'Product'}
-              className={`w-24 h-40 object-cover rounded-xl shadow-md border border-purple-100 ${idx === 0 ? '-rotate-6' : 'rotate-6'}`}
+              className={`w-24 h-40 object-cover rounded-xl shadow-md border drop-shadow-lg border-purple-100 ${idx === 0 ? '-rotate-6' : 'rotate-6'}`}
               loading={idx === 0 ? 'eager' : 'lazy'}
               decoding="async"
               onError={(e) => {
@@ -42,7 +42,7 @@ const ComboOfferCard = React.memo(({ offer }) => {
             />
           ))}
         </div>
-        <div className="bg-gradient-to-br from-violet-400 to-violet-500 text-white rounded-b-2xl h-12 text-center w-full flex flex-col justify-center">
+        <div className="bg-gradient-to-br z-10 from-violet-400 to-violet-500 text-white rounded-b-2xl h-12 text-center w-full flex flex-col justify-center">
           <h3 className="text-base font-semibold capitalize truncate">{offer.name || 'Unnamed Combo'}</h3>
           <div className="text-sm flex items-center justify-center gap-1">
             <span>{offer.discount || 0}% off</span>

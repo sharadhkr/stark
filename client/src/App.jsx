@@ -42,6 +42,13 @@ const isValidUrl = (url) => {
   return /^https?:\/\/[^\s$.?#].[^\s]*$/i.test(url);
 };
 
+// Generate image ID from URL (simple hash for deduplication)
+const generateImageId = (url) => {
+  if (!url) return 'default';
+  // Simple hash: use first 8 chars of URL's base64-encoded string
+  return 'img_' + btoa(url).slice(0, 8).replace(/[^a-zA-Z0-9]/g, '');
+};
+
 const DataProvider = ({ children }) => {
   const [cache, setCache] = useState({
     products: { data: [], timestamp: 0 },
@@ -51,7 +58,8 @@ const DataProvider = ({ children }) => {
     layout: { data: [], timestamp: 0 },
     ads: { data: [], timestamp: 0 },
     tripleAds: { data: [], timestamp: 0 },
-    sellers: { data: [], timestamp: 0 }, // Added sellers
+    sellers: { data: [], timestamp: 0 },
+    images: { data: {}, timestamp: 0 }, // New cache for image URLs
     nonArrayData: { banner: null, searchSuggestions: null, trendingSearches: null, timestamp: 0 },
   });
 
@@ -75,58 +83,102 @@ const DataProvider = ({ children }) => {
       }
 
       // Validate array data
-      if (!Array.isArray(data)) {
+      if (!Array.isArray(data) && key !== 'images') {
         console.warn(`Invalid data for cache key ${key}:`, data);
         return { ...prev, [key]: { data: [], timestamp: Date.now() } };
       }
 
       let validatedData = data;
+      let imageMap = prev.images.data;
+
       if (key === 'products' || key === 'comboOffers' || key.startsWith('category_')) {
-        validatedData = data.map((item) => ({
-          ...item,
-          image: item?.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE,
-        }));
+        validatedData = data.map((item) => {
+          const imageUrl = item?.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE;
+          const imageId = generateImageId(imageUrl);
+          imageMap = { ...imageMap, [imageId]: imageUrl };
+          return {
+            ...item,
+            imageId, // Store imageId instead of image URL
+            image: undefined, // Remove original image to save space
+          };
+        });
       } else if (key === 'ads' || key === 'tripleAds') {
         validatedData = data.map((item) => ({
           ...item,
           images: Array.isArray(item?.images)
-            ? item.images.map((img) => ({
-                ...img,
-                url: img?.url && isValidUrl(img.url) ? img.url : DEFAULT_AD_IMAGE,
-              }))
+            ? item.images.map((img) => {
+                const imageUrl = img?.url && isValidUrl(img.url) ? img.url : DEFAULT_AD_IMAGE;
+                const imageId = generateImageId(imageUrl);
+                imageMap = { ...imageMap, [imageId]: imageUrl };
+                return { ...img, imageId, url: undefined };
+              })
             : [],
         }));
       } else if (key === 'layout') {
         validatedData = data;
       } else if (key === 'sellers') {
-        validatedData = data.map((item) => ({
-          ...item,
-          profilePicture: item?.profilePicture && isValidUrl(item.profilePicture) ? item.profilePicture : DEFAULT_PROFILE_PICTURE,
-        }));
+        validatedData = data.map((item) => {
+          const imageUrl = item?.profilePicture && isValidUrl(item.profilePicture) ? item.profilePicture : DEFAULT_PROFILE_PICTURE;
+          const imageId = generateImageId(imageUrl);
+          imageMap = { ...imageMap, [imageId]: imageUrl };
+          return {
+            ...item,
+            imageId,
+            profilePicture: undefined,
+          };
+        });
+      } else if (key === 'images') {
+        validatedData = data; // Direct image map
       }
 
-      const newCache = { ...prev, [key]: { data: validatedData, timestamp: Date.now() } };
-      if (key === 'products' || key === 'comboOffers' || key === 'layout' || key === 'ads' || key === 'tripleAds' || key.startsWith('category_') || key === 'sellers') {
+      // Update images cache
+      const newCache = {
+        ...prev,
+        [key]: { data: validatedData, timestamp: Date.now() },
+        images: { data: imageMap, timestamp: Date.now() },
+      };
+
+      // Save to localStorage
+      if (key === 'products' || key === 'comboOffers' || key === 'layout' || key === 'ads' || key === 'tripleAds' || key.startsWith('category_') || key === 'sellers' || key === 'images') {
         try {
-          const slimData = key === 'products'
-            ? validatedData.slice(0, 10).map(({ _id, name, price, image, gender }) => ({
-                _id, name, price, image, gender,
-              }))
-            : key === 'ads' || key === 'tripleAds'
-            ? validatedData.slice(0, 10).map(({ type, images }) => ({ type, images: images.slice(0, 10) }))
-            : key.startsWith('category_')
-            ? validatedData.slice(0, 10).map(({ _id, name, price, image, gender, category }) => ({
-                _id, name, price, image, gender, category,
-              }))
-            : key === 'sellers'
-            ? validatedData.slice(0, 10).map(({ _id, name, shopName, profilePicture }) => ({
-                _id, name, shopName, profilePicture,
-              }))
-            : validatedData;
+          let slimData;
+          if (key === 'products' || key === 'comboOffers' || key.startsWith('category_')) {
+            slimData = validatedData.slice(0, 10).map(({ _id, name, price, imageId, gender, category }) => ({
+              _id, name, price, imageId, gender, category,
+            }));
+          } else if (key === 'ads' || key === 'tripleAds') {
+            slimData = validatedData.slice(0, 10).map(({ type, images }) => ({
+              type,
+              images: images.slice(0, 10).map(({ imageId }) => ({ imageId })),
+            }));
+          } else if (key === 'sellers') {
+            slimData = validatedData.slice(0, 10).map(({ _id, name, shopName, imageId }) => ({
+              _id, name, shopName, imageId,
+            }));
+          } else if (key === 'images') {
+            // Limit to 100 images to prevent quota issues
+            const imageEntries = Object.entries(imageMap).slice(0, 100);
+            slimData = Object.fromEntries(imageEntries);
+          } else {
+            slimData = validatedData;
+          }
           const compressed = lzString.compressToUTF16(JSON.stringify({ data: slimData, timestamp: newCache[key].timestamp }));
           localStorage.setItem(`cache_${key}`, compressed);
         } catch (error) {
           console.warn(`Failed to cache ${key} in localStorage:`, error);
+          // Fallback: try saving without images if quota exceeded
+          if (key !== 'images') {
+            try {
+              const fallbackData = validatedData.slice(0, 5).map(item => ({
+                ...item,
+                imageId: 'default',
+              }));
+              const compressed = lzString.compressToUTF16(JSON.stringify({ data: fallbackData, timestamp: newCache[key].timestamp }));
+              localStorage.setItem(`cache_${key}`, compressed);
+            } catch (fallbackError) {
+              console.error(`Fallback cache save failed for ${key}:`, fallbackError);
+            }
+          }
         }
       }
       return newCache;
@@ -143,7 +195,7 @@ const DataProvider = ({ children }) => {
           parsed.data = Array.isArray(parsed.data)
             ? parsed.data.map((item) => ({
                 ...item,
-                image: item?.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE,
+                image: undefined, // Image URL will be resolved from images cache
               }))
             : [];
         } else if (key === 'ads' || key === 'tripleAds') {
@@ -153,7 +205,7 @@ const DataProvider = ({ children }) => {
                 images: Array.isArray(item?.images)
                   ? item.images.map((img) => ({
                       ...img,
-                      url: img?.url && isValidUrl(img.url) ? img.url : DEFAULT_AD_IMAGE,
+                      url: undefined,
                     }))
                   : [],
               }))
@@ -162,12 +214,15 @@ const DataProvider = ({ children }) => {
           parsed.data = Array.isArray(parsed.data)
             ? parsed.data.map((item) => ({
                 ...item,
-                profilePicture: item?.profilePicture && isValidUrl(item.profilePicture) ? item.profilePicture : DEFAULT_PROFILE_PICTURE,
+                profilePicture: undefined,
               }))
             : [];
+        } else if (key === 'images') {
+          parsed.data = typeof parsed.data === 'object' ? parsed.data : {};
         }
         return parsed;
       } catch (error) {
+        console.warn(`Failed to load cache_${key} from localStorage:`, error);
         localStorage.removeItem(`cache_${key}`);
       }
     }
@@ -186,7 +241,7 @@ const DataProvider = ({ children }) => {
     try {
       // Load cached data
       const cacheUpdates = {};
-      ['layout', 'products', 'comboOffers', 'ads', 'tripleAds', 'sellers'].forEach((key) => {
+      ['layout', 'products', 'comboOffers', 'ads', 'tripleAds', 'sellers', 'images'].forEach((key) => {
         const stored = loadFromStorage(key);
         if (stored && !isDataStale(stored.timestamp)) {
           cacheUpdates[key] = { data: stored.data, timestamp: stored.timestamp };
@@ -288,6 +343,7 @@ const DataProvider = ({ children }) => {
         ads: cache.ads?.data?.length || 0,
         tripleAds: cache.tripleAds?.data?.length || 0,
         sellers: cache.sellers?.data?.length || 0,
+        images: Object.keys(cache.images?.data || {}).length,
         categories: Object.keys(cache).filter(key => key.startsWith('category_')).length,
         banner: cache.nonArrayData?.banner?.url || null,
         searchSuggestions: cache.nonArrayData?.searchSuggestions ? {
@@ -302,7 +358,12 @@ const DataProvider = ({ children }) => {
     }
   }, [cache]);
 
-  const contextValue = useMemo(() => ({ cache, updateCache, isDataStale }), [cache, updateCache, isDataStale]);
+  const contextValue = useMemo(() => ({
+    cache,
+    updateCache,
+    isDataStale,
+    getImageUrl: (imageId) => cache.images.data[imageId] || DEFAULT_IMAGE,
+  }), [cache, updateCache, isDataStale]);
 
   return <DataContext.Provider value={contextValue}>{children}</DataContext.Provider>;
 };
