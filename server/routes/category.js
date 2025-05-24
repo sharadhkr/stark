@@ -26,7 +26,7 @@ router.get('/' , async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch categories', error: error.message });
   }
 });
-
+ 
 // Get a single category by ID (Accessible to all authenticated users)
 router.get('/:id' , async (req, res) => {
   const { id } = req.params;

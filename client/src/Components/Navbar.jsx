@@ -50,8 +50,8 @@ const BottomNavbar = () => {
 
   return (
     <>
-      <div className="fixed bottom-4 left-0 w-screen flex justify-center z-40 px-4">
-        <div className="relative w-[98%] max-w-md h-[67px] bg-violet-50/80 backdrop-blur-md rounded-3xl shadow-[0px_0px_20px_-15px_rgba(0,0,0,1)] px-4 flex justify-between items-center overflow-visible border border-violet-300">
+      <div className="fixed bottom-0 left-0 w-screen flex justify-center z-40 px-0">
+        <div className="relative w-full max-w-md h-[67px] bg-violet-50/80 backdrop-blur-md rounded-t-3xl shadow-[0px_0px_20px_-15px_rgba(0,0,0,1)] px-4 flex justify-between items-center overflow-visible border border-violet-300">
           {tabs.map((tab, index) => {
             const isActive = index === activeIndex;
 
