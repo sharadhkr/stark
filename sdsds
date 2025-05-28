@@ -1,0 +1,53 @@
+import React from 'react'
+import imag from "../assets/vmig7kasls34evfbkz9f.jpg"
+import { FileHeartIcon } from 'lucide-react'
+import { FaCartPlus, FaHeart } from 'react-icons/fa'
+function ProductCard() {
+  return (
+    <div>
+      <div className="w-full p-4 min-h-10 flex flex-col bg-red-600/0">
+        <div className='w-full mb-4 m-auto flex justify-center items-center'>
+          <div
+            className='w-full relative drop-shadow-md h-40 rounded-xl bg-center bg-cover'
+            style={{ backgroundImage: `url(${imag})` }}
+          >
+            
+          <div className='absolute top-2 right-2'>
+            <FaHeart className='text-gray-500'/>
+          </div>
+          <div className='absolute bg-green-100 -bottom-4 flex gap-1 rounded-md justify-center items-center px-[6px] py-[2px] right-0'>
+            <h2 className='text-gray-500 text-[13px]'>add to</h2>
+            <FaCartPlus className='text-gray-500'/>
+          </div>
+          </div>
+        </div>
+        <div>
+          <div className='bg-violet-50 border-violet-200 shadow-none border w-fit px-2 py-[2px] rounded-md '>
+            <h1 className='text-[12px] tracking-wide'>polyster</h1>
+          </div>
+          <h1 className='text-[13px]'>description Lorem ipsum dolor sit, amet ectetur</h1>
+          <div className="flex gap-2">
+            <div className="border px-1 rounded-md">
+              <h1 className='text-[13px] text-gray-500'>L</h1>
+            </div>
+            <div className="border px-1 rounded-md">
+              <h1 className='text-[13px] text-gray-500'>X</h1>
+            </div>
+            <div className="border px-1 rounded-md">
+              <h1 className='text-[13px] text-gray-500'>XL</h1>
+            </div>
+          </div>
+          <div className="flex gap-2 items-center">
+            <h1 className='font-semibold'>₹225</h1>
+            <div className='flex items-center gap-1 text-[13px] text-gray-600'>
+              <h2 className=''>MRP</h2>
+            <h2 className='line-through'>₹999 </h2>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default ProductCard

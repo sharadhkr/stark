@@ -311,8 +311,8 @@ const Home = React.memo(() => {
   // Memoized loading UI
   const LoadingUI = useMemo(
     () => (
-      <div className='fixed inset-0 z-50 bg-gray-100 bg-opacity-75 flex items-center justify-center'>
-        <div className="text-center w-screen h-screen bg-white flex flex-col min-h-screen justify-center items-center" aria-live="polite">
+      <div className='fixed inset-0 z-50 bg-gray-100 bg-opacity-75 flex items-center justify-center overflow-hidden'>
+        <div className="text-center w-screen h-screen bg-white flex flex-col min-h-screen justify-center overflow-hidden items-center" aria-live="polite">
         {/* <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /> */}
         <img className='w-[80%]' src={Loading} alt="" />
         {/* <p className="text-gray-500 text-lg mt-4">Loading...</p> */}
