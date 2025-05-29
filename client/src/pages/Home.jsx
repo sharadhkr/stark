@@ -372,7 +372,7 @@ const Home = React.memo(() => {
   return (
     <div className="min-h-screen bg-white">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-      <main className="container mx-auto px-1">{renderedLayout}</main>
+      <main className="container mx-auto">{renderedLayout}</main>
     </div>
   );
 });

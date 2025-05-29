@@ -192,7 +192,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
         variants={cardVariants}
         whileHover="hover"
         whileTap="tap"
-        className="w-[185px] p-3 flex flex-col rounded-xl drop-shadow-sm cursor-pointer"
+        className="w-[185px] bg-violet-50/80 shadow-[0px_0px_20px_-12px] shadow-violet-900/80 p-3 flex flex-col rounded-xl drop-shadow-sm cursor-pointer"
         aria-label={`Product: ${name}`}
         {...(isDrawerOpen ? { inert: '' } : {})}
       >

@@ -4,7 +4,7 @@ import { FaEye } from 'react-icons/fa';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import Cookies from 'js-cookie';
-import ProductCard from '../ProductCard';
+import ProductCard from '../ProductCard4line';
 import { DataContext } from '../../App';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
@@ -90,10 +90,10 @@ const RecentlyViewedSection = React.memo(() => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="py-4 px-2 sm:px-6 lg:px-8 bg-gray-50"
+      className="py-4 bg-gray-50"
     >
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-3">
+        <div className="flex justify-between px-[13px] items-center">
           <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
             <FaEye className="text-blue-500" aria-hidden="true" /> Checkout Again
           </h2>
@@ -144,16 +144,15 @@ const RecentlyViewedSection = React.memo(() => {
         </div>
         <motion.div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
+          className="flex gap-4 overflow-x-auto scrollbar-hide py-4 cursor-grab active:cursor-grabbing"
           style={{ scrollBehavior: 'smooth' }}
         >
-          {products.map((product) => (
-            <div key={product._id} className="flex-shrink-0">
-              <ProductCard
-                product={product}
-                onClick={() => trackProductView(product._id)}
-                onAddToCart={() => addToCart(product._id)}
-              />
+          {products.map((product, idx) => (
+            <div
+              key={product._id}
+              className={`flex-shrink-0${idx === 0 ? ' pl-[13px]' : ''}${idx === products.length - 1 ? ' pr-[13px]' : ''}`}
+            >
+              <ProductCard product={product} onAddToCart={() => addToCart(product._id)} />
             </div>
           ))}
         </motion.div>

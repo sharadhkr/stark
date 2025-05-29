@@ -22,7 +22,7 @@ const ComboOfferCard = React.memo(({ offer }) => {
   return (
     <Link to={`/combo/${offer._id}`} aria-label={`View combo offer ${offer.name}`}>
       <motion.div
-        className="flex flex-col items-center w-52 bg-slate-200 rounded-2xl hover:scale-105 transition-transform duration-300"
+        className="flex flex-col items-center shadow-[0px_0px_20px_-12px] shadow-gray-900/60 w-52 bg-slate-200 rounded-2xl hover:scale-105 transition-transform duration-300"
         whileHover={{ scale: 1.05 }}
       >
         <div className="flex justify-center -space-x-2 mt-2 -mb-4">
@@ -90,8 +90,8 @@ const ComboOfferSection = React.memo(() => {
   }
 
   return (
-    <div className="w-full px-2 mb-5">
-      <div className="flex justify-between items-center">
+    <div className="w-full mb-5">
+      <div className="flex px-[13px] justify-between items-center">
         <h2 className="text-xl font-bold text-gray-700">Special Combo Offers</h2>
         {normalizedOffers.length > 1 && (
           <div className="flex gap-2">
@@ -118,11 +118,19 @@ const ComboOfferSection = React.memo(() => {
       </div>
       <motion.div
         ref={scrollRef}
-        className="flex gap-4 mt-2 overflow-x-auto scrollbar-hide snap-x snap-mandatory"
+        className="flex gap-4 py-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory"
         style={{ scrollBehavior: 'smooth' }}
       >
-        {normalizedOffers.map((offer) => (
-          <ComboOfferCard key={offer._id} offer={offer} />
+        {normalizedOffers.map((offer, idx) => (
+          <div
+            key={offer._id}
+            style={{
+              paddingLeft: idx === 0 ? 13 : undefined,
+              paddingRight: idx === normalizedOffers.length - 1 ? 13 : undefined,
+            }}
+          >
+            <ComboOfferCard offer={offer} />
+          </div>
         ))}
       </motion.div>
     </div>

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { FaStar } from 'react-icons/fa';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
-import ProductCard from '../ProductCard';
+import ProductCard from '../ProductCard4line';
 import { DataContext } from '../../App';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
@@ -73,12 +73,12 @@ const SponsoredSection = React.memo(() => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="py-6 px-4 sm:px-6 lg:px-8 bg-gray-50"
+      className="py-6 bg-gray-50"
       role="region"
       aria-label="Sponsored Products"
     >
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between px-[13px] items-center ">
           <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2">
             <FaStar className="text-yellow-500" aria-hidden="true" /> Top Sponsored Products
           </h2>
@@ -135,11 +135,14 @@ const SponsoredSection = React.memo(() => {
         ) : (
           <motion.div
             ref={scrollRef}
-            className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 cursor-grab active:cursor-grabbing"
+            className="flex gap-4 overflow-x-auto scrollbar-hide py-4 cursor-grab active:cursor-grabbing"
             style={{ scrollBehavior: 'smooth' }}
           >
-            {products.map((product) => (
-              <div key={product._id} className="flex-shrink-0">
+            {products.map((product, idx) => (
+              <div
+                key={product._id}
+                className={`flex-shrink-0${idx === 0 ? ' pl-[13px]' : ''}${idx === products.length - 1 ? ' pr-[13px]' : ''}`}
+              >
                 <ProductCard product={product} onAddToCart={() => addToCart(product._id)} />
               </div>
             ))}
