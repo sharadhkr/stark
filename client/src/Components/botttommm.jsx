@@ -16,7 +16,7 @@ function Botttommm() {
 
       {/* Footer Text */}
       <div className="text-center text-sm text-gray-600 pt-8 font-semibold z-10 relative">
-        &copy; {new Date().getFullYear()} Stark strips. All rights reserved.
+        © {new Date().getFullYear()} Stark strips. All rights reserved.
       </div>
       <div className="text-center text-sm text-gray-600 pt-1 font-semibold z-10 relative">
         +91-7724974347 | stark@gmail.coom

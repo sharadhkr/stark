@@ -120,28 +120,20 @@ const OwnerProfilePage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-100 to-blue-200">
+      <div className="min-h-screen bg-gray-50">
         <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
         <motion.header
           initial="hidden"
           animate="visible"
           variants={fadeIn}
-          className="w-full max-w-7xl mx-auto flex items-center justify-between pt-5 px-4 sm:px-6"
+          className="w-full max-w-7xl mx-auto flex items-center justify-between py-4 px-2 sm:px-6"
         >
-          <div className="flex items-center gap-3">
-            <img
-              className="w-12 h-12 object-contain drop-shadow-lg hover:scale-110 transition-transform duration-300"
-              src={agroLogo}
-              alt="AgroTrade Logo"
-              onError={(e) => (e.target.style.display = 'none')}
-            />
-          </div>
         </motion.header>
         <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           <SearchBar
-            onSearch={() => {}}
+            onSearch={() => { }}
             searchQuery=""
-            setSearchQuery={() => {}}
+            setSearchQuery={() => { }}
             placeholder="Search products..."
           />
           <div className="flex items-center gap-4 mt-4">
@@ -168,21 +160,7 @@ const OwnerProfilePage = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-100 to-blue-200">
         <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-        <motion.header
-          initial="hidden"
-          animate="visible"
-          variants={fadeIn}
-          className="w-full max-w-7xl mx-auto flex items-center justify-between pt-5 px-4 sm:px-6"
-        >
-          <div className="flex items-center gap-3">
-            <img
-              className="w-12 h-12 object-contain drop-shadow-lg hover:scale-110 transition-transform duration-300"
-              src={agroLogo}
-              alt="AgroTrade Logo"
-              onError={(e) => (e.target.style.display = 'none')}
-            />
-          </div>
-        </motion.header>
+
         <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
           <p className="text-gray-600 text-lg mb-4">Seller not found. Please check the seller ID or try again later.</p>
           <motion.button
@@ -199,28 +177,11 @@ const OwnerProfilePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-blue-200">
+    <div className="min-h-screen bg-gray-50 px-2 py-6">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
 
-      {/* Header */}
-      <motion.header
-        initial="hidden"
-        animate="visible"
-        variants={fadeIn}
-        className="w-full max-w-7xl mx-auto flex items-center justify-between pt-5 px-4 sm:px-6"
-      >
-        <div className="flex items-center gap-3">
-          <img
-            className="w-12 h-12 object-contain drop-shadow-lg hover:scale-110 transition-transform duration-300"
-            src={agroLogo}
-            alt="AgroTrade Logo"
-            onError={(e) => (e.target.style.display = 'none')}
-          />
-        </div>
-      </motion.header>
-
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto ">
         <motion.div initial="hidden" animate="visible" variants={fadeIn}>
           {/* Search Bar and Filter */}
           <div className="flex items-center justify-between mb-6">
@@ -232,54 +193,43 @@ const OwnerProfilePage = () => {
                 placeholder={`Search ${owner.name}'s products...`}
               />
             </div>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setShowFilter(true)}
-              className="ml-4 p-2 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors duration-200"
-            >
-              <FaFilter size={18} />
-            </motion.button>
           </div>
 
           {/* Seller Profile Section */}
-          <div className="flex items-center gap-4 mb-8">
+          <div className="flex items-center content-center gap-4 mb-8">
             <motion.img
               src={owner.profilePicture || 'https://via.placeholder.com/150'}
               alt={owner.name}
               className="w-20 h-20 rounded-full object-cover border-2 border-blue-300 hover:scale-105 transition-transform duration-300"
               whileHover={{ scale: 1.05 }}
             />
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 ">
               <h1 className="text-xl font-semibold text-gray-800">{owner.name}</h1>
               <p className="text-gray-600 flex items-center gap-2 text-sm">
                 <FaStore className="text-blue-500" /> {owner.shopName || 'Unnamed Shop'}
               </p>
-              <div className="flex flex-col gap-1 text-gray-600 text-xs">
-                <p className="flex items-center gap-2">
-                  <FaEnvelope className="text-blue-500" /> {owner.email || 'N/A'}
-                </p>
-                <p className="flex items-center gap-2">
-                  <FaPhone className="text-blue-500" /> {owner.phoneNumber || 'N/A'}
-                </p>
-                <p className="flex items-center gap-2">
-                  <FaMapMarkerAlt className="text-blue-500" /> {owner.address || 'Location not provided'}
-                </p>
-              </div>
             </div>
           </div>
 
           {/* Products Section */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              {filteredProducts.length} {filteredProducts.length === 1 ? 'Product' : 'Products'}
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-800 ">
+                {filteredProducts.length} {filteredProducts.length === 1 ? 'Product' : 'Products'}
+              </h2>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setShowFilter(true)}
+                className=" mr-10 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors duration-200"
+              >
+                <FaFilter size={18} />
+              </motion.button>
+            </div>
             {filteredProducts.length === 0 ? (
               <div className="text-center py-10">
                 <p className="text-gray-600 text-lg mb-4">No products available from this seller.</p>
                 <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
                   onClick={() => navigate('/')}
                   className="bg-blue-500 text-white px-6 py-2 rounded-full font-medium hover:bg-blue-600 transition-all duration-300"
                 >
@@ -287,7 +237,7 @@ const OwnerProfilePage = () => {
                 </motion.button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {filteredProducts.map((product) => (
                   <motion.div
                     key={product._id}

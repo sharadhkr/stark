@@ -13,6 +13,6 @@
         "~/lib/*": ["lib/*"]
       }
     },
-    "include": ["src", "components"],
+    "include": ["src", "components", "@/components/ui"],
     "exclude": ["node_modules"]
   }

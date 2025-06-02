@@ -41,13 +41,21 @@ const componentMap = {
 const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';
 
 const Home = React.memo(() => {
-  const { cache, updateCache, isDataStale } = useContext(DataContext);
+  const context = useContext(DataContext);
+  const { cache = {}, updateCache = () => {}, isDataStale = () => true } = context || {};
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState(cache.products?.data || []);
   const [selectedGender, setSelectedGender] = useState('all');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const location = useLocation();
+
+  // Log context for debugging
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('DataContext value:', context);
+    }
+  }, [context]);
 
   // Memoize cache keys to stabilize hasValidCache
   const cacheKeys = useMemo(() => ({
@@ -313,10 +321,8 @@ const Home = React.memo(() => {
     () => (
       <div className='fixed inset-0 z-50 bg-gray-100 bg-opacity-75 flex items-center justify-center overflow-hidden'>
         <div className="text-center w-screen h-screen bg-white flex flex-col min-h-screen justify-center overflow-hidden items-center" aria-live="polite">
-        {/* <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /> */}
-        <img className='w-[80%]' src={Loading} alt="" />
-        {/* <p className="text-gray-500 text-lg mt-4">Loading...</p> */}
-      </div>
+          <img className='w-[80%]' src={Loading} alt="" />
+        </div>
       </div>
     ),
     []

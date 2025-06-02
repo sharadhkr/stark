@@ -1,25 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
+import SearchBar from '../Components/SearchBar';
+import ProductCard from '../Components/ProductCard';
+import ProductCardSkeleton from '../Components/ProductCardSkeleton';
 import agroLogo from '../assets/logo.png';
-import { FaArrowLeft, FaShoppingBag, FaTag, FaStar } from 'react-icons/fa';
 import { motion } from 'framer-motion';
+import { FaArrowLeft, FaShoppingBag, FaTag, FaStar } from 'react-icons/fa';
+
+// Animation variants
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+};
 
 const SearchResults = () => {
   const [results, setResults] = useState({ products: [], categories: [], sellers: [] });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Animation variants
-  const fadeIn = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-  };
-
   // Extract query from URL
   const query = new URLSearchParams(location.search).get('q') || '';
+
+  // Update search query state when URL query changes
+  useEffect(() => {
+    setSearchQuery(query);
+  }, [query]);
 
   // Fetch search results
   useEffect(() => {
@@ -27,6 +36,7 @@ const SearchResults = () => {
       const token = localStorage.getItem('token');
       if (!token || !query) {
         setResults({ products: [], categories: [], sellers: [] });
+        setLoading(false);
         return;
       }
 
@@ -52,6 +62,16 @@ const SearchResults = () => {
     fetchSearchResults();
   }, [query]);
 
+  // Handle search submission
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      toast.error('Please enter a search term');
+      return;
+    }
+    navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+  };
+
   const handleItemClick = (type, item) => {
     switch (type) {
       case 'product':
@@ -68,173 +88,166 @@ const SearchResults = () => {
     }
   };
 
-  const ResultCard = ({ item, type }) => (
+  const CategoryCard = ({ item }) => (
     <motion.div
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="bg-blue-50 rounded-3xl shadow-xl p-4 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform duration-300"
-      onClick={() => handleItemClick(type, item)}
+      className="bg-white rounded-3xl shadow-xl p-4 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform duration-300"
+      onClick={() => handleItemClick('category', item)}
     >
-      {type === 'product' && (
-        <img
-          src={item.image?.[0] || agroLogo}
-          alt={item.name}
-          className="w-36 h-36 object-cover rounded-xl mb-3 drop-shadow-md"
-          onError={(e) => (e.target.src = agroLogo)}
-        />
-      )}
-      <h3 className="text-sm font-semibold text-gray-800 text-center truncate w-full opacity-80">
+      <h3 className="text-sm font-semibold text-gray-800 text-center truncate w-full">
         {item.name}
-        {type === 'seller' && item.shopName && ` (${item.shopName})`}
       </h3>
-      {type === 'product' && item.sellerId && (
-        <p className="text-xs text-gray-500 mt-1 flex items-center opacity-60">
-          <FaStar className="mr-1 text-yellow-500" />
-          {item.sellerId.name} {item.sellerId.shopName ? `(${item.sellerId.shopName})` : ''}
-        </p>
-      )}
     </motion.div>
   );
 
-  const SectionSkeleton = () => (
-    <div className="mb-8">
-      <div className="h-8 w-1/4 bg-gray-200 rounded animate-pulse mb-4"></div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {Array(4)
-          .fill()
-          .map((_, i) => (
-            <div
-              key={i}
-              className="bg-gray-200 rounded-3xl h-48 animate-pulse"
-            ></div>
-          ))}
-      </div>
-    </div>
+  const SellerCard = ({ item }) => (
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={fadeIn}
+      className="bg-white rounded-3xl shadow-xl p-4 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform duration-300"
+      onClick={() => handleItemClick('seller', item)}
+    >
+      <img
+        src={item.profilePicture || agroLogo}
+        alt={item.name}
+        className="w-20 h-20 rounded-full object-cover border-2 border-blue-300 mb-3"
+        onError={(e) => (e.target.src = agroLogo)}
+      />
+      <h3 className="text-sm font-semibold text-gray-800 text-center truncate w-full">
+        {item.name} {item.shopName && `(${item.shopName})`}
+      </h3>
+    </motion.div>
   );
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-blue-200 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* Header */}
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={fadeIn}
-          className="flex items-center justify-between mb-8"
-        >
-          <div className="flex items-center">
-            <button
-              onClick={() => navigate('/')}
-              className="p-2 bg-blue-100 rounded-full shadow-[inset_0px_3px_15px_-10px] text-gray-600 hover:text-gray-800 mr-4 transition-colors"
-            >
-              <FaArrowLeft size={20} />
-            </button>
-            <h1 className="text-3xl font-bold text-gray-800 opacity-80">
-              Search Results for "{query}"
-            </h1>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-2 py-6">
+        <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
+        <main className="max-w-7xl mx-auto">
+          <SearchBar
+            onSearch={() => {}}
+            searchQuery=""
+            setSearchQuery={() => {}}
+            placeholder="Search products..."
+          />
+          <div className="flex items-center gap-4 mt-4">
+            <div className="w-32 h-6 bg-gray-200 rounded animate-pulse"></div>
           </div>
-          <p className="text-sm text-gray-600 opacity-70">
-            {loading
-              ? 'Loading...'
-              : `${results.products.length + results.categories.length + results.sellers.length} results found`}
-          </p>
-        </motion.div>
-
-        {/* Loading State */}
-        {loading ? (
-          <div className="space-y-8">
-            <SectionSkeleton />
-            <SectionSkeleton />
-            <SectionSkeleton />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-6">
+            {Array(5)
+              .fill()
+              .map((_, index) => (
+                <ProductCardSkeleton key={index} />
+              ))}
           </div>
-        ) : (
-          <>
-            {/* No Results */}
-            {results.products.length === 0 &&
-              results.categories.length === 0 &&
-              results.sellers.length === 0 && (
-                <motion.div
-                  initial="hidden"
-                  animate="visible"
-                  variants={fadeIn}
-                  className="text-center py-16 bg-blue-50 rounded-3xl shadow-xl"
-                >
-                  <p className="text-gray-500 text-xl opacity-80">
-                    No results found for "{query}"
-                  </p>
-                  <p className="text-gray-400 mt-2 opacity-70">
-                    Try a different search term.
-                  </p>
-                </motion.div>
-              )}
-
-            {/* Results Sections */}
-            {results.products.length > 0 && (
-              <motion.section
-                initial="hidden"
-                animate="visible"
-                variants={fadeIn}
-                className="mb-10"
-              >
-                <h2 className="text-2xl font-bold text-gray-500 mb-6 flex items-center gap-4">
-                  <div className="flex p-2 bg-blue-100 rounded-full shadow-[inset_0px_3px_15px_-10px]">
-                    <FaShoppingBag className="text-blue-500" />
-                  </div>
-                  <span className="opacity-40">PRODUCTS</span>
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                  {results.products.map((product) => (
-                    <ResultCard key={product._id} item={product} type="product" />
-                  ))}
-                </div>
-              </motion.section>
-            )}
-
-            {results.categories.length > 0 && (
-              <motion.section
-                initial="hidden"
-                animate="visible"
-                variants={fadeIn}
-                className="mb-10"
-              >
-                <h2 className="text-2xl font-bold text-gray-500 mb-6 flex items-center gap-4">
-                  <div className="flex p-2 bg-blue-100 rounded-full shadow-[inset_0px_3px_15px_-10px]">
-                    <FaTag className="text-green-500" />
-                  </div>
-                  <span className="opacity-40">CATEGORIES</span>
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                  {results.categories.map((category) => (
-                    <ResultCard key={category._id} item={category} type="category" />
-                  ))}
-                </div>
-              </motion.section>
-            )}
-
-            {results.sellers.length > 0 && (
-              <motion.section
-                initial="hidden"
-                animate="visible"
-                variants={fadeIn}
-                className="mb-10"
-              >
-                <h2 className="text-2xl font-bold text-gray-500 mb-6 flex items-center gap-4">
-                  <div className="flex p-2 bg-blue-100 rounded-full shadow-[inset_0px_3px_15px_-10px]">
-                    <FaStar className="text-yellow-500" />
-                  </div>
-                  <span className="opacity-40">SELLERS</span>
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                  {results.sellers.map((seller) => (
-                    <ResultCard key={seller._id} item={seller} type="seller" />
-                  ))}
-                </div>
-              </motion.section>
-            )}
-          </>
-        )}
+        </main>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 px-2 py-6">
+      <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
+      <main className="max-w-7xl mx-auto">
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          {/* Header and Search Bar */}
+          <div className="w-full max-w-md mb-8">
+            <SearchBar
+              onSearch={handleSearch}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              placeholder="Search products, categories, or sellers..."
+            />
+          </div>
+
+          {/* No Results */}
+          {results.products.length === 0 &&
+            results.categories.length === 0 &&
+            results.sellers.length === 0 && (
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={fadeIn}
+                className="text-center py-10 bg-white rounded-3xl shadow-xl"
+              >
+                <p className="text-gray-600 text-lg mb-4">
+                  No results found for "{query}"
+                </p>
+                <p className="text-gray-500 mb-4">
+                  Try a different search term.
+                </p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => navigate('/')}
+                  className="bg-blue-500 text-white px-6 py-2 rounded-full font-medium hover:bg-blue-600 transition-all duration-300"
+                >
+                  Back to Home
+                </motion.button>
+              </motion.div>
+            )}
+
+          {/* Products Section */}
+          {results.products.length > 0 && (
+            <motion.section
+              initial="hidden"
+              animate="visible"
+              variants={fadeIn}
+              className="mb-10"
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {results.products.map((product) => (
+                  <motion.div
+                    key={product._id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4 }}
+                    whileHover={{ scale: 1.03 }}
+                    className="w-full"
+                  >
+                    <ProductCard product={product} />
+                  </motion.div>
+                ))}
+              </div>
+            </motion.section>
+          )}
+
+          {/* Categories Section */}
+          {results.categories.length > 0 && (
+            <motion.section
+              initial="hidden"
+              animate="visible"
+              variants={fadeIn}
+              className="mb-10"
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {results.categories.map((category) => (
+                  <CategoryCard key={category._id} item={category} />
+                ))}
+              </div>
+            </motion.section>
+          )}
+
+          {/* Sellers Section */}
+          {results.sellers.length > 0 && (
+            <motion.section
+              initial="hidden"
+              animate="visible"
+              variants={fadeIn}
+              className="mb-10"
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {results.sellers.map((seller) => (
+                  <SellerCard key={seller._id} item={seller} />
+                ))}
+              </div>
+            </motion.section>
+          )}
+        </motion.div>
+      </main>
     </div>
   );
 };

@@ -123,11 +123,13 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
   };
 
   const saveSearch = () => {
-    axios.post(
-      '/api/user/auth/search/recent',
-      { query: searchQuery },
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-    ).catch((err) => console.error('Save Search Error:', err));
+    axios
+      .post(
+        '/api/user/auth/search/recent',
+        { query: searchQuery },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      )
+      .catch((err) => console.error('Save Search Error:', err));
   };
 
   const handleQuickSearch = (type, item) => {
@@ -135,9 +137,9 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
     switch (type) {
       case 'recent':
       case 'trending':
-        query = item;
-        setSearchQuery(item);
-        navigate(`/search?q=${encodeURIComponent(item)}`);
+        query = typeof item === 'string' ? item : item.query || 'Unknown';
+        setSearchQuery(query);
+        navigate(`/search?q=${encodeURIComponent(query)}`);
         break;
       case 'category':
         navigate(`/category/${item._id}`);
@@ -161,24 +163,32 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
   };
 
   const clearAllRecent = () => {
-    axios.post(
-      '/api/user/auth/search/recent',
-      { query: '' },
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-    ).then(() => {
-      setSuggestions((prev) => ({ ...prev, recentSearches: [] }));
-      toast.success('Recent searches cleared');
-    }).catch((err) => console.error('Clear Recent Error:', err));
+    axios
+      .post(
+        '/api/user/auth/search/recent',
+        { query: '' },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      )
+      .then(() => {
+        setSuggestions((prev) => ({ ...prev, recentSearches: [] }));
+        toast.success('Recent searches cleared');
+      })
+      .catch((err) => console.error('Clear Recent Error:', err));
   };
 
   const removeRecentSearch = (search) => {
-    const updatedSearches = suggestions.recentSearches.filter((item) => item !== search);
+    const searchText = typeof search === 'string' ? search : search.query || 'Unknown';
+    const updatedSearches = suggestions.recentSearches.filter(
+      (item) => (typeof item === 'string' ? item : item.query) !== searchText
+    );
     setSuggestions((prev) => ({ ...prev, recentSearches: updatedSearches }));
-    axios.post(
-      '/api/user/auth/search/recent',
-      { query: search },
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-    ).catch((err) => console.error('Remove Recent Error:', err));
+    axios
+      .post(
+        '/api/user/auth/search/recent',
+        { query: searchText },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      )
+      .catch((err) => console.error('Remove Recent Error:', err));
   };
 
   const TagItem = ({ text, onRemove, onClick }) => (
@@ -218,23 +228,21 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
 
   return (
     <div className="relative w-full">
-      <div ref={searchRef} className="relative mt-4 mb-5 px-2 mx-auto z-20">
+      <div ref={searchRef} className="relative z-20">
         <motion.form
           onSubmit={handleSearch}
           initial="hidden"
           animate="visible"
           variants={fadeIn}
-          className="flex w-full items-center bg-gray-50/85 rounded-2xl shadow-md px-8 py-3 border border-gray-200"
+          className="flex w-full items-center bg-gray-50/85 rounded-2xl shadow-md px-6 py-3 border border-gray-200"
         >
           <div className="flex w-full items-center">
-            <div className=" relative w-15 flex h-full rounded-full shadow-inner">
-              <div className="-top-[14px] z-10 -left-8 w-32 absolute">
-                <img className="drop-shadow-lg w-full" src={slogo} alt="Logo" />
-              </div>
-            </div>
+            <button type="submit" className="text-purple-400 text-xl drop-shadow-lg hover:text-purple-500 transition-colors">
+              <FaSearch className="mr-2" />
+            </button>
             <input
               ref={inputRef}
-              className="flex-1 w-[60%] ml-16 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
+              className="flex-1 w-[100%] text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
               placeholder={placeholder}
               type="text"
               value={searchQuery}
@@ -248,9 +256,6 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
               />
             )}
           </div>
-          <button type="submit" className="text-purple-400 text-xl drop-shadow-lg hover:text-purple-500 transition-colors">
-            <FaArrowRight />
-          </button>
         </motion.form>
 
         {isExpanded && (
@@ -313,7 +318,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                         <BlockItem
                           key={seller._id}
                           icon={<FaUser className="text-yellow-500" />}
-                          text={`${seller.name} ${seller.shopName ? `(` + seller.shopName + `)` : ''}`}
+                          text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
                           onClick={() => handleQuickSearch('seller', seller)}
                         />
                       ))}
@@ -343,7 +348,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                             {suggestions.recentSearches.map((search, index) => (
                               <TagItem
                                 key={index}
-                                text={search}
+                                text={typeof search === 'string' ? search : search.query || 'Unknown'}
                                 onRemove={() => removeRecentSearch(search)}
                                 onClick={() => handleQuickSearch('recent', search)}
                               />
@@ -361,7 +366,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                             {trending.trendingSearches.map((search, index) => (
                               <TagItem
                                 key={index}
-                                text={search}
+                                text={typeof search === 'string' ? search : search.query || 'Unknown'}
                                 onClick={() => handleQuickSearch('trending', search)}
                               />
                             ))}
@@ -394,7 +399,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                             <BlockItem
                               key={seller._id}
                               icon={<FaUser className="text-yellow-500" />}
-                              text={`${seller.name} ${seller.shopName ? `(` + seller.shopName + `)` : ''}`}
+                              text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
                               onClick={() => handleQuickSearch('seller', seller)}
                             />
                           ))}
@@ -445,7 +450,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                         {suggestions.recentSearches.map((search, index) => (
                           <TagItem
                             key={index}
-                            text={search}
+                            text={typeof search === 'string' ? search : search.query || 'Unknown'}
                             onRemove={() => removeRecentSearch(search)}
                             onClick={() => handleQuickSearch('recent', search)}
                           />
@@ -463,7 +468,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                         {trending.trendingSearches.map((search, index) => (
                           <TagItem
                             key={index}
-                            text={search}
+                            text={typeof search === 'string' ? search : search.query || 'Unknown'}
                             onClick={() => handleQuickSearch('trending', search)}
                           />
                         ))}
@@ -496,7 +501,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
                         <BlockItem
                           key={seller._id}
                           icon={<FaUser className="text-yellow-500" />}
-                          text={`${seller.name} ${seller.shopName ? `(` + seller.shopName + `)` : ''}`}
+                          text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
                           onClick={() => handleQuickSearch('seller', seller)}
                         />
                       ))}
@@ -531,7 +536,7 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
           </div>
         )}
       </div>
-      <div className="absolute w-full z-0 opacity-40 top-0 left-0 flex items-center justify-center blur-xl">
+      <div className="absolute w-full z-0 opacity-30 top-0 left-0 flex items-center justify-center blur-xl">
         <div className="w-[30%] h-20 bg-purple-400"></div>
         <div className="w-[40%] h-20 skew-x-12 bg-pink-400"></div>
         <div className="w-[30%] h-20 skew-x-12 bg-yellow-400"></div>
@@ -541,4 +546,3 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
 };
 
 export default SearchBar;
-

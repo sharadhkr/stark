@@ -261,6 +261,40 @@ router.put('/profile', userLoggedin, uploadSingle, async (req, res) => {
   }
 });
 
+
+router.post('/cart/add', userLoggedin, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { productId, quantity, size, color } = req.body;
+
+    if (!productId || !quantity || quantity < 1 || !size || !color) {
+      return res.status(400).json({ message: 'Invalid product data' });
+    }
+
+    // Validate product exists and stock is available
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    if (quantity > product.quantityAvailable) {
+      return res.status(400).json({ message: 'Requested quantity not available' });
+    }
+
+    // Fetch user and update cart using model method
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    await user.updateCart({ productId, quantity, size, color });
+
+    return res.json({ message: 'Item added to cart successfully', cart: user.cart });
+  } catch (err) {
+    console.error('Cart Add Error:', err);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+
 // Address Routes
 router.post('/add-address', userLoggedin, async (req, res) => {
   try {
@@ -294,32 +328,79 @@ router.delete('/remove-address/:addressId', userLoggedin, async (req, res) => {
   }
 });
 
+// // Product Routes
+// router.get('/products', async (req, res) => {
+//   try {
+//     const { category, sellerId } = req.query;
+//     let query = {};
+
+//     if (category && category.toLowerCase() !== 'all') {
+//       const categoryDoc = await Category.findOne({
+//         name: { $regex: new RegExp(`^${category}$`, 'i') },
+//       });
+//       if (!categoryDoc) return res.status(404).json({ message: `Category '${category}' not found` });
+//       query.category = categoryDoc._id;
+//     }
+
+//     if (sellerId) query.sellerId = sellerId;
+
+//     const products = await Product.find(query)
+//       .populate('sellerId', 'name phoneNumber shopName')
+//       .populate('category', 'name');
+
+//     res.status(200).json({ products: products.length ? products : [], message: products.length ? undefined : 'No products found' });
+//   } catch (error) {
+//     console.error('Fetch Products Error:', error);
+//     res.status(500).json({ message: 'Failed to fetch products', error: error.message });
+//   }
+// });
 // Product Routes
 router.get('/products', async (req, res) => {
   try {
-    const { category, sellerId } = req.query;
+    const { category, sellerId, page = 1, limit = 20 } = req.query;
     let query = {};
 
+    // Filter by category name (case-insensitive)
     if (category && category.toLowerCase() !== 'all') {
       const categoryDoc = await Category.findOne({
         name: { $regex: new RegExp(`^${category}$`, 'i') },
       });
-      if (!categoryDoc) return res.status(404).json({ message: `Category '${category}' not found` });
+      if (!categoryDoc) {
+        return res.status(404).json({ message: `Category '${category}' not found` });
+      }
       query.category = categoryDoc._id;
     }
 
-    if (sellerId) query.sellerId = sellerId;
+    // Filter by seller
+    if (sellerId) {
+      query.sellerId = sellerId;
+    }
 
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const parsedLimit = parseInt(limit);
+
+    // Get total count for all matching products (without pagination)
+    const totalCount = await Product.countDocuments(query);
+
+    // Fetch paginated products
     const products = await Product.find(query)
+      .skip(skip)
+      .limit(parsedLimit)
       .populate('sellerId', 'name phoneNumber shopName')
       .populate('category', 'name');
 
-    res.status(200).json({ products: products.length ? products : [], message: products.length ? undefined : 'No products found' });
+    return res.status(200).json({
+      products,
+      totalCount,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalCount / parsedLimit),
+    });
   } catch (error) {
     console.error('Fetch Products Error:', error);
-    res.status(500).json({ message: 'Failed to fetch products', error: error.message });
+    return res.status(500).json({ message: 'Failed to fetch products', error: error.message });
   }
 });
+
 
 // Alias for compatibility with Home.jsx
 router.get('/user/auth/products', (req, res, next) => {
@@ -470,6 +551,7 @@ router.get('/sellers', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch sellers', error: error.message });
   }
 });
+
 
 // Alias for compatibility with Home.jsx
 router.get('/user/auth/sellers', (req, res, next) => {
