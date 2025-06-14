@@ -36,28 +36,80 @@ const DEFAULT_PROFILE_PICTURE = 'https://res.cloudinary.com/your-cloud/image/upl
 // Data Context
 export const DataContext = createContext();
 
-// Simple URL validation
-const isValidUrl = (url) => {
-  if (!url || typeof url !== 'string') return false;
-  return /^https?:\/\/[^\s$.?#].[^\s]*$/i.test(url);
+// Simple URL validation - memoized for performance
+const isValidUrl = (() => {
+  const urlRegex = /^https?:\/\/[^\s$.?#].[^\s]*$/i;
+  const cache = new Map();
+  
+  return (url) => {
+    if (!url || typeof url !== 'string') return false;
+    if (cache.has(url)) return cache.get(url);
+    const result = urlRegex.test(url);
+    cache.set(url, result);
+    return result;
+  };
+})();
+
+// Cache configuration
+const CACHE_CONFIG = {
+  STALE_TIME: 10 * 60 * 1000, // Reduced from 15 to 10 minutes
+  MAX_CACHE_SIZE: 100, // Limit cache size
+  STORAGE_PREFIX: 'app_cache_v2_', // Versioned cache
 };
 
 const DataProvider = ({ children }) => {
-  const [cache, setCache] = useState({
-    products: { data: [], timestamp: 0 },
-    wishlist: { data: [], timestamp: 0 },
-    cart: { data: [], timestamp: 0 },
-    comboOffers: { data: [], timestamp: 0 },
-    layout: { data: [], timestamp: 0 },
-    ads: { data: [], timestamp: 0 },
-    tripleAds: { data: [], timestamp: 0 },
-    sellers: { data: [], timestamp: 0 }, // Added sellers
-    nonArrayData: { banner: null, searchSuggestions: null, trendingSearches: null, timestamp: 0 },
+  const [cache, setCache] = useState(() => {
+    // Initialize with empty cache structure
+    return {
+      products: { data: [], timestamp: 0 },
+      wishlist: { data: [], timestamp: 0 },
+      cart: { data: [], timestamp: 0 },
+      comboOffers: { data: [], timestamp: 0 },
+      layout: { data: [], timestamp: 0 },
+      ads: { data: [], timestamp: 0 },
+      tripleAds: { data: [], timestamp: 0 },
+      sellers: { data: [], timestamp: 0 },
+      nonArrayData: { banner: null, searchSuggestions: null, trendingSearches: null, timestamp: 0 },
+    };
   });
 
   const isDataStale = useCallback((timestamp) => {
-    if (!timestamp) return true;
-    return Date.now() - timestamp > 15 * 60 * 1000; // 15 minutes
+    return !timestamp || Date.now() - timestamp > CACHE_CONFIG.STALE_TIME;
+  }, []);
+
+  // Optimized image validation functions
+  const validateProductData = useCallback((data) => {
+    return data.map((item, index) => {
+      // Only validate first few items for performance
+      if (index < 20) {
+        return {
+          ...item,
+          image: item?.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE,
+        };
+      }
+      return item;
+    });
+  }, []);
+
+  const validateAdData = useCallback((data) => {
+    return data.map((item) => ({
+      ...item,
+      images: Array.isArray(item?.images)
+        ? item.images.slice(0, 5).map((img) => ({ // Limit images per ad
+            ...img,
+            url: img?.url && isValidUrl(img.url) ? img.url : DEFAULT_AD_IMAGE,
+          }))
+        : [],
+    }));
+  }, []);
+
+  const validateSellerData = useCallback((data) => {
+    return data.map((item) => ({
+      ...item,
+      profilePicture: item?.profilePicture && isValidUrl(item.profilePicture) 
+        ? item.profilePicture 
+        : DEFAULT_PROFILE_PICTURE,
+    }));
   }, []);
 
   const updateCache = useCallback((key, data) => {
@@ -80,229 +132,226 @@ const DataProvider = ({ children }) => {
         return { ...prev, [key]: { data: [], timestamp: Date.now() } };
       }
 
-      let validatedData = data;
+      let validatedData;
+      // Optimize validation based on data type
       if (key === 'products' || key === 'comboOffers' || key.startsWith('category_')) {
-        validatedData = data.map((item) => ({
-          ...item,
-          image: item?.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE,
-        }));
+        validatedData = validateProductData(data);
       } else if (key === 'ads' || key === 'tripleAds') {
-        validatedData = data.map((item) => ({
-          ...item,
-          images: Array.isArray(item?.images)
-            ? item.images.map((img) => ({
-                ...img,
-                url: img?.url && isValidUrl(img.url) ? img.url : DEFAULT_AD_IMAGE,
-              }))
-            : [],
-        }));
-      } else if (key === 'layout') {
-        validatedData = data;
+        validatedData = validateAdData(data);
       } else if (key === 'sellers') {
-        validatedData = data.map((item) => ({
-          ...item,
-          profilePicture: item?.profilePicture && isValidUrl(item.profilePicture) ? item.profilePicture : DEFAULT_PROFILE_PICTURE,
-        }));
+        validatedData = validateSellerData(data);
+      } else {
+        validatedData = data;
       }
 
-      const newCache = { ...prev, [key]: { data: validatedData, timestamp: Date.now() } };
-      if (key === 'products' || key === 'comboOffers' || key === 'layout' || key === 'ads' || key === 'tripleAds' || key.startsWith('category_') || key === 'sellers') {
-        try {
-          const slimData = key === 'products'
-            ? validatedData.slice(0, 10).map(({ _id, name, price, image, gender }) => ({
-                _id, name, price, image, gender,
-              }))
-            : key === 'ads' || key === 'tripleAds'
-            ? validatedData.slice(0, 10).map(({ type, images }) => ({ type, images: images.slice(0, 10) }))
-            : key.startsWith('category_')
-            ? validatedData.slice(0, 10).map(({ _id, name, price, image, gender, category }) => ({
-                _id, name, price, image, gender, category,
-              }))
-            : key === 'sellers'
-            ? validatedData.slice(0, 10).map(({ _id, name, shopName, profilePicture }) => ({
-                _id, name, shopName, profilePicture,
-              }))
-            : validatedData;
-          const compressed = lzString.compressToUTF16(JSON.stringify({ data: slimData, timestamp: newCache[key].timestamp }));
-          localStorage.setItem(`cache_${key}`, compressed);
-        } catch (error) {
-          console.warn(`Failed to cache ${key} in localStorage:`, error);
-        }
+      const newCache = { 
+        ...prev, 
+        [key]: { data: validatedData, timestamp: Date.now() } 
+      };
+
+      // Async localStorage operation to avoid blocking
+      if (['products', 'comboOffers', 'layout', 'ads', 'tripleAds', 'sellers'].includes(key) || key.startsWith('category_')) {
+        setTimeout(() => {
+          try {
+            const slimData = getSlimData(key, validatedData);
+            const compressed = lzString.compressToUTF16(JSON.stringify({ 
+              data: slimData, 
+              timestamp: newCache[key].timestamp 
+            }));
+            localStorage.setItem(`${CACHE_CONFIG.STORAGE_PREFIX}${key}`, compressed);
+          } catch (error) {
+            console.warn(`Failed to cache ${key} in localStorage:`, error);
+          }
+        }, 0);
       }
+
       return newCache;
     });
-  }, []);
+  }, [validateProductData, validateAdData, validateSellerData]);
+
+  // Helper function to create slim data for storage
+  const getSlimData = (key, data) => {
+    const limit = key === 'products' ? 20 : 10; // More products for main cache
+    
+    if (key === 'products') {
+      return data.slice(0, limit).map(({ _id, name, price, image, gender }) => ({
+        _id, name, price, image, gender,
+      }));
+    } else if (key === 'ads' || key === 'tripleAds') {
+      return data.slice(0, limit).map(({ type, images }) => ({ 
+        type, 
+        images: images.slice(0, 3) // Limit images
+      }));
+    } else if (key.startsWith('category_')) {
+      return data.slice(0, limit).map(({ _id, name, price, image, gender, category }) => ({
+        _id, name, price, image, gender, category,
+      }));
+    } else if (key === 'sellers') {
+      return data.slice(0, limit).map(({ _id, name, shopName, profilePicture }) => ({
+        _id, name, shopName, profilePicture,
+      }));
+    }
+    return data;
+  };
 
   const loadFromStorage = useCallback((key) => {
-    const stored = localStorage.getItem(`cache_${key}`);
-    if (stored) {
-      try {
-        const decompressed = lzString.decompressFromUTF16(stored);
-        const parsed = JSON.parse(decompressed);
-        if (key === 'products' || key === 'comboOffers' || key.startsWith('category_')) {
-          parsed.data = Array.isArray(parsed.data)
-            ? parsed.data.map((item) => ({
-                ...item,
-                image: item?.image && isValidUrl(item.image) ? item.image : DEFAULT_IMAGE,
-              }))
-            : [];
-        } else if (key === 'ads' || key === 'tripleAds') {
-          parsed.data = Array.isArray(parsed.data)
-            ? parsed.data.map((item) => ({
-                ...item,
-                images: Array.isArray(item?.images)
-                  ? item.images.map((img) => ({
-                      ...img,
-                      url: img?.url && isValidUrl(img.url) ? img.url : DEFAULT_AD_IMAGE,
-                    }))
-                  : [],
-              }))
-            : [];
-        } else if (key === 'sellers') {
-          parsed.data = Array.isArray(parsed.data)
-            ? parsed.data.map((item) => ({
-                ...item,
-                profilePicture: item?.profilePicture && isValidUrl(item.profilePicture) ? item.profilePicture : DEFAULT_PROFILE_PICTURE,
-              }))
-            : [];
-        }
+    try {
+      const stored = localStorage.getItem(`${CACHE_CONFIG.STORAGE_PREFIX}${key}`);
+      if (!stored) return null;
+
+      const decompressed = lzString.decompressFromUTF16(stored);
+      const parsed = JSON.parse(decompressed);
+      
+      // Quick validation without heavy processing
+      if (parsed?.data && Array.isArray(parsed.data)) {
         return parsed;
-      } catch (error) {
-        localStorage.removeItem(`cache_${key}`);
       }
+    } catch (error) {
+      localStorage.removeItem(`${CACHE_CONFIG.STORAGE_PREFIX}${key}`);
     }
     return null;
   }, []);
 
   const isFetchingRef = useRef(false);
+  const abortControllerRef = useRef(null);
 
   const fetchCriticalData = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
-    const token = localStorage.getItem('token');
-    const params = { limit: 10, fields: 'layout,products,comboOffers,ads,tripleAds,categoryProducts,banner,searchSuggestions,trendingSearches,sellers' };
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
     try {
-      // Load cached data
+      // Load only essential cached data first
+      const essentialKeys = ['products', 'layout'];
       const cacheUpdates = {};
-      ['layout', 'products', 'comboOffers', 'ads', 'tripleAds', 'sellers'].forEach((key) => {
+      
+      essentialKeys.forEach((key) => {
         const stored = loadFromStorage(key);
         if (stored && !isDataStale(stored.timestamp)) {
           cacheUpdates[key] = { data: stored.data, timestamp: stored.timestamp };
         }
       });
+
       if (Object.keys(cacheUpdates).length > 0) {
         setCache((prev) => ({ ...prev, ...cacheUpdates }));
       }
 
-      // Fetch critical data
-      const response = await axios.get('/api/user/auth/initial-data', { params });
-      const { layout, products, comboOffers, ads, tripleAds, categoryProducts, banner, searchSuggestions, trendingSearches, sellers } = response.data;
+      const token = localStorage.getItem('token');
+      
+      // Optimized API call - request only essential data first
+      const essentialParams = { 
+        limit: 20, 
+        fields: 'layout,products,banner',
+        priority: 'high'
+      };
 
-      console.log('API Response:', {
-        products: products?.length,
-        comboOffers: comboOffers?.length,
-        ads: ads?.length,
-        tripleAds: tripleAds?.length,
-        sellers: sellers?.length,
-        categoryProducts: categoryProducts
-          ? Object.entries(categoryProducts).map(([catId, prods]) => ({
-              category: catId,
-              products: Array.isArray(prods) ? prods.length : 0,
-            }))
-          : null,
-        banner: banner?.url,
-        searchSuggestions: searchSuggestions ? {
-          recentSearches: searchSuggestions.recentSearches?.length,
-          categories: searchSuggestions.categories?.length,
-          sellers: searchSuggestions.sellers?.length,
-          products: searchSuggestions.products?.length,
-        } : null,
-        trendingSearches: trendingSearches ? {
-          trendingSearches: trendingSearches.trendingSearches?.length,
-          topSellers: trendingSearches.topSellers?.length,
-          topCategories: trendingSearches.topCategories?.length,
-          topProducts: trendingSearches.topProducts?.length,
-        } : null,
+      const response = await axios.get('/api/user/auth/initial-data', { 
+        params: essentialParams,
+        signal: abortControllerRef.current.signal,
+        timeout: 5000 // 5 second timeout
       });
 
-      // Validate and cache data
+      const { layout, products, banner } = response.data;
+
+      // Update essential data immediately
       updateCache('layout', Array.isArray(layout?.components) ? layout.components : []);
       updateCache('products', Array.isArray(products) ? products : []);
-      updateCache('comboOffers', Array.isArray(comboOffers) ? comboOffers : []);
-      updateCache('ads', Array.isArray(ads) ? ads : []);
-      updateCache('tripleAds', Array.isArray(tripleAds) ? tripleAds : []);
-      updateCache('sellers', Array.isArray(sellers) ? sellers : []);
       updateCache('banner', banner || { url: DEFAULT_AD_IMAGE });
-      updateCache('searchSuggestions', searchSuggestions || {});
-      updateCache('trendingSearches', trendingSearches || {});
 
-      // Cache category-specific products
-      if (categoryProducts && typeof categoryProducts === 'object') {
-        Object.entries(categoryProducts).forEach(([catId, prods]) => {
-          if (!Array.isArray(prods)) {
-            console.warn(`Invalid categoryProducts for category ${catId}:`, prods);
-            updateCache(`category_${catId}`, []);
-          } else {
-            console.log(`Caching category ${catId} with ${prods.length} products`);
-            updateCache(`category_${catId}`, prods);
-          }
-        });
-      } else {
-        console.warn('Invalid categoryProducts:', categoryProducts);
-      }
+      // Fetch non-essential data in background
+      setTimeout(async () => {
+        try {
+          const backgroundParams = {
+            limit: 10,
+            fields: 'comboOffers,ads,tripleAds,sellers,searchSuggestions,trendingSearches',
+            priority: 'low'
+          };
 
-      // Fetch auth-dependent data
+          const bgResponse = await axios.get('/api/user/auth/initial-data', { 
+            params: backgroundParams,
+            timeout: 10000
+          });
+
+          const { comboOffers, ads, tripleAds, sellers, searchSuggestions, trendingSearches } = bgResponse.data;
+
+          updateCache('comboOffers', Array.isArray(comboOffers) ? comboOffers : []);
+          updateCache('ads', Array.isArray(ads) ? ads : []);
+          updateCache('tripleAds', Array.isArray(tripleAds) ? tripleAds : []);
+          updateCache('sellers', Array.isArray(sellers) ? sellers : []);
+          updateCache('searchSuggestions', searchSuggestions || {});
+          updateCache('trendingSearches', trendingSearches || {});
+
+        } catch (bgError) {
+          console.warn('Background data fetch failed:', bgError);
+        }
+      }, 100);
+
+      // Fetch auth-dependent data if token exists
       if (token) {
-        const [wishlistRes, cartRes] = await Promise.all([
-          axios.get('/api/user/auth/wishlist').catch(() => ({ data: { wishlist: [] } })),
-          axios.get('/api/user/auth/cart').catch(() => ({ data: { items: [] } })),
-        ]);
+        setTimeout(async () => {
+          try {
+            const [wishlistRes, cartRes] = await Promise.allSettled([
+              axios.get('/api/user/auth/wishlist', { timeout: 3000 }),
+              axios.get('/api/user/auth/cart', { timeout: 3000 }),
+            ]);
 
-        updateCache('wishlist', Array.isArray(wishlistRes.data.wishlist)
-          ? wishlistRes.data.wishlist.map(item => item._id?.toString() || item.productId?.toString()) || []
-          : []);
-        updateCache('cart', Array.isArray(cartRes.data.items)
-          ? cartRes.data.items.map(item => item.product?._id?.toString() || item.productId?.toString()) || []
-          : []);
+            if (wishlistRes.status === 'fulfilled') {
+              const wishlistIds = Array.isArray(wishlistRes.value.data.wishlist)
+                ? wishlistRes.value.data.wishlist.map(item => 
+                    item._id?.toString() || item.productId?.toString()
+                  ).filter(Boolean)
+                : [];
+              updateCache('wishlist', wishlistIds);
+            }
+
+            if (cartRes.status === 'fulfilled') {
+              const cartIds = Array.isArray(cartRes.value.data.items)
+                ? cartRes.value.data.items.map(item => 
+                    item.product?._id?.toString() || item.productId?.toString()
+                  ).filter(Boolean)
+                : [];
+              updateCache('cart', cartIds);
+            }
+          } catch (authError) {
+            console.warn('Auth-dependent data fetch failed:', authError);
+          }
+        }, 200);
       }
+
     } catch (error) {
-      console.error('Error fetching critical data:', error);
+      if (error.name !== 'AbortError') {
+        console.error('Error fetching critical data:', error);
+      }
     } finally {
       isFetchingRef.current = false;
     }
   }, [loadFromStorage, isDataStale, updateCache]);
 
+  // Optimized initialization
   useEffect(() => {
+    // Start data fetching immediately
     fetchCriticalData();
-  }, [fetchCriticalData]);
+    
+    // Cleanup function
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []); // Remove fetchCriticalData from dependencies to prevent re-runs
 
-  // Debug cache data
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Cache Data:', {
-        products: cache.products?.data?.length || 0,
-        comboOffers: cache.comboOffers?.data?.length || 0,
-        layout: cache.layout?.data?.length || 0,
-        ads: cache.ads?.data?.length || 0,
-        tripleAds: cache.tripleAds?.data?.length || 0,
-        sellers: cache.sellers?.data?.length || 0,
-        categories: Object.keys(cache).filter(key => key.startsWith('category_')).length,
-        banner: cache.nonArrayData?.banner?.url || null,
-        searchSuggestions: cache.nonArrayData?.searchSuggestions ? {
-          recentSearches: cache.nonArrayData.searchSuggestions.recentSearches?.length || 0,
-          categories: cache.nonArrayData.searchSuggestions.categories?.length || 0,
-        } : null,
-        trendingSearches: cache.nonArrayData?.trendingSearches ? {
-          trendingSearches: cache.nonArrayData.trendingSearches.trendingSearches?.length || 0,
-          topCategories: cache.nonArrayData.trendingSearches.topCategories?.length || 0,
-        } : null,
-      });
-    }
-  }, [cache]);
-
-  const contextValue = useMemo(() => ({ cache, updateCache, isDataStale }), [cache, updateCache, isDataStale]);
+  const contextValue = useMemo(() => ({ 
+    cache, 
+    updateCache, 
+    isDataStale,
+    // Add loading states
+    isLoading: isFetchingRef.current
+  }), [cache, updateCache, isDataStale]);
 
   return <DataContext.Provider value={contextValue}>{children}</DataContext.Provider>;
 };
@@ -314,17 +363,31 @@ class ErrorBoundary extends React.Component {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
   render() {
     if (this.state.hasError) {
       return (
-        <div className="text-center py-8 text-red-500">
-          <p>Something went wrong: {this.state.error?.message || 'Unknown error'}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg"
-          >
-            Refresh
-          </button>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-center">
+            <div className="text-red-500 mb-4">
+              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h2>
+            <p className="text-gray-600 mb-4 text-sm">
+              {this.state.error?.message || 'An unexpected error occurred'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
         </div>
       );
     }
@@ -340,10 +403,13 @@ const userRoutes = [
 
 const Layout = React.memo(({ children }) => {
   const { pathname } = useLocation();
-  const showNavbar = useMemo(() => userRoutes.some(path => matchPath({ path, end: path === '/' }, pathname)), [pathname]);
+  const showNavbar = useMemo(() => 
+    userRoutes.some(path => matchPath({ path, end: path === '/' }, pathname)), 
+    [pathname]
+  );
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <>
       {children}
       {showNavbar && (
         <>
@@ -351,12 +417,13 @@ const Layout = React.memo(({ children }) => {
           <Bottom />
         </>
       )}
-    </div>
+    </>
   );
 });
 
+// Optimized route configuration
 const routes = [
-  { path: '/', element: <Home />, layout: true },
+  { path: '/', element: <Home />, layout: true, preload: true },
   { path: '/cart', element: <Cart />, layout: true },
   { path: '/wishlist', element: <WishlistPage />, layout: true },
   { path: '/dashboard', element: <UserDashboard />, layout: true },
@@ -378,19 +445,22 @@ const routes = [
   { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
 ];
 
+// Optimized loading component
+const LoadingSpinner = React.memo(() => (
+  <div className="flex justify-center items-center h-screen bg-gray-50">
+    <div className="flex flex-col items-center">
+      <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+      <p className="text-gray-600 text-sm">Loading...</p>
+    </div>
+  </div>
+));
+
 function App() {
   return (
     <Router>
       <ErrorBoundary>
         <DataProvider>
-          <Suspense
-            fallback={
-              <div className="flex justify-center items-center h-screen">
-                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <p className="ml-2 text-gray-500">Loading...</p>
-              </div>
-            }
-          >
+          <Suspense fallback={<LoadingSpinner />}>
             <Routes>
               {routes.map(({ path, element, layout }) => (
                 <Route

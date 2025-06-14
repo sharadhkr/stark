@@ -66,14 +66,14 @@ const AdminCategories = ({ categories = [], setCategories, loading }) => {
       const token = localStorage.getItem('adminToken');
       let response;
       if (editingCategory) {
-        response = await axios.put(`/api/admin/auth/categories/${editingCategory._id}`, formData, {
+        response = await axios.put(`/api/categories/${editingCategory._id}`, formData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setCategories(categories.map((cat) => (cat._id === editingCategory._id ? response.data.category : cat)));
         setFilteredCategories(filteredCategories.map((cat) => (cat._id === editingCategory._id ? response.data.category : cat)));
         toast.success('Category updated successfully');
       } else {
-        response = await axios.post('/api/admin/auth/categories', formData, {
+        response = await axios.post('/api/categories', formData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setCategories([...categories, response.data.category]);
@@ -105,7 +105,7 @@ const AdminCategories = ({ categories = [], setCategories, loading }) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
     try {
       const token = localStorage.getItem('adminToken');
-      await axios.delete(`/api/admin/auth/categories/${id}`, {
+      await axios.delete(`/api/categories/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCategories(categories.filter((cat) => cat._id !== id));
@@ -130,7 +130,7 @@ const AdminCategories = ({ categories = [], setCategories, loading }) => {
     if (!window.confirm(`Are you sure you want to delete ${selectedCategories.length} categories?`)) return;
     try {
       const token = localStorage.getItem('adminToken');
-      await axios.delete('/api/admin/auth/categories/bulk', {
+      await axios.delete('/api/categories/bulk', {
         headers: { Authorization: `Bearer ${token}` },
         data: { categoryIds: selectedCategories },
       });
@@ -156,7 +156,7 @@ const AdminCategories = ({ categories = [], setCategories, loading }) => {
     }
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await axios.get(`/api/admin/auth/categories/search?name=${encodeURIComponent(searchQuery)}`, {
+      const response = await axios.get(`/api/ categories/search?name=${encodeURIComponent(searchQuery)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFilteredCategories(response.data.categories || []);
