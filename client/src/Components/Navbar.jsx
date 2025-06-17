@@ -10,6 +10,8 @@ const BottomNavbar = () => {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [ripples, setRipples] = useState({});
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
 
   const tabs = useMemo(() => [
     { 
@@ -50,6 +52,26 @@ const BottomNavbar = () => {
     const currentIndex = tabs.findIndex((tab) => tab.path === location.pathname);
     setActiveIndex(isCategoryModalOpen ? 2 : currentIndex !== -1 ? currentIndex : -1);
   }, [location.pathname, isCategoryModalOpen, tabs]);
+
+  // Handle scroll to toggle navbar visibility
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      if (currentScrollY > lastScrollY && currentScrollY > 50) {
+        // Scrolling down and past a small threshold
+        setIsVisible(false);
+      } else if (currentScrollY < lastScrollY || currentScrollY <= 50) {
+        // Scrolling up or near the top
+        setIsVisible(true);
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   // Create ripple effect
   const createRipple = useCallback((index) => {
@@ -92,7 +114,13 @@ const BottomNavbar = () => {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 w-full flex justify-center z-40">
+      <div 
+        className={`
+          fixed bottom-0 left-0 w-full flex justify-center z-40 
+          transition-transform duration-300 ease-in-out
+          ${isVisible ? 'translate-y-0' : 'translate-y-full'}
+        `}
+      >
         <div className="relative w-full max-w-md bg-gray-100/90 backdrop-blur-xl rounded-t-2xl shadow-[0px_-10px_32px_rgba(0,0,0,0.12)] border border-gray-200/50 overflow-hidden">
           <div className="relative flex justify-around items-center py-2 px-2">
             {tabs.map((tab, index) => {
