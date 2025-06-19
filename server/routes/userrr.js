@@ -225,41 +225,41 @@ router.get('/profile', userLoggedin, async (req, res) => {
   }
 });
 
-router.put('/profile', userLoggedin, uploadSingle, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+// router.put('/profile', userLoggedin, uploadSingle, async (req, res) => {
+//   try {
+//     const user = await User.findById(req.user.id);
+//     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { firstName, email } = req.body;
+//     const { firstName, email } = req.body;
 
-    if (firstName) user.firstName = firstName.trim();
-    if (email) user.email = email.trim().toLowerCase();
+//     if (firstName) user.firstName = firstName.trim();
+//     if (email) user.email = email.trim().toLowerCase();
 
-    if (req.file) {
-      const uploadResult = await uploadToCloudinary(req.file.buffer, {
-        folder: 'user_profiles',
-        resource_type: 'image',
-        timeout: 10000,
-      });
-      user.profilePicture = uploadResult.url;
-    }
+//     if (req.file) {
+//       const uploadResult = await uploadToCloudinary(req.file.buffer, {
+//         folder: 'user_profiles',
+//         resource_type: 'image',
+//         timeout: 10000,
+//       });
+//       user.profilePicture = uploadResult.url;
+//     }
 
-    await user.save({ validateBeforeSave: true });
-    res.status(200).json({
-      message: 'Profile updated successfully',
-      user: {
-        id: user._id,
-        phoneNumber: user.phoneNumber,
-        firstName: user.firstName,
-        email: user.email,
-        profilePicture: user.profilePicture,
-      },
-    });
-  } catch (error) {
-    console.error('Update Profile Error:', error);
-    res.status(500).json({ message: 'Failed to update profile', error: error.message });
-  }
-});
+//     await user.save({ validateBeforeSave: true });
+//     res.status(200).json({
+//       message: 'Profile updated successfully',
+//       user: {
+//         id: user._id,
+//         phoneNumber: user.phoneNumber,
+//         firstName: user.firstName,
+//         email: user.email,
+//         profilePicture: user.profilePicture,
+//       },
+//     });
+//   } catch (error) {
+//     console.error('Update Profile Error:', error);
+//     res.status(500).json({ message: 'Failed to update profile', error: error.message });
+//   }
+// });
 
 
 router.post('/cart/add', userLoggedin, async (req, res) => {

@@ -1,85 +1,93 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
-import { motion } from 'framer-motion';
-import { FaSignOutAlt, FaBox, FaUserEdit, FaCamera, FaTrash, FaPlus, FaMapMarkerAlt, FaFilter } from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  FaUser,
+  FaSignOutAlt,
+  FaShoppingBag,
+  FaHeart,
+  FaShoppingCart,
+  FaQuestionCircle,
+  FaCog,
+  FaMapMarkerAlt,
+  FaCamera,
+  FaChevronDown,
+  FaTimes,
+  FaPlus,
+  FaTrash,
+  FaList,
+} from 'react-icons/fa';
 import { isUserLoggedIn, userLogout } from '../utils/authUtils';
 import axios from '../useraxios';
 import agroLogo from '../assets/logo.png';
 import agrotade from '../assets/logoname.png';
+import ProductCardSkeleton from '../Components/ProductCardSkeleton';
+import { MdArrowBack } from 'react-icons/md';
 
 // Animation Variants
-const dashboardVariants = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-};
-
-const sectionVariants = {
-  initial: { opacity: 0, scale: 0.9 },
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.4 } },
+const fadeIn = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } } };
+const slideIn = {
+  initial: { x: '100%', opacity: 0 },
+  animate: { x: 0, opacity: 1, transition: { duration: 0.4, ease: 'easeOut' } },
+  exit: { x: '100%', opacity: 0, transition: { duration: 0.3, ease: 'easeIn' } },
 };
 
 const UserDashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('orders');
-  const [orders, setOrders] = useState([]);
-  const [filteredOrders, setFilteredOrders] = useState([]);
-  const [orderFilter, setOrderFilter] = useState('all');
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [profile, setProfile] = useState({
     firstName: '',
     lastName: '',
     email: '',
+    phoneNumber: '',
     profilePicture: '',
-    addresses: [],
-    preferences: { notifications: true },
+    addresses: [{ street: '', city: '', state: '', postalCode: '', country: 'India', isDefault: false }],
+    preferences: { notifications: true, preferredCategories: [] },
   });
-  const [newAddress, setNewAddress] = useState({
-    street: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: 'India',
-  });
-  const [showNewAddressForm, setShowNewAddressForm] = useState(false);
-  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
+  const [orderFilter, setOrderFilter] = useState('all');
+  const [showEditProfilePanel, setShowEditProfilePanel] = useState(false);
+  const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [profilePicturePreview, setProfilePicturePreview] = useState(null);
 
   useEffect(() => {
     const checkAuth = async () => {
       const loggedIn = isUserLoggedIn();
       setIsAuthenticated(loggedIn);
-      if (!loggedIn) {
-        toast.error('Please log in to access the dashboard.');
-        navigate('/login', { replace: true });
-      } else {
+      if (loggedIn) {
         await fetchUserData();
       }
     };
     checkAuth();
-  }, [navigate]);
+  }, []);
 
   const fetchUserData = useCallback(async (retryCount = 0) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const [profileRes, ordersRes] = await Promise.all([
-        axios.get('/api/user/auth/profile', { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get('/api/user/auth/orders', { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get('/api/user/profile', { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get('/api/user/orders', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const user = profileRes.data.user;
       const newProfile = {
         firstName: user.firstName || '',
         lastName: user.lastName || '',
         email: user.email || '',
+        phoneNumber: user.phoneNumber || '',
         profilePicture: user.profilePicture || '',
-        addresses: user.addresses || [],
-        preferences: user.preferences || { notifications: true },
+        addresses: user.addresses && user.addresses.length
+          ? user.addresses
+          : [{ street: '', city: '', state: '', postalCode: '', country: 'India', isDefault: true }],
+        preferences: user.preferences || { notifications: true, preferredCategories: [] },
       };
       setProfile(newProfile);
       setProfilePicturePreview(newProfile.profilePicture || null);
-      const fetchedOrders = ordersRes.data.orders || [];
+      const fetchedOrders = (ordersRes.data.orders || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setOrders(fetchedOrders);
       handleOrderFilter(orderFilter, fetchedOrders);
     } catch (error) {
@@ -89,25 +97,47 @@ const UserDashboard = () => {
           return fetchUserData(retryCount + 1);
         }
         userLogout(navigate);
-        toast.error('Session expired. Please log in again.');
+        toast.error('Session expired. Please log in again.', {
+          style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+        });
       } else {
-        toast.error(error.response?.data?.message || 'Failed to load dashboard data.');
+        toast.error(error.response?.data?.message || 'Failed to load data.', {
+          style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+        });
       }
     } finally {
       setLoading(false);
     }
-  }, [orderFilter]);
+  }, [orderFilter, navigate]);
 
   const handleLogout = () => {
     userLogout(navigate);
-    toast.success('Logged out successfully!');
+    toast.success('Logged out successfully!', {
+      style: { background: '#f9fafb', color: '#111827', borderRadius: '8px', padding: '12px' },
+    });
+  };
+
+  const validateAddress = (address) => {
+    return address.street && address.city && address.state && address.postalCode && address.country;
   };
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     if (!profile.email.match(/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/)) {
-      toast.error('Please enter a valid email.');
+      toast.error('Please enter a valid email.', {
+        style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+      });
       return;
+    }
+
+    // Validate addresses
+    for (const addr of profile.addresses) {
+      if (!validateAddress(addr)) {
+        toast.error('All address fields are required.', {
+          style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+        });
+        return;
+      }
     }
 
     setLoading(true);
@@ -115,14 +145,15 @@ const UserDashboard = () => {
     formData.append('firstName', profile.firstName);
     formData.append('lastName', profile.lastName);
     formData.append('email', profile.email);
+    formData.append('addresses', JSON.stringify(profile.addresses));
     formData.append('preferences', JSON.stringify(profile.preferences));
     if (profilePicturePreview instanceof File) {
-      formData.append('file', profilePicturePreview);
+      formData.append('profilePicture', profilePicturePreview);
     }
 
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.put('/api/user/auth/profile', formData, {
+      const res = await axios.put('/api/user/profile', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
@@ -130,9 +161,14 @@ const UserDashboard = () => {
       });
       setProfile(prev => ({ ...prev, ...res.data.user }));
       setProfilePicturePreview(res.data.user.profilePicture || null);
-      toast.success('Profile updated successfully!');
+      setShowEditProfilePanel(false);
+      toast.success('Profile updated successfully!', {
+        style: { background: '#f9fafb', color: '#111827', borderRadius: '8px', padding: '12px' },
+      });
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update profile.');
+      toast.error(error.response?.data?.message || 'Failed to update profile.', {
+        style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+      });
     } finally {
       setLoading(false);
     }
@@ -145,32 +181,11 @@ const UserDashboard = () => {
     }
   };
 
-  const handleAddNewAddress = async () => {
-    if (!newAddress.street || !newAddress.city || !newAddress.state || !newAddress.postalCode) {
-      toast.error('Please fill in all address fields.');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      const res = await axios.post('/api/user/auth/add-address', newAddress, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setProfile(prev => ({
-        ...prev,
-        addresses: [...prev.addresses, res.data.address],
-      }));
-      setNewAddress({ street: '', city: '', state: '', postalCode: '', country: 'India' });
-      setShowNewAddressForm(false);
-      toast.success('Address added successfully!');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to add address');
-    }
-  };
-
-  const handleAddCurrentLocation = () => {
+  const handleAddCurrentLocation = (index) => {
     if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by your browser.');
+      toast.error('Geolocation is not supported by your browser.', {
+        style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+      });
       return;
     }
 
@@ -179,7 +194,7 @@ const UserDashboard = () => {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          const apiKey = process.env.REACT_APP_OPENCAGE_API_KEY || 'YOUR_OPENCAGE_API_KEY';
+          const apiKey = import.meta.env.VITE_OPENCAGE_API_KEY || 'YOUR_OPENCAGE_API_KEY';
           const res = await axios.get(`https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=${apiKey}`);
           const { components } = res.data.results[0];
           const newAddr = {
@@ -188,387 +203,587 @@ const UserDashboard = () => {
             state: components.state || 'Unknown State',
             postalCode: components.postcode || '000000',
             country: components.country || 'India',
+            isDefault: profile.addresses.length === 0,
           };
-          setNewAddress(newAddr);
-          setUseCurrentLocation(false);
-          toast.success('Location fetched successfully! Please review and save.');
+          const newAddresses = [...profile.addresses];
+          newAddresses[index] = newAddr;
+          setProfile({ ...profile, addresses: newAddresses });
+          toast.success('Location fetched successfully! Please save profile.', {
+            style: { background: '#f9fafb', color: '#111827', borderRadius: '8px', padding: '12px' },
+          });
         } catch (error) {
-          toast.error('Failed to fetch location data. Please enter manually.');
+          toast.error('Failed to fetch location data. Please enter manually.', {
+            style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+          });
         } finally {
           setLoading(false);
         }
       },
       () => {
         setLoading(false);
-        toast.error('Unable to retrieve your location. Please allow location access.');
+        toast.error('Unable to retrieve your location. Please allow location access.', {
+          style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+        });
       }
     );
   };
 
-  const handleRemoveAddress = async (addressId) => {
-    try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`/api/user/auth/remove-address/${addressId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setProfile(prev => ({
-        ...prev,
-        addresses: prev.addresses.filter(addr => addr._id !== addressId),
-      }));
-      toast.success('Address removed successfully!');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to remove address');
-    }
-  };
-
   const handleOrderFilter = (filter, orderList = orders) => {
     setOrderFilter(filter);
-    if (filter === 'all') {
-      setFilteredOrders(orderList);
-    } else {
-      setFilteredOrders(orderList.filter(order => order.status.toLowerCase() === filter));
-    }
+    const filtered = filter === 'all'
+      ? orderList
+      : orderList.filter(order => order.status.toLowerCase() === filter);
+    setFilteredOrders(filtered);
   };
 
-  const renderOrderItem = (order) => {
+  const renderOrderCard = (order) => {
     const total = order.total || order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const statusColor = order.status.toLowerCase() === 'pending' ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600';
     return (
       <motion.div
-        key={order._id} // Use _id as React key
+        key={order._id}
         whileHover={{ scale: 1.02 }}
-        className="p-4 bg-blue-50 rounded-3xl shadow-md flex items-center justify-between hover:shadow-lg transition-shadow duration-300 cursor-pointer"
-        onClick={() => navigate(`/order/${order.orderId}`)} // Navigate with orderId
+        className="bg-white rounded-2xl shadow-sm p-6 flex items-center gap-4 hover:shadow-md transition-all duration-300 cursor-pointer"
+        onClick={() => navigate(`/order/${order.orderId}`)}
       >
-        <div className="flex items-center gap-4">
-          <img
-            src={agroLogo} // Placeholder since items don’t include images
-            alt={order.items[0]?.name || 'Product'}
-            className="w-16 h-16 object-cover rounded-md"
-            onError={(e) => (e.target.src = agroLogo)}
-          />
-          <div>
-            <p className="text-lg font-semibold text-gray-800">
-              {order.items[0]?.name || 'Unknown Product'}
-            </p>
-            {order?.orderId ? (
-              <p className="text-sm text-gray-500">
-                Order ID: {order.orderId.slice(0, 15) + "###"}
-              </p>
-            ) : null}
-
-            <p className="text-sm text-gray-600">Total: ₹{total.toFixed(2)}</p>
-            <p className="text-sm text-blue-600 font-medium capitalize">Status: {order.status}</p>
-          </div>
+        <img
+          src={order.items[0]?.images?.[0] || agroLogo}
+          alt={order.items[0]?.name || 'Product'}
+          className="w-20 h-20 object-cover rounded-lg border border-gray-100"
+          onError={(e) => (e.target.src = agroLogo)}
+        />
+        <div className="flex-1">
+          <p className="text-lg font-semibold text-gray-900">{order.items[0]?.name || 'Unknown Product'}</p>
+          <p className="text-sm text-gray-500">Order ID: {order.orderId.slice(0, 10)}...</p>
+          <p className="text-sm text-gray-500">Items: {order.items.length}</p>
+          <p className="text-sm text-gray-600">Total: ₹{total.toFixed(2)}</p>
+          <p className="text-sm text-gray-500">Placed: {new Date(order.createdAt).toLocaleDateString()}</p>
+          <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${statusColor}`}>
+            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+          </span>
         </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/order/${order.orderId}`);
+          }}
+          className="text-pink-600 hover:text-pink-700 text-sm font-medium"
+        >
+          View Details
+        </button>
       </motion.div>
     );
   };
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'orders':
-        return (
-          <motion.div variants={sectionVariants} initial="initial" animate="animate" className="space-y-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                <div className="flex p-3 bg-blue-50 rounded-full shadow-inner">
-                  <FaBox className="text-lg text-gray-500" />
-                </div>
-                <span className="opacity-70 text-sm">YOUR ORDERS</span>
-              </h2>
-              <div className="flex items-center gap-3">
-                <FaFilter className="text-gray-500" />
-                <select
-                  value={orderFilter}
-                  onChange={(e) => handleOrderFilter(e.target.value)}
-                  className="bg-blue-50 rounded-xl px-2 py-1 text-sm focus:ring-2 focus:ring-blue-400"
-                >
-                  <option value="all">All</option>
-                  <option value="pending">Pending</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-            </div>
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-24 bg-blue-50 rounded-3xl animate-pulse" />
-                ))}
-              </div>
-            ) : filteredOrders.length === 0 ? (
-              <p className="text-gray-600 text-center py-10">No orders found.</p>
-            ) : (
-              <div className="space-y-4">{filteredOrders.map(renderOrderItem)}</div>
-            )}
-          </motion.div>
-        );
-      case 'profile':
-        return (
-          <motion.div variants={sectionVariants} initial="initial" animate="animate" className="space-y-6">
-            <form onSubmit={handleProfileUpdate} className="space-y-6 bg-blue-50 p-6 rounded-3xl shadow-lg">
-              <h2 className="text-2xl font-bold text-gray-800 flex items-center justify-center gap-4">
-                <div className="flex items-center justify-center p-2 bg-blue-100 rounded-full shadow-inner">
-                  <FaUserEdit />
-                </div>
-                <span className="opacity-70">EDIT PROFILE</span>
-              </h2>
-              <div className="flex justify-center mb-6">
-                <div className="relative">
-                  <img
-                    src={
-                      profilePicturePreview instanceof File
-                        ? URL.createObjectURL(profilePicturePreview)
-                        : profile.profilePicture || agroLogo
-                    }
-                    alt="Profile"
-                    className="w-32 h-32 rounded-full object-cover shadow-md"
-                  />
-                  <label
-                    htmlFor="profilePictureInput"
-                    className="absolute bottom-2 right-2 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors duration-200 shadow-sm"
-                  >
-                    <FaCamera />
-                    <input
-                      id="profilePictureInput"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleProfilePictureChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">First Name</label>
-                  <input
-                    type="text"
-                    value={profile.firstName}
-                    onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
-                    className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                    disabled={loading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Last Name</label>
-                  <input
-                    type="text"
-                    value={profile.lastName}
-                    onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
-                    className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                  disabled={loading}
-                  required
-                />
-              </div>
-              <div className="border-t pt-6">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Your Addresses</h4>
-                {profile.addresses.length > 0 ? (
-                  <ul className="space-y-3">
-                    {profile.addresses.map((addr) => (
-                      <li
-                        key={addr._id}
-                        className="p-4 bg-white rounded-3xl flex justify-between items-center shadow-md hover:bg-gray-50 transition-colors duration-200"
-                      >
-                        <p className="text-gray-700 text-sm">{`${addr.street}, ${addr.city}, ${addr.state}, ${addr.postalCode}, ${addr.country}`}</p>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveAddress(addr._id);
-                          }}
-                          className="text-red-500 hover:text-red-700 transition-colors duration-200"
-                        >
-                          <FaTrash size={16} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-600 text-center py-4">No addresses found.</p>
-                )}
-                <div className="mt-6 flex flex-col items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowNewAddressForm(!showNewAddressForm);
-                      setUseCurrentLocation(false);
-                    }}
-                    className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl shadow-md transition-colors duration-200"
-                  >
-                    <FaPlus /> {showNewAddressForm && !useCurrentLocation ? 'Cancel' : 'Add Manual Address'}
-                  </button>
-                  <div className="flex items-center gap-2 w-full justify-center">
-                    <span className="w-[20%] h-[1px] bg-gray-400"></span>
-                    <span className="text-gray-500 text-sm">Or</span>
-                    <span className="w-[20%] h-[1px] bg-gray-400"></span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowNewAddressForm(true);
-                      setUseCurrentLocation(true);
-                      handleAddCurrentLocation();
-                    }}
-                    className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl shadow-md transition-colors duration-200"
-                  >
-                    <FaMapMarkerAlt /> Use Current Location
-                  </button>
-                </div>
-                {showNewAddressForm && (
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-xl shadow-md">
-                    <input
-                      type="text"
-                      placeholder="Street"
-                      value={newAddress.street}
-                      onChange={(e) => setNewAddress({ ...newAddress, street: e.target.value })}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                      disabled={useCurrentLocation && loading}
-                    />
-                    <input
-                      type="text"
-                      placeholder="City"
-                      value={newAddress.city}
-                      onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                      disabled={useCurrentLocation && loading}
-                    />
-                    <input
-                      type="text"
-                      placeholder="State"
-                      value={newAddress.state}
-                      onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                      disabled={useCurrentLocation && loading}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Postal Code"
-                      value={newAddress.postalCode}
-                      onChange={(e) => setNewAddress({ ...newAddress, postalCode: e.target.value })}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                      disabled={useCurrentLocation && loading}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddNewAddress}
-                      className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-medium transition-colors duration-200 shadow-sm col-span-full"
-                      disabled={loading}
-                    >
-                      {loading && useCurrentLocation ? 'Fetching...' : 'Save Address'}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="border-t pt-6">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Preferences</h4>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={profile.preferences.notifications}
-                    onChange={(e) => setProfile({
-                      ...profile,
-                      preferences: { ...profile.preferences, notifications: e.target.checked },
-                    })}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    disabled={loading}
-                  />
-                  Receive Notifications
-                </label>
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`w-full py-3 rounded-xl text-white font-medium transition-all duration-200 shadow-md ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
-                  }`}
-              >
-                {loading ? 'Saving...' : 'Save Profile'}
-              </button>
-            </form>
-          </motion.div>
-        );
-      default:
-        return null;
+  const addNewAddress = () => {
+    setProfile({
+      ...profile,
+      addresses: [
+        ...profile.addresses,
+        { street: '', city: '', state: '', postalCode: '', country: 'India', isDefault: false },
+      ],
+    });
+  };
+
+  const removeAddress = (index) => {
+    if (profile.addresses.length === 1) {
+      toast.error('At least one address is required.', {
+        style: { background: '#ef4444', color: '#ffffff', borderRadius: '8px', padding: '12px' },
+      });
+      return;
     }
+    const newAddresses = profile.addresses.filter((_, i) => i !== index);
+    if (!newAddresses.some(addr => addr.isDefault) && newAddresses.length > 0) {
+      newAddresses[0].isDefault = true;
+    }
+    setProfile({ ...profile, addresses: newAddresses });
   };
 
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"
+          className="w-12 h-12 border-4 border-pink-600 border-t-transparent rounded-full"
         />
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-blue-200 px-4 pt-5 pb-10">
-      <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-      <motion.header
-        variants={dashboardVariants}
-        initial="initial"
-        animate="animate"
-        className="w-full max-w-7xl mx-auto flex items-center justify-between pt-5 px-4 sm:px-6"
-      >
-        <div className="flex items-center gap-3">
-          <img
-            className="w-14 h-14 object-contain shadow-md hover:scale-110 transition-transform duration-300"
-            src={agroLogo}
-            alt="AgroTrade Logo"
-            onError={(e) => (e.target.style.display = 'none')}
-          />
-          <div className="hover:scale-110 transition-transform duration-300">
-            <img className="w-[80%]" src={agrotade} alt="AgroTrade" />
-          </div>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200 shadow-md bg-blue-50 px-4 py-2 rounded-xl"
-        >
-          <FaSignOutAlt /> Logout
-        </button>
-      </motion.header>
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: { background: '#f9fafb', color: '#111827', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '12px' },
+          success: { style: { background: '#f9fafb', color: '#111827' } },
+          error: { style: { background: '#ef4444', color: '#ffffff' } },
+        }}
+      />
+      <header className="bg-white shadow-sm p-4 sticky top-0 z-20">
+              <div className="max-w-7xl mx-auto flex gap-2 items-center">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => navigate('/')}
+                  className="text-gray-600"
+                >
+                  <MdArrowBack size={24} />
+                </motion.button>
+                <h1 className="text-xl font-bold text-gray-800">Profile</h1>
+                <div className="w-10" />
+              </div>
+            </header>
 
-      <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6">
-        <motion.div
-          variants={dashboardVariants}
-          initial="initial"
-          animate="animate"
-          className="bg-blue-50 rounded-3xl shadow-lg mb-6 px-3 py-2 flex justify-center gap-4"
-        >
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 ${activeTab === 'orders' ? 'bg-blue-500 text-white shadow-md' : 'text-blue-600 hover:bg-blue-100'
-              }`}
-          >
-            <FaBox /> Orders
-          </button>
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 ${activeTab === 'profile' ? 'bg-blue-500 text-white shadow-md' : 'text-blue-600 hover:bg-blue-100'
-              }`}
-          >
-            <FaUserEdit /> Profile
-          </button>
+      <main className="max-w-7xl mx-auto py-12 px-6">
+        <motion.div variants={fadeIn} initial="initial" animate="animate" className="space-y-8">
+          {isAuthenticated ? (
+            <>
+              <div className="bg-white rounded-2xl shadow-sm p-8 flex items-center gap-6">
+                <motion.img
+                  src={profile.profilePicture || agroLogo}
+                  alt="Profile"
+                  className="w-24 h-24 rounded-full object-cover border-2 border-pink-100 shadow-sm"
+                  onError={(e) => (e.target.src = agroLogo)}
+                  whileHover={{ scale: 1.05 }}
+                />
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{`${profile.firstName} ${profile.lastName}`.trim() || 'User'}</p>
+                  <p className="text-sm text-gray-500 mt-1">{profile.email}</p>
+                  <p className="text-sm text-gray-500">{profile.phoneNumber || 'No phone number'}</p>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm p-8">
+                <p className="text-lg font-semibold text-gray-900 flex items-center gap-3">
+                  <FaMapMarkerAlt className="w-5 h-5 text-pink-600" /> Addresses
+                </p>
+                {profile.addresses.length ? (
+                  <div className="mt-4 space-y-3">
+                    {profile.addresses.map((addr, index) => (
+                      <p key={index} className="text-sm text-gray-600">
+                        {`${addr.street}, ${addr.city}, ${addr.state}, ${addr.postalCode}, ${addr.country}`}
+                        {addr.isDefault && <span className="ml-2 inline-block px-2 py-1 text-xs font-medium text-pink-600 bg-pink-50 rounded-full">Default</span>}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 mt-2">No addresses provided</p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[
+                  { icon: FaShoppingBag, label: 'Orders', action: () => setShowOrdersModal(true) },
+                  { icon: FaHeart, label: 'Wishlist', action: () => navigate('/wishlist') },
+                  { icon: FaShoppingCart, label: 'Cart', action: () => navigate('/cart') },
+                  { icon: FaQuestionCircle, label: 'Help Center', action: () => navigate('/help-center') },
+                  { icon: FaUser, label: 'Manage Account', action: () => setShowEditProfilePanel(true) },
+                ].map(({ icon: Icon, label, action }, index) => (
+                  <motion.button
+                    key={index}
+                    whileHover={{ scale: 1.05, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={action}
+                    className="bg-white rounded-xl shadow-sm p-6 flex items-center gap-4 text-gray-900 hover:shadow-md transition-all duration-300"
+                  >
+                    <Icon className="w-6 h-6 text-pink-600" />
+                    <span className="text-base font-medium">{label}</span>
+                  </motion.button>
+                ))}
+                <div className="relative">
+                  <motion.button
+                    whileHover={{ scale: 1.05, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                    className="bg-white rounded-xl shadow-sm p-6 flex items-center gap-4 text-gray-900 hover:shadow-md transition-all duration-300 w-full"
+                  >
+                    <FaCog className="w-6 h-6 text-pink-600" />
+                    <span className="text-base font-medium">Settings</span>
+                    <FaChevronDown className={`w-4 h-4 ml-auto text-gray-500 transition-transform ${showSettingsMenu ? 'rotate-180' : ''}`} />
+                  </motion.button>
+                  {showSettingsMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg w-full z-10 border border-gray-100"
+                    >
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-t-xl transition-all duration-200"
+                      >
+                        Logout
+                      </button>
+                      <button
+                        onClick={() => navigate('/add-account')}
+                        className="w-full text-left px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-b-xl transition-all duration-200"
+                      >
+                        Add Another Account
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-20 bg-white rounded-2xl shadow-sm">
+              <p className="text-gray-900 text-xl font-semibold mb-6">Please log in to access your dashboard</p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => navigate('/login')}
+                className="bg-pink-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-pink-700 transition-all duration-300"
+              >
+                Login
+              </motion.button>
+            </div>
+          )}
+          <div className="bg-white rounded-2xl shadow-sm p-8 mt-8">
+            {/* <p className="text-lg font-semibold text-gray-900 mb-4">More Information </p> */}
+            <div className="flex flex-col items-start gap-6 text-sm text-gray-600">
+              {[
+                { label: ' FAQs', path: '/faq' },
+                { label: ' About Us', path: '/about' },
+                { label: ' Terms of Use', path: '/terms' },
+                { label: ' Privacy Policy', path: '/privacy' },
+              ].map(({ label, path }, index) => (
+                <button
+                  key={index}
+                  onClick={() => navigate(path)}
+                  className="hover:text-pink-600 transition-colors duration-200"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </motion.div>
 
-        <div className="min-h-[400px]">{renderTabContent()}</div>
+        {/* Orders Modal */}
+        <AnimatePresence>
+          {showOrdersModal && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"
+                onClick={() => setShowOrdersModal(false)}
+              />
+              <motion.div
+                variants={slideIn}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="fixed top-0 right-0 h-full bg-white p-8 shadow-2xl max-w-md w-full z-40 overflow-y-auto"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <FaShoppingBag className="w-6 h-6 text-pink-600" /> My Orders
+                  </h2>
+                  <button
+                    onClick={() => setShowOrdersModal(false)}
+                    className="text-gray-600 hover:text-gray-800"
+                  >
+                    <FaTimes className="w-6 h-6" />
+                  </button>
+                </div>
+                <div className="mb-6">
+                  <select
+                    value={orderFilter}
+                    onChange={(e) => handleOrderFilter(e.target.value)}
+                    className="w-full bg-gray-50 text-gray-900 rounded-lg px-4 py-2 text-sm border border-gray-200 focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                  >
+                    <option value="all">All Orders</option>
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                {loading ? (
+                  <div className="space-y-6">
+                    {Array(3).fill().map((_, index) => (
+                      <ProductCardSkeleton key={index} />
+                    ))}
+                  </div>
+                ) : filteredOrders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FaShoppingBag className="mx-auto w-16 h-16 text-gray-300" />
+                    <p className="text-gray-600 mt-4 text-base">No orders found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">{filteredOrders.map(renderOrderCard)}</div>
+                )}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowOrdersModal(false)}
+                  className="mt-8 w-full bg-pink-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-pink-700 transition-all duration-300"
+                >
+                  Close
+                </motion.button>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Profile Panel */}
+        <AnimatePresence>
+          {showEditProfilePanel && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"
+                onClick={() => setShowEditProfilePanel(false)}
+              />
+              <motion.div
+                variants={slideIn}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="fixed top-0 right-0 h-full bg-white p-8 shadow-2xl max-w-md w-full z-40 overflow-y-auto"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <FaUser className="w-6 h-6 text-pink-600" /> Edit Profile
+                  </h2>
+                  <button
+                    onClick={() => setShowEditProfilePanel(false)}
+                    className="text-gray-600 hover:text-gray-800"
+                  >
+                    <FaTimes className="w-6 h-6" />
+                  </button>
+                </div>
+                <form onSubmit={handleProfileUpdate} className="space-y-6">
+                  <div className="flex justify-center mb-6">
+                    <div className="relative">
+                      <motion.img
+                        src={
+                          profilePicturePreview instanceof File
+                            ? URL.createObjectURL(profilePicturePreview)
+                            : profile.profilePicture || agroLogo
+                        }
+                        alt="Profile"
+                        className="w-32 h-32 rounded-full object-cover border-2 border-pink-100 shadow-sm"
+                        onError={(e) => (e.target.src = agroLogo)}
+                        whileHover={{ scale: 1.05 }}
+                      />
+                      <label
+                        htmlFor="profilePicture"
+                        className="absolute bottom-0 right-0 bg-pink-600 text-white p-3 rounded-full cursor-pointer hover:bg-pink-700 transition-all duration-200"
+                      >
+                        <FaCamera className="w-5 h-5" />
+                        <input
+                          id="profilePicture"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleProfilePictureChange}
+                          className="hidden"
+                          disabled={loading}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">First Name</label>
+                      <input
+                        type="text"
+                        value={profile.firstName}
+                        onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Last Name</label>
+                      <input
+                        type="text"
+                        value={profile.lastName}
+                        onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      value={profile.email}
+                      onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-sm font-medium text-gray-700">Addresses</label>
+                    {profile.addresses.map((addr, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="space-y-4 bg-gray-50 p-4 rounded-lg"
+                      >
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <input
+                            type="text"
+                            placeholder="Street"
+                            value={addr.street}
+                            onChange={(e) => {
+                              const newAddresses = [...profile.addresses];
+                              newAddresses[index].street = e.target.value;
+                              setProfile({ ...profile, addresses: newAddresses });
+                            }}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            disabled={loading}
+                          />
+                          <input
+                            type="text"
+                            placeholder="City"
+                            value={addr.city}
+                            onChange={(e) => {
+                              const newAddresses = [...profile.addresses];
+                              newAddresses[index].city = e.target.value;
+                              setProfile({ ...profile, addresses: newAddresses });
+                            }}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            disabled={loading}
+                          />
+                          <input
+                            type="text"
+                            placeholder="State"
+                            value={addr.state}
+                            onChange={(e) => {
+                              const newAddresses = [...profile.addresses];
+                              newAddresses[index].state = e.target.value;
+                              setProfile({ ...profile, addresses: newAddresses });
+                            }}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            disabled={loading}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Postal Code"
+                            value={addr.postalCode}
+                            onChange={(e) => {
+                              const newAddresses = [...profile.addresses];
+                              newAddresses[index].postalCode = e.target.value;
+                              setProfile({ ...profile, addresses: newAddresses });
+                            }}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            disabled={loading}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Country"
+                            value={addr.country}
+                            onChange={(e) => {
+                              const newAddresses = [...profile.addresses];
+                              newAddresses[index].country = e.target.value;
+                              setProfile({ ...profile, addresses: newAddresses });
+                            }}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            disabled={loading}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={addr.isDefault}
+                              onChange={(e) => {
+                                const newAddresses = profile.addresses.map((a, i) => ({
+                                  ...a,
+                                  isDefault: i === index ? e.target.checked : false,
+                                }));
+                                setProfile({ ...profile, addresses: newAddresses });
+                              }}
+                              className="w-4 h-4 text-pink-600 border-gray-200 rounded focus:ring-pink-600 transition-all duration-200"
+                              disabled={loading}
+                            />
+                            Set as Default
+                          </label>
+                          {profile.addresses.length > 1 && (
+                            <motion.button
+                              type="button"
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => removeAddress(index)}
+                              className="text-red-600 hover:text-red-700 flex items-center gap-2 text-sm font-medium"
+                              disabled={loading}
+                            >
+                              <FaTrash className="w-4 h-4" /> Remove
+                            </motion.button>
+                          )}
+                        </div>
+                        <motion.button
+                          type="button"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleAddCurrentLocation(index)}
+                          className="text-pink-600 hover:text-pink-700 font-medium flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg transition-all duration-200 w-full"
+                          disabled={loading}
+                        >
+                          <FaMapMarkerAlt className="w-4 h-4" /> Use Current Location
+                        </motion.button>
+                      </motion.div>
+                    ))}
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={addNewAddress}
+                      className="w-full text-pink-600 hover:text-pink-700 font-medium flex items-center justify-center gap-2 bg-gray-100 px-4 py-2 rounded-lg transition-all duration-200"
+                      disabled={loading}
+                    >
+                      <FaPlus className="w-4 h-4" /> Add New Address
+                    </motion.button>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Preferences</label>
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={profile.preferences.notifications}
+                        onChange={(e) => setProfile({
+                          ...profile,
+                          preferences: { ...profile.preferences, notifications: e.target.checked },
+                        })}
+                        className="w-4 h-4 text-pink-600 border-gray-200 rounded focus:ring-pink-600 transition-all duration-200"
+                        disabled={loading}
+                      />
+                      Receive Notifications
+                    </label>
+                  </div>
+                  <div className="flex gap-4">
+                    <motion.button
+                      type="submit"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      disabled={loading}
+                      className={`flex-1 py-3 rounded-lg text-white font-medium transition-all duration-200 ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-pink-600 hover:bg-pink-700'}`}
+                    >
+                      {loading ? 'Saving...' : 'Save Profile'}
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowEditProfilePanel(false)}
+                      className="flex-1 py-3 rounded-lg text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 transition-all duration-200"
+                    >
+                      Cancel
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

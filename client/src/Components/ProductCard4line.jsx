@@ -1,14 +1,15 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IoHeartOutline, IoHeart, IoCartOutline } from 'react-icons/io5';
 import { FaCartPlus } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import axios from '../useraxios';
-import placeholderImage from '../assets/logo.png';
+import placeholderImage from '../assets/slogo.webp';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerClose, DrawerDescription } from '../../@/components/ui/drawer';
 import { Button } from '../../@/components/ui/button';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
+import debounce from 'lodash/debounce';
 
 // Animation Variants
 const cardVariants = {
@@ -22,69 +23,98 @@ const buttonVariants = {
 };
 
 const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddToCart = () => {} }) => {
-  const [isWishlisted, setIsWishlisted] = useState(wishlist.includes(product._id?.toString()));
-  const [isInCart, setIsInCart] = useState(cart.includes(product._id?.toString()));
+  const { _id, name = 'Product', description = 'Lorem ipsum dolor sit amet', price = 225, images = [], sizes = ['L', 'X', 'XL'], colors = [], material = 'Polyester', discount = 0, discountPercentage = 0, quantityAvailable = 10 } = product;
+
+  const [isWishlisted, setIsWishlisted] = useState(wishlist.includes(_id?.toString()));
+  const [isInCart, setIsInCart] = useState(cart.includes(_id?.toString()));
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [selectedSize, setSelectedSize] = useState('');
-  const [selectedColor, setSelectedColor] = useState('');
+  const [selectedSize, setSelectedSize] = useState(sizes.length > 0 ? sizes[0] : '');
+  const [selectedColor, setSelectedColor] = useState(colors.length > 0 ? colors[0] : '');
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
-  const [productDetails, setProductDetails] = useState(null);
-  const [fetchError, setFetchError] = useState(null);
   const navigate = useNavigate();
 
   if (!navigate) {
     console.error('useNavigate is not available. Ensure ProductCard is rendered within a BrowserRouter and react-router-dom is installed.');
   }
 
-  const { _id } = product;
+  // Memoized derived values
+  const discountedPrice = useMemo(() => 
+    discount > 0 ? price - discount : discountPercentage > 0 ? price * (1 - discountPercentage / 100) : price, 
+    [price, discount, discountPercentage]
+  );
 
-  // Fetch product details on mount
-  useEffect(() => {
-    const fetchProductDetails = async () => {
-      if (!_id) return;
-      setLoading(true);
-      try {
-        const response = await axios.get(`/api/user/auth/products/${_id}`);
-        setProductDetails(response.data.product);
-        console.log('Fetched product details:', response.data.product);
-      } catch (error) {
-        console.error('Error fetching product:', error.response?.data || error.message);
-        setFetchError(error.response?.data?.message || 'Failed to load product details');
-        toast.error('Failed to load product details');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProductDetails();
-  }, [_id]);
+  const displayImage = useMemo(() => 
+    Array.isArray(images) && images[0] ? images[0].replace(/^http:/, 'https:') : placeholderImage, 
+    [images]
+  );
 
-  // Update wishlist and cart status
-  useEffect(() => {
-    setIsWishlisted(wishlist.includes(_id?.toString()));
-    setIsInCart(cart.includes(_id?.toString()));
-  }, [wishlist, cart, _id]);
+  // Define handleAddToCart first to avoid TDZ
+  const handleAddToCart = useCallback(async () => {
+    if (!_id) {
+      toast.error('Invalid product ID');
+      return;
+    }
+    // Validate size/color only if required
+    if (sizes.length > 0 && !selectedSize) {
+      toast.error('Please select a size');
+      return;
+    }
+    if (colors.length > 0 && !selectedColor) {
+      toast.error('Please select a color');
+      return;
+    }
+    // Validate size is in product.sizes
+    if (sizes.length > 0 && !sizes.includes(selectedSize)) {
+      toast.error('Selected size is not available');
+      return;
+    }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Please login to add to cart');
+      navigate('/login');
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload = {
+        productId: _id,
+        quantity,
+        ...(sizes.length > 0 && { size: selectedSize }),
+        ...(colors.length > 0 && { color: selectedColor }),
+      };
+      console.log('Add to cart payload:', payload);
+      const response = await axios.post('/api/user/auth/cart/add', payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setIsInCart(true);
+      setIsDrawerOpen(false);
+      toast.success('Added to Cart', {
+        duration: 1500,
+        style: {
+          background: '#f3f4f6',
+          color: '#10b981',
+          borderRadius: '12px',
+          padding: '8px 16px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
+          fontSize: '14px',
+          fontWeight: '500',
+        },
+      });
+      onAddToCart(_id);
+      console.log('Cart response:', response.data);
+    } catch (error) {
+      console.error('Cart error:', error.response?.data || error.message);
+      const errorMessage = error.response?.data?.message || 'Failed to add to cart. Please try again.';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [_id, quantity, selectedSize, selectedColor, navigate, sizes, colors, onAddToCart]);
 
-  // Fallback to product props or defaults if productDetails is not loaded
-  const {
-    name = 'Product',
-    description = 'Lorem ipsum dolor sit amet',
-    price = 225,
-    images = [],
-    sizes = ['L', 'X', 'XL'],
-    colors = [],
-    material = 'Polyester',
-    discount = 0,
-    discountPercentage = 0,
-    quantityAvailable = 10,
-  } = productDetails || product;
-
-  const discountedPrice = discount > 0 ? price - discount : discountPercentage > 0 ? price * (1 - discountPercentage / 100) : price;
-
-  const displayImage = Array.isArray(images) && images[0] ? images[0].replace(/^http:/, 'https:') : placeholderImage;
-
-  const handleToggleWishlist = useCallback(async (e) => {
+  // Debounced wishlist handler
+  const handleToggleWishlist = useCallback(debounce(async (e) => {
     e.stopPropagation();
     const token = localStorage.getItem('token');
     if (!token) {
@@ -95,7 +125,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
     setLoading(true);
     try {
       const response = await axios.put(`/api/user/auth/wishlist/${_id}`);
-      setIsWishlisted((prev) => !prev);
+      setIsWishlisted(prev => !prev);
       toast.success(isWishlisted ? 'Removed from Wishlist' : 'Added to Wishlist', {
         duration: 1500,
         style: {
@@ -115,7 +145,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
     } finally {
       setLoading(false);
     }
-  }, [_id, isWishlisted, navigate]);
+  }, 300), [_id, isWishlisted, navigate]);
 
   const handleAddToCartClick = useCallback((e) => {
     e.stopPropagation();
@@ -130,50 +160,12 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
       navigate('/cart');
       return;
     }
-    setSelectedSize(sizes[0] || '');
-    setSelectedColor(colors[0] || '');
-    setIsDrawerOpen(true);
-  }, [_id, isInCart, navigate, sizes, colors]);
-
-  const handleAddToCart = useCallback(async () => {
-    if (!selectedSize || !selectedColor) {
-      toast.error('Please select size and color');
-      return;
+    if (!sizes.length && !colors.length) {
+      handleAddToCart();
+    } else {
+      setIsDrawerOpen(true);
     }
-    const token = localStorage.getItem('token');
-    if (!token) {
-      toast.error('Please login to add to cart');
-      navigate('/login');
-      return;
-    }
-    setLoading(true);
-    try {
-      const payload = { productId: _id, quantity, size: selectedSize, color: selectedColor };
-      console.log('Add to cart payload:', payload);
-      const response = await axios.post('/api/user/auth/cart/add', payload);
-      setIsInCart(true);
-      setIsDrawerOpen(false);
-      toast.success('Added to Cart', {
-        duration: 1500,
-        style: {
-          background: '#f3f4f6',
-          color: '#10b981',
-          borderRadius: '12px',
-          padding: '8px 16px',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-          fontSize: '14px',
-          fontWeight: '500',
-        },
-      });
-      onAddToCart(_id);
-      console.log('Cart response:', response.data);
-    } catch (error) {
-      console.error('Cart error:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Failed to add to cart');
-    } finally {
-      setLoading(false);
-    }
-  }, [_id, quantity, selectedSize, selectedColor, navigate, onAddToCart]);
+  }, [isInCart, navigate, sizes, colors, handleAddToCart]);
 
   const handleProductClick = useCallback(() => navigate(`/product/${_id}`), [_id, navigate]);
 
@@ -324,9 +316,9 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
               onClick={handleAddToCart}
               className={cn(
                 'flex-1 text-sm',
-                !selectedSize || !selectedColor || loading ? 'opacity-50 cursor-not-allowed' : 'bg-green-400 hover:bg-green-700'
+                !selectedSize && sizes.length > 0 || !selectedColor && colors.length > 0 || loading ? 'opacity-50 cursor-not-allowed' : 'bg-green-400 hover:bg-green-700'
               )}
-              disabled={loading || !selectedSize || !selectedColor}
+              disabled={loading || (sizes.length > 0 && !selectedSize) || (colors.length > 0 && !selectedColor)}
             >
               {loading ? 'Adding...' : 'Add to Cart'}
             </Button>

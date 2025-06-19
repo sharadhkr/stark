@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
-import agroLogo from '../assets/logo.png';
+import agroLogo from '../assets/slogo.webp';
 import slogo from '../assets/slogo.webp';
 
 // Animation variants

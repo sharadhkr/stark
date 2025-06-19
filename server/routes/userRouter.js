@@ -111,117 +111,114 @@ router.post('/logout', userLoggedin, async (req, res) => {
     sendResponse(res, 500, { success: false, message: 'Failed to logout', error: error.message });
   }
 });
-// Profile Routes
+
+
+// GET User Profile
 router.get('/profile', userLoggedin, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select(
-      '-verificationToken -resetPasswordToken -resetPasswordExpire -loginAttempts -accountLockedUntil'
-    );
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return sendResponse(res, 404, { success: false, message: 'User not found' });
+    }
+    sendResponse(res, 200, { success: true, user });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    sendResponse(res, 500, { success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// PUT Update User Profile
+router.put('/profile', userLoggedin, uploadSingle('profilePicture'), async (req, res) => {
+  try {
+    const { firstName, lastName, email, addresses, preferences } = req.body;
+    let parsedAddresses = [];
+    let parsedPreferences = { notifications: true, preferredCategories: [] };
+
+    // Validate and parse addresses
+    if (addresses) {
+      try {
+        parsedAddresses = JSON.parse(addresses);
+        if (!Array.isArray(parsedAddresses)) {
+          return sendResponse(res, 400, { success: false, message: 'Addresses must be an array' });
+        }
+        for (const addr of parsedAddresses) {
+          if (!addr.street || !addr.city || !addr.state || !addr.postalCode || !addr.country) {
+            return sendResponse(res, 400, { success: false, message: 'All address fields are required' });
+          }
+          addr.isDefault = !!addr.isDefault; // Ensure boolean
+        }
+      } catch (error) {
+        return sendResponse(res, 400, { success: false, message: 'Invalid addresses format' });
+      }
+    }
+
+    // Validate and parse preferences
+    if (preferences) {
+      try {
+        parsedPreferences = JSON.parse(preferences);
+        if (typeof parsedPreferences.notifications !== 'boolean') {
+          return sendResponse(res, 400, { success: false, message: 'Notifications must be a boolean' });
+        }
+        if (!Array.isArray(parsedPreferences.preferredCategories)) {
+          return sendResponse(res, 400, { success: false, message: 'Preferred categories must be an array' });
+        }
+      } catch (error) {
+        return sendResponse(res, 400, { success: false, message: 'Invalid preferences format' });
+      }
+    }
+
+    // Validate email
+    if (email && !/.+\@.+\..+/.test(email)) {
+      return sendResponse(res, 400, { success: false, message: 'Please enter a valid email address' });
+    }
+
+    const user = await User.findById(req.user.id);
     if (!user) {
       return sendResponse(res, 404, { success: false, message: 'User not found' });
     }
 
-    sendResponse(res, 200, { success: true, user });
-  } catch (error) {
-    console.error('Fetch Profile Error:', error);
-    sendResponse(res, 500, { success: false, message: 'Failed to fetch profile', error: error.message });
-  }
-});
-const multer = require('multer');
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
-router.put('/profile', userLoggedin, uploadSingle, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const {
-      firstName,
-      lastName,
-      dateOfBirth,
-      email,
-      farmName,
-      farmLocation,
-      bio,
-      preferences,
-      address, // New field for single address update
-    } = req.body;
-
-    // Update basic fields
-    if (firstName) user.firstName = firstName.trim();
-    if (lastName) user.lastName = lastName.trim();
-    if (dateOfBirth) {
-      const dob = new Date(dateOfBirth);
-      if (isNaN(dob.getTime())) return res.status(400).json({ message: 'Invalid date of birth' });
-      user.dateOfBirth = dob;
-    }
-    if (email) {
-      if (!/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email)) {
-        return res.status(400).json({ message: 'Invalid email format' });
+    // Check if email is already in use by another user
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return sendResponse(res, 400, { success: false, message: 'Email already in use' });
       }
-      user.email = email.trim().toLowerCase();
-    }
-    if (farmName) user.farmName = farmName.trim();
-    if (farmLocation) user.farmLocation = farmLocation.trim();
-    if (bio) {
-      if (bio.length > 500) return res.status(400).json({ message: 'Bio cannot exceed 500 characters' });
-      user.bio = bio.trim();
     }
 
-    // Update address (single address in schema)
-    if (address) {
-      const { street, city, state, postalCode, country } = typeof address === 'string' ? JSON.parse(address) : address;
-      if (!street || !city || !state || !postalCode || !country) {
-        return res.status(400).json({ message: 'All address fields are required' });
-      }
-      user.address = { street, city, state, postalCode, country, country: country || 'India' };
-    }
+    // Update user fields
+    user.firstName = firstName || user.firstName;
+    user.lastName = lastName || user.lastName;
+    user.email = email || user.email;
+    user.addresses = parsedAddresses.length ? parsedAddresses : user.addresses;
+    user.preferences = parsedPreferences;
 
-    // Update preferences
-    if (preferences) {
-      let parsedPreferences;
-      try {
-        parsedPreferences = typeof preferences === 'string' ? JSON.parse(preferences) : preferences;
-      } catch (error) {
-        return res.status(400).json({ message: 'Invalid preferences format' });
-      }
-      user.preferences = {
-        notifications: parsedPreferences.notifications ?? user.preferences.notifications,
-        preferredCategories: parsedPreferences.preferredCategories ?? user.preferences.preferredCategories,
-      };
-    }
-
-    // Handle profile picture upload
+    // Handle profile picture upload to Cloudinary
     if (req.file) {
-      const uploadResult = await uploadToCloudinary(req.file.buffer);
-      user.profilePicture = uploadResult.url;
+      try {
+        const result = await uploadToCloudinary(req.file.buffer, {
+          folder: 'profile_pictures',
+          public_id: `user_${req.user.id}_${Date.now()}`,
+        });
+        user.profilePicture = result.secure_url;
+      } catch (uploadError) {
+        console.error('Cloudinary Upload Error:', uploadError);
+        return sendResponse(res, 400, { success: false, message: 'Failed to upload image to Cloudinary', error: uploadError.message });
+      }
     }
 
-    await user.save({ validateBeforeSave: true });
+    await user.save();
 
-    res.status(200).json({
-      message: 'Profile updated successfully',
-      user: {
-        id: user._id,
-        phoneNumber: user.phoneNumber,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        dateOfBirth: user.dateOfBirth,
-        farmName: user.farmName,
-        farmLocation: user.farmLocation,
-        bio: user.bio,
-        profilePicture: user.profilePicture,
-        preferences: user.preferences,
-        address: user.address,
-      },
-    });
+    const updatedUser = await User.findById(req.user.id).select('-password');
+    sendResponse(res, 200, { success: true, user: updatedUser });
   } catch (error) {
-    console.error('Update Profile Error:', error);
-    res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    console.error('Error updating profile:', error);
+    if (error.message.includes('Only JPEG, JPG, and PNG')) {
+      return sendResponse(res, 400, { success: false, message: error.message });
+    }
+    sendResponse(res, 500, { success: false, message: 'Server error', error: error.message });
   }
 });
+
 
 // Address Routes
 router.post('/add-address', userLoggedin, async (req, res) => {
@@ -413,18 +410,178 @@ router.get('/wishlist/:productId', userLoggedin, async (req, res) => {
     sendResponse(res, 500, { success: false, message: 'Failed to fetch wishlist status', error: error.message });
   }
 });
-
-// Cart Routes
 router.get('/cart', userLoggedin, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate('cart.productId');
+    const user = await User.findById(req.user.id).populate({
+      path: 'cart.productId',
+      select: 'name discountedPrice discount quantity images sizes', // Explicitly include images
+    });
     if (!user) {
       return sendResponse(res, 404, { success: false, message: 'User not found' });
     }
-    sendResponse(res, 200, { success: true, cart: user.cart });
+    // Map cart items to ensure consistent structure
+    const cartItems = user.cart.map((item) => ({
+      productId: item.productId?._id?.toString() || item.productId,
+      name: item.productId?.name || item.name || 'Unnamed Product',
+      price: item.productId?.discountedPrice || item.priceAtAdd || 0,
+      quantity: item.quantity || 1,
+      size: item.size || 'N/A',
+      images: Array.isArray(item.productId?.images) ? item.productId.images : [],
+      sizes: Array.isArray(item.productId?.sizes) ? item.productId.sizes : ['S', 'M', 'L'],
+      discount: item.productId?.discount || 0,
+      stock: item.productId?.quantity || 0,
+    }));
+    sendResponse(res, 200, { success: true, cart: { items: cartItems } });
   } catch (error) {
     console.error('Fetch Cart Error:', error);
     sendResponse(res, 500, { success: false, message: 'Failed to fetch cart', error: error.message });
+  }
+});
+
+// POST /api/user/auth/wishlist/move-to-cart - Move product from wishlist to cart
+router.post('/wishlist/move-to-cart', userLoggedin, async (req, res) => {
+  try {
+    const { productId, quantity, size, color } = req.body;
+
+    // Validate inputs
+    if (!productId || !quantity || !size || !color) {
+      return sendResponse(res, 400, { success: false, message: 'Missing required fields: productId, quantity, size, color' });
+    }
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      return sendResponse(res, 400, { success: false, message: 'Invalid quantity' });
+    }
+
+    // Validate product
+    const product = await Product.findById(productId);
+    if (!product) {
+      return sendResponse(res, 404, { success: false, message: 'Product not found' });
+    }
+    if (product.quantity < quantity) {
+      return sendResponse(res, 400, { success: false, message: `Insufficient stock. Available: ${product.quantity}` });
+    }
+    if (!product.sizes.includes(size)) {
+      return sendResponse(res, 400, { success: false, message: 'Invalid size' });
+    }
+    if (!product.colors.includes(color)) {
+      return sendResponse(res, 400, { success: false, message: 'Invalid color' });
+    }
+
+    // Update user cart and wishlist
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return sendResponse(res, 404, { success: false, message: 'User not found' });
+    }
+
+    // Check if product is in wishlist
+    const wishlistIndex = user.wishlist.findIndex(
+      (item) => item.productId.toString() === productId
+    );
+    if (wishlistIndex === -1) {
+      return sendResponse(res, 404, { success: false, message: 'Product not found in wishlist' });
+    }
+
+    // Add to cart
+    const cartItem = {
+      productId,
+      quantity: Math.max(1, Math.min(quantity, product.quantity)),
+      size,
+      color,
+    };
+    const existingItem = user.cart.find(
+      (item) => item.productId.toString() === productId && item.size === size && item.color === color
+    );
+    if (existingItem) {
+      existingItem.quantity = Math.min(existingItem.quantity + quantity, product.quantity);
+    } else {
+      user.cart.push(cartItem);
+    }
+
+    // Remove from wishlist
+    user.wishlist.splice(wishlistIndex, 1);
+
+    // Save changes
+    await user.save();
+    console.log(`Moved to cart: user=${req.user.id}, productId=${productId}, size=${size}, color=${color}, quantity=${quantity}`);
+    sendResponse(res, 200, { success: true, message: 'Item moved to cart' });
+  } catch (error) {
+    console.error('Move to Cart Error:', error);
+    sendResponse(res, 500, { success: false, message: 'Failed to move to cart', error: error.message });
+  }
+});
+
+// Existing routes (for reference, ensure they coexist)
+router.post('/cart/add', userLoggedin, async (req, res) => {
+  try {
+    const { productId, quantity, size, color } = req.body;
+    if (!productId || !quantity || !size || !color) {
+      return sendResponse(res, 400, { success: false, message: 'Missing required fields: productId, quantity, size, color' });
+    }
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      return sendResponse(res, 400, { success: false, message: 'Invalid quantity' });
+    }
+    const product = await Product.findById(productId);
+    if (!product) {
+      return sendResponse(res, 404, { success: false, message: 'Product not found' });
+    }
+    if (product.quantity < quantity) {
+      return sendResponse(res, 400, { success: false, message: `Insufficient stock. Available: ${product.quantity}` });
+    }
+    if (!product.sizes.includes(size)) {
+      return sendResponse(res, 400, { success: false, message: 'Invalid size' });
+    }
+    if (!product.colors.includes(color)) {
+      return sendResponse(res, 400, { success: false, message: 'Invalid color' });
+    }
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return sendResponse(res, 404, { success: false, message: 'User not found' });
+    }
+    const cartItem = {
+      productId,
+      quantity: Math.max(1, Math.min(quantity, product.quantity)),
+      size,
+      color,
+    };
+    const existingItem = user.cart.find(
+      (item) => item.productId.toString() === productId && item.size === size && item.color === color
+    );
+    if (existingItem) {
+      existingItem.quantity = Math.min(existingItem.quantity + quantity, product.quantity);
+    } else {
+      user.cart.push(cartItem);
+    }
+    await user.save();
+    console.log(`Added to cart: user=${req.user.id}, productId=${productId}, size=${size}, color=${color}, quantity=${quantity}`);
+    sendResponse(res, 200, { success: true, message: 'Item added to cart' });
+  } catch (error) {
+    console.error('Add to Cart Error:', error);
+    sendResponse(res, 500, { success: false, message: 'Failed to add to cart', error: error.message });
+  }
+});
+
+router.delete('/wishlist/:productId', userLoggedin, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    if (!productId) {
+      return sendResponse(res, 400, { success: false, message: 'Missing productId' });
+    }
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return sendResponse(res, 404, { success: false, message: 'User not found' });
+    }
+    const wishlistIndex = user.wishlist.findIndex(
+      (item) => item.productId.toString() === productId
+    );
+    if (wishlistIndex === -1) {
+      return sendResponse(res, 404, { success: false, message: 'Product not found in wishlist' });
+    }
+    user.wishlist.splice(wishlistIndex, 1);
+    await user.save();
+    console.log(`Removed from wishlist: user=${req.user.id}, productId=${productId}`);
+    sendResponse(res, 200, { success: true, message: 'Item removed from wishlist' });
+  } catch (error) {
+    console.error('Remove from Wishlist Error:', error);
+    sendResponse(res, 500, { success: false, message: 'Failed to remove from wishlist', error: error.message });
   }
 });
 

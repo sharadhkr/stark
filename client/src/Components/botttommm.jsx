@@ -1,9 +1,9 @@
 import React from 'react'
-import Logo from '../assets/slogooo.png'
+import Logo from '../assets/slogooo.webp'
 
 function Botttommm() {
   return (
-    <div className="w-full bg-gradient-to-br from-violet-100 to-violet-300 pb-28 relative z-10 overflow-hidden">
+    <div className="w-full bg-gradient-to-br from-gray-100 to-gray-300 pb-28 relative z-10 overflow-hidden">
       {/* Background image with lower z-index */}
       <img
         className="absolute w-32 opacity-40 rotate-12 drop-shadow-sm -translate-x-1/2 left-1/2 top-4 z-0"

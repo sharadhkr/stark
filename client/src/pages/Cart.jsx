@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdArrowBack, MdShoppingCart } from 'react-icons/md';
 import { FaSpinner } from 'react-icons/fa';
 import axios from '../useraxios';
-import CartProductCard from '../Components/CartProductCard'; // Adjust path
-import ProductCardSkeleton from '../Components/ProductCardSkeleton'; // Adjust path
+import CartProductCard from '../Components/CartProductCard';
+import ProductCardSkeleton from '../Components/ProductCardSkeleton';
 import agroLogo from '../assets/slogo.webp';
 
 const fadeIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.9, ease: 'easeInOut' } } };
@@ -16,175 +16,244 @@ const modalVariants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.3 } },
 };
 
-const CartPage = () => {
+const CartPage = React.memo(() => {
   const navigate = useNavigate();
   const [cart, setCart] = useState({ items: [], savedForLater: [] });
   const [loading, setLoading] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-  const [isButtonFixed, setIsButtonFixed] = useState(false);
-  const orderSummaryRef = useRef(null);
 
-  useEffect(() => {
-    fetchCart(setCart, setLoading, toast, navigate);
-  }, []);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (orderSummaryRef.current) {
-        const rect = orderSummaryRef.current.getBoundingClientRect();
-        setIsButtonFixed(rect.bottom < window.innerHeight * 0.1);
+  const fetchCart = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Please log in to view your cart');
+        navigate('/login');
+        return;
       }
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+      const [cartResponse, savedResponse] = await Promise.all([
+        axios.get('/api/user/auth/cart', { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get('/api/user/auth/save-for-later', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      console.log('Cart API response:', JSON.stringify(cartResponse.data, null, 2));
+      console.log('Saved for Later response:', JSON.stringify(savedResponse.data, null, 2));
 
-  const updateQuantity = async (productId, newQuantity, size, color) => {
-    if (newQuantity < 1) {
-      toast.error('Quantity must be at least 1');
-      return;
+      const cartItems = (cartResponse.data.cart?.items || [])
+        .filter((item) => item.product?._id) // Filter invalid products
+        .map((item, index) => ({
+          cartItemId: index, // For unique key
+          productId: item.product?._id || item.productId,
+          name: item.product?.name || 'Unnamed Product',
+          price: item.product?.price || 0,
+          quantity: item.quantity || 1,
+          size: item.size || 'N/A',
+          color: item.color || 'N/A',
+          image: item.product?.images?.[0] || null,
+          sizes: Array.isArray(item.product?.sizes) ? item.product.sizes : ['S', 'M', 'L'],
+          stock: item.product?.quantity || 0,
+          discount: item.product?.discount || 0,
+        }));
+
+      const savedItems = (savedResponse.data.savedForLater || [])
+        .filter((item) => item.productId?._id)
+        .map((item, index) => ({
+          cartItemId: index,
+          productId: item.productId?._id || item.productId,
+          name: item.productId?.name || 'Unnamed Product',
+          price: item.productId?.price || 0,
+          quantity: item.quantity || 1,
+          size: item.size || 'N/A',
+          color: item.color || 'N/A',
+          image: item.productId?.images?.[0] || null,
+          sizes: Array.isArray(item.productId?.sizes) ? item.productId.sizes : ['S', 'M', 'L'],
+          stock: item.productId?.quantity || 0,
+          discount: item.productId?.discount || 0,
+        }));
+
+      setCart({ items: cartItems, savedForLater: savedItems });
+      if (cartItems.length === 0) {
+        console.warn('Cart is empty after fetch');
+      }
+    } catch (error) {
+      toast.error('Failed to fetch cart: ' + (error.response?.data?.message || error.message));
+      console.error('Fetch Cart Error:', error.response?.data || error);
+      setCart({ items: [], savedForLater: [] });
+    } finally {
+      setLoading(false);
     }
+  }, [navigate]);
 
-    const originalCart = { ...cart };
-    const itemToUpdate = cart.items.find(
-      (item) => item.productId === productId && item.size === size && item.color === color
-    );
-    if (!itemToUpdate) return;
+  useEffect(() => {
+    fetchCart();
+  }, [fetchCart]);
 
-    if (newQuantity > itemToUpdate.stock) {
-      toast.error(`Only ${itemToUpdate.stock} items available in stock!`);
-      return;
-    }
+  const updateQuantity = useCallback(
+    async (productId, newQuantity, size, color) => {
+      if (newQuantity < 1) {
+        toast.error('Quantity must be at least 1');
+        return;
+      }
 
-    setCart((prev) => ({
-      ...prev,
-      items: prev.items.map((item) =>
-        item.productId === productId && item.size === size && item.color === color
-          ? { ...item, quantity: newQuantity }
-          : item
-      ),
-    }));
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.put(
-        `/api/user/auth/cart/${productId}`,
-        { quantity: newQuantity, size, color },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const originalCart = { ...cart };
+      const itemToUpdate = cart.items.find(
+        (item) => item.productId === productId && item.size === size && item.color === color
       );
-      await fetchCart(setCart, setLoading, toast, navigate);
-      toast.success('Quantity updated!');
-    } catch (error) {
-      setCart(originalCart);
-      toast.error('Failed to update quantity: ' + (error.response?.data?.message || error.message));
-      console.error('Update Quantity Error:', error.response?.data || error);
-    }
-  };
+      if (!itemToUpdate) {
+        toast.error('Item not found in cart');
+        return;
+      }
 
-  const removeItem = async (productId, size, color, isSavedForLater = false) => {
-    const originalCart = { ...cart };
-    setCart((prev) => ({
-      ...prev,
-      [isSavedForLater ? 'savedForLater' : 'items']: prev[isSavedForLater ? 'savedForLater' : 'items'].filter(
-        (item) => !(item.productId === productId && item.size === size && item.color === color)
-      ),
-    }));
+      if (newQuantity > itemToUpdate.stock) {
+        toast.error(`Only ${itemToUpdate.stock} items available in stock!`);
+        return;
+      }
 
-    try {
-      const token = localStorage.getItem('token');
-      const endpoint = isSavedForLater ? 'save-for-later' : 'cart';
-      await axios.delete(`/api/user/auth/${endpoint}/${productId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        data: { size, color },
-      });
-      await fetchCart(setCart, setLoading, toast, navigate);
-      toast.success('Item removed!');
-    } catch (error) {
-      setCart(originalCart);
-      toast.error('Failed to remove item: ' + (error.response?.data?.message || error.message));
-      console.error('Remove Item Error:', error.response?.data || error);
-    }
-  };
-
-  const saveForLater = async (productId, quantity, size, color) => {
-    const item = cart.items.find(
-      (item) => item.productId === productId && item.size === size && item.color === color
-    );
-    if (!item) return;
-
-    const originalCart = { ...cart };
-    setCart((prev) => ({
-      items: prev.items.filter(
-        (i) => !(i.productId === productId && i.size === size && i.color === color)
-      ),
-      savedForLater: prev.savedForLater.some(
-        (i) => i.productId === productId && i.size === size && i.color === color
-      )
-        ? prev.savedForLater
-        : [...prev.savedForLater, { ...item }],
-    }));
-
-    try {
-      const token = localStorage.getItem('token');
-      await Promise.all([
-        axios.post(
-          '/api/user/auth/save-for-later',
-          { productId, quantity, size, color },
-          { headers: { Authorization: `Bearer ${token}` } }
+      setCart((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.productId === productId && item.size === size && item.color === color
+            ? { ...item, quantity: newQuantity }
+            : item
         ),
-        axios.delete(`/api/user/auth/cart/${productId}`, {
+      }));
+
+      try {
+        const token = localStorage.getItem('token');
+        await axios.put(
+          `/api/user/auth/cart/${productId}`,
+          { quantity: newQuantity, size, color },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        await fetchCart();
+        toast.success('Quantity updated!');
+      } catch (error) {
+        setCart(originalCart);
+        toast.error('Failed to update quantity: ' + (error.response?.data?.message || error.message));
+        console.error('Update Quantity Error:', error.response?.data || error);
+      }
+    },
+    [cart, fetchCart]
+  );
+
+  const removeItem = useCallback(
+    async (productId, size, color, isSavedForLater = false) => {
+      const originalCart = { ...cart };
+      setCart((prev) => ({
+        ...prev,
+        [isSavedForLater ? 'savedForLater' : 'items']: prev[isSavedForLater ? 'savedForLater' : 'items'].filter(
+          (item) => !(item.productId === productId && item.size === size && item.color === color)
+        ),
+      }));
+
+      try {
+        const token = localStorage.getItem('token');
+        const endpoint = isSavedForLater ? 'save-for-later' : 'cart';
+        await axios.delete(`/api/user/auth/${endpoint}/${productId}`, {
           headers: { Authorization: `Bearer ${token}` },
           data: { size, color },
-        }),
-      ]);
-      await fetchCart(setCart, setLoading, toast, navigate);
-      toast.success(`${item.name} saved for later!`);
-    } catch (error) {
-      setCart(originalCart);
-      toast.error('Failed to save for later: ' + (error.response?.data?.message || error.message));
-      console.error('Save For Later Error:', error.response?.data || error);
-    }
-  };
+        });
+        await fetchCart();
+        toast.success('Item removed!');
+      } catch (error) {
+        setCart(originalCart);
+        toast.error('Failed to remove item: ' + (error.response?.data?.message || error.message));
+        console.error('Remove Item Error:', error.response?.data || error);
+      }
+    },
+    [cart, fetchCart]
+  );
 
-  const moveToCart = async (productId, quantity, size, color) => {
-    const item = cart.savedForLater.find(
-      (item) => item.productId === productId && item.size === size && item.color === color
-    );
-    if (!item) return;
+  const saveForLater = useCallback(
+    async (productId, quantity, size, color) => {
+      const item = cart.items.find(
+        (item) => item.productId === productId && item.size === size && item.color === color
+      );
+      if (!item) {
+        toast.error('Item not found in cart');
+        return;
+      }
 
-    const originalCart = { ...cart };
-    setCart((prev) => ({
-      items: prev.items.some((i) => i.productId === productId && i.size === size && i.color === color)
-        ? prev.items
-        : [...prev.items, { ...item }],
-      savedForLater: prev.savedForLater.filter(
-        (i) => !(i.productId === productId && i.size === size && i.color === color)
-      ),
-    }));
-
-    try {
-      const token = localStorage.getItem('token');
-      await Promise.all([
-        axios.post(
-          '/api/user/auth/cart',
-          { productId, quantity, size, color },
-          { headers: { Authorization: `Bearer ${token}` } }
+      const originalCart = { ...cart };
+      setCart((prev) => ({
+        items: prev.items.filter(
+          (i) => !(i.productId === productId && i.size === size && i.color === color)
         ),
-        axios.delete(`/api/user/auth/save-for-later/${productId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          data: { size, color },
-        }),
-      ]);
-      await fetchCart(setCart, setLoading, toast, navigate);
-      toast.success(`${item.name} moved to cart!`);
-    } catch (error) {
-      setCart(originalCart);
-      toast.error('Failed to move to cart: ' + (error.response?.data?.message || error.message));
-      console.error('Move To Cart Error:', error.response?.data || error);
-    }
-  };
+        savedForLater: prev.savedForLater.some(
+          (i) => i.productId === productId && i.size === size && i.color === color
+        )
+          ? prev.savedForLater
+          : [...prev.savedForLater, { ...item }],
+      }));
 
-  const handleCheckout = () => {
+      try {
+        const token = localStorage.getItem('token');
+        await Promise.all([
+          axios.post(
+            '/api/user/auth/save-for-later',
+            { productId, quantity, size, color },
+            { headers: { Authorization: `Bearer ${token}` } }
+          ),
+          axios.delete(`/api/user/auth/cart/${productId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { size, color },
+          }),
+        ]);
+        await fetchCart();
+        toast.success(`${item.name} saved for later!`);
+      } catch (error) {
+        setCart(originalCart);
+        toast.error('Failed to save for later: ' + (error.response?.data?.message || error.message));
+        console.error('Save For Later Error:', error.response?.data || error);
+      }
+    },
+    [cart, fetchCart]
+  );
+
+  const moveToCart = useCallback(
+    async (productId, quantity, size, color) => {
+      const item = cart.savedForLater.find(
+        (item) => item.productId === productId && item.size === size && item.color === color
+      );
+      if (!item) {
+        toast.error('Item not found in saved for later');
+        return;
+      }
+
+      const originalCart = { ...cart };
+      setCart((prev) => ({
+        items: prev.items.some((i) => i.productId === productId && i.size === size && i.color === color)
+          ? prev.items
+          : [...prev.items, { ...item }],
+        savedForLater: prev.savedForLater.filter(
+          (i) => !(i.productId === productId && i.size === size && i.color === color)
+        ),
+      }));
+
+      try {
+        const token = localStorage.getItem('token');
+        await Promise.all([
+          axios.post(
+            '/api/user/auth/cart',
+            { productId, quantity, size, color },
+            { headers: { Authorization: `Bearer ${token}` } }
+          ),
+          axios.delete(`/api/user/auth/save-for-later/${productId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { size, color },
+          }),
+        ]);
+        await fetchCart();
+        toast.success(`${item.name} moved to cart!`);
+      } catch (error) {
+        setCart(originalCart);
+        toast.error('Failed to move to cart: ' + (error.response?.data?.message || error.message));
+        console.error('Move To Cart Error:', error.response?.data || error);
+      }
+    },
+    [cart, fetchCart]
+  );
+
+  const handleCheckout = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please login to proceed to checkout');
@@ -212,12 +281,21 @@ const CartPage = () => {
 
     setIsCheckoutModalOpen(false);
     navigate('/checkout', { state: { cart: checkoutCart } });
-  };
+  }, [cart.items, navigate]);
 
-  const subtotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.1;
-  const shipping = subtotal > 0 ? 5 : 0;
-  const total = subtotal + tax + shipping;
+  const { subtotal, discountTotal, tax, shipping, total } = useMemo(() => {
+    const sub = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const disc = cart.items.reduce((sum, item) => sum + (item.discount || 0) * item.quantity, 0);
+    const tx = sub * 0.12; // 12% GST
+    const ship = sub > 0 ? 20 : 0; // ₹20 delivery
+    return {
+      subtotal: sub,
+      discountTotal: disc,
+      tax: tx,
+      shipping: ship,
+      total: sub - disc + tx + ship,
+    };
+  }, [cart.items]);
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-sans">
@@ -232,7 +310,7 @@ const CartPage = () => {
 
       {/* Header */}
       <header className="bg-white shadow-sm p-4 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex gap-2 items-center">
           <div className="flex items-center gap-2">
             <motion.button
               whileHover={{ scale: 1.1 }}
@@ -241,9 +319,9 @@ const CartPage = () => {
             >
               <MdArrowBack size={24} />
             </motion.button>
-            <img src={agroLogo} alt="Agro Logo" className="h-10" />
+            {/* <img src={agroLogo} alt="Agro Logo" className="h-10" /> */}
           </div>
-          <h1 className="text-xl font-bold text-gray-800">My Bag</h1>
+          <h1 className="text-xl font-bold text-gray-800">Shopping Bag</h1>
           <div className="w-10" />
         </div>
       </header>
@@ -267,7 +345,7 @@ const CartPage = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/')}
-              className="mt-4 bg-pink-500 text-white px-6 py-2 rounded-md font-medium hover:bg-pink-600 transition-all duration-300"
+              className="mt-4 bg-green-500 text-white px-6 py-2 rounded-md font-medium hover:bg-green-600 transition-all duration-300"
             >
               Shop Now
             </motion.button>
@@ -284,7 +362,7 @@ const CartPage = () => {
                     <AnimatePresence>
                       {cart.items.map((item) => (
                         <motion.div
-                          key={`${item.productId}-${item.size}-${item.color}`}
+                          key={`cart-${item.cartItemId}-${item.productId}-${item.size}`}
                           layout
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -314,7 +392,7 @@ const CartPage = () => {
                     <AnimatePresence>
                       {cart.savedForLater.map((item) => (
                         <motion.div
-                          key={`${item.productId}-${item.size}-${item.color}`}
+                          key={`saved-${item.cartItemId}-${item.productId}-${item.size}`}
                           layout
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -337,7 +415,7 @@ const CartPage = () => {
             </div>
 
             {cart.items.length > 0 && (
-              <div className="lg:col-span-1" ref={orderSummaryRef}>
+              <div className="lg:col-span-1">
                 <div className="bg-white p-6 rounded-lg shadow-sm sticky top-20">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Price Details</h3>
                   <div className="space-y-3 text-gray-600 text-sm">
@@ -345,8 +423,14 @@ const CartPage = () => {
                       <span>Bag Total</span>
                       <span>₹{subtotal.toFixed(2)}</span>
                     </div>
+                    {discountTotal > 0 && (
+                      <div className="flex justify-between">
+                        <span>Discount</span>
+                        <span className="text-green-600">−₹{discountTotal.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
-                      <span>GST (10%)</span>
+                      <span>GST (12%)</span>
                       <span>₹{tax.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
@@ -360,27 +444,21 @@ const CartPage = () => {
                       <span>₹{total.toFixed(2)}</span>
                     </div>
                   </div>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setIsCheckoutModalOpen(true)}
-                    className={`mt-6 w-full bg-pink-500 text-white px-6 py-3 rounded-md font-medium hover:bg-pink-600 transition-all duration-300 flex items-center justify-center ${
-                      isButtonFixed
-                        ? 'fixed bottom-4 left-1/2 transform -translate-x-1/2 w-11/12 max-w-md z-50 bg-pink-500 rounded-md'
-                        : ''
-                    }`}
-                    disabled={cart.items.length === 0 || loading}
-                  >
-                    {loading ? (
-                      <FaSpinner className="animate-spin" size={20} />
-                    ) : (
-                      'Place Order'
-                    )}
-                  </motion.button>
                 </div>
               </div>
             )}
           </div>
+        )}
+        {cart.items.length > 0 && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsCheckoutModalOpen(true)}
+            className="w-11/12 max-w-md bg-green-500 text-white px-6 py-3 shadow-lg m-auto mt-4 rounded-md font-medium hover:bg-green-600 transition-all duration-300 flex items-center justify-center z-50"
+            disabled={cart.items.length === 0 || loading}
+          >
+            {loading ? <FaSpinner className="animate-spin" size={20} /> : 'Place Order'}
+          </motion.button>
         )}
       </main>
 
@@ -411,7 +489,7 @@ const CartPage = () => {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleCheckout}
-                  className="px-4 py-2 bg-pink-500 text-white rounded-md hover:bg-pink-600 transition-colors text-sm"
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm"
                 >
                   Proceed
                 </motion.button>
@@ -422,53 +500,6 @@ const CartPage = () => {
       </AnimatePresence>
     </div>
   );
-};
-
-const fetchCart = async (setCart, setLoading, toast, navigate) => {
-  setLoading(true);
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      toast.error('Please log in to view your cart');
-      navigate('/login');
-      return;
-    }
-    const [cartResponse, savedResponse] = await Promise.all([
-      axios.get('/api/user/auth/cart', { headers: { Authorization: `Bearer ${token}` } }),
-      axios.get('/api/user/auth/save-for-later', { headers: { Authorization: `Bearer ${token}` } }),
-    ]);
-
-    const cartItems = (cartResponse.data.cart?.items || []).map((item) => ({
-      productId: item.product?._id || item.productId,
-      name: item.product?.name || 'Unnamed Product',
-      price: item.product?.price || 0,
-      quantity: item.quantity || 1,
-      size: item.size || 'N/A',
-      color: item.color || 'N/A',
-      image: item.product?.images?.[0] || null,
-      stock: item.product?.quantity || 0,
-      discount: item.product?.discount || 0,
-    }));
-
-    const savedItems = (savedResponse.data.savedForLater || []).map((item) => ({
-      productId: item.productId?._id || item.productId,
-      name: item.productId?.name || 'Unnamed Product',
-      price: item.productId?.price || 0,
-      quantity: item.quantity || 1,
-      size: item.size || 'N/A',
-      color: item.color || 'N/A',
-      image: item.productId?.images?.[0] || null,
-      stock: item.productId?.quantity || 0,
-      discount: item.productId?.discount || 0,
-    }));
-
-    setCart({ items: cartItems, savedForLater: savedItems });
-  } catch (error) {
-    toast.error('Failed to fetch cart: ' + (error.response?.data?.message || error.message));
-    setCart({ items: [], savedForLater: [] });
-  } finally {
-    setLoading(false);
-  }
-};
+});
 
 export default CartPage;
