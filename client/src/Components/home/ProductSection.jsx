@@ -6,10 +6,8 @@ import ProductCard from '../ProductCard';
 import GenderFilterBar from './GenderFilterBar';
 import { DataContext } from '../../App';
 
-// Default fallback image URL
 const FALLBACK_IMAGE = 'https://via.placeholder.com/150?text=No+Image';
 
-// Skeleton component
 const ProductSkeleton = () => (
   <div className="w-full h-64 bg-gray-200 rounded-lg animate-pulse" />
 );
@@ -19,12 +17,13 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
   const [page, setPage] = useState(1);
   const [isFetching, setIsFetching] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const { ref: sentinelRef, inView } = useInView({
-    threshold: 0,
-    rootMargin: '200px',
-  });
+  const { ref: sentinelRef, inView } = useInView({ threshold: 0, rootMargin: '200px' });
 
-  // Deduplicate and validate products
+  // Safely fallback data from cache
+  const cachedProducts = cache?.products?.data ?? [];
+  const wishlist = cache?.wishlist?.data ?? [];
+  const cart = cache?.cart?.data ?? [];
+
   const validFilteredProducts = useMemo(() => {
     const seenIds = new Set();
     return filteredProducts.filter((product) => {
@@ -38,13 +37,12 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     });
   }, [filteredProducts]);
 
-  // Debounced infinite scroll
   const loadMoreProducts = useCallback(async () => {
     if (isFetching || !hasMore) return;
     setIsFetching(true);
     try {
       const response = await axios.get('/api/user/auth/products', {
-        params: { page: page + 1, limit: 20 }, // Increased to 20 for fewer calls
+        params: { page: page + 1, limit: 20 },
       });
       const newProducts = (response.data.products || []).map((product) => ({
         ...product,
@@ -52,42 +50,37 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
           ? product.image
           : FALLBACK_IMAGE,
       }));
+
       if (newProducts.length < 20) {
         setHasMore(false);
       }
-      const combinedProducts = [...cache.products.data, ...newProducts];
+
+      const combinedProducts = [...cachedProducts, ...newProducts];
       updateCache('products', combinedProducts);
+
       setFilteredProducts((prev) => {
         const prevIds = new Set(prev.map((p) => p._id));
         const uniqueNewProducts = newProducts.filter((p) => p._id && !prevIds.has(p._id));
         return [...prev, ...uniqueNewProducts];
       });
+
       setPage((prev) => prev + 1);
     } catch (error) {
       toast.error('Failed to load more products');
     } finally {
       setIsFetching(false);
     }
-  }, [isFetching, hasMore, page, cache.products.data, updateCache, setFilteredProducts]);
+  }, [isFetching, hasMore, page, cachedProducts, updateCache, setFilteredProducts]);
 
-  // Debounced effect for infinite scroll
   useEffect(() => {
     let timeout;
     if (inView && !isFetching && hasMore) {
-      timeout = setTimeout(() => loadMoreProducts(), 300); // Debounce 300ms
+      timeout = setTimeout(() => loadMoreProducts(), 300);
     }
     return () => clearTimeout(timeout);
   }, [inView, isFetching, hasMore, loadMoreProducts]);
 
-  // Debug filtered products
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Valid Filtered Products:', validFilteredProducts.length);
-    }
-  }, [validFilteredProducts]);
-
-  // Loading state
-  if (!cache.products.data.length) {
+  if (!cachedProducts.length) {
     return (
       <div className="w-full flex flex-col">
         <GenderFilterBar onGenderChange={onGenderChange} selectedGender={selectedGender} />
@@ -100,7 +93,6 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     );
   }
 
-  // Empty state
   if (validFilteredProducts.length === 0) {
     return (
       <div className="w-full flex flex-col">
@@ -112,7 +104,6 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
     );
   }
 
-  // Main render with native scrolling
   return (
     <div className="w-full flex flex-col">
       <GenderFilterBar onGenderChange={onGenderChange} selectedGender={selectedGender} />
@@ -121,8 +112,8 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
           <ProductCard
             key={product._id}
             product={product}
-            wishlist={cache.wishlist.data}
-            cart={cache.cart.data}
+            wishlist={wishlist}
+            cart={cart}
             wishlistLoading={false}
             cartLoading={false}
             wishlistError={null}
