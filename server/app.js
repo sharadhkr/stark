@@ -19,7 +19,9 @@ app.use(express.urlencoded({ extended: true }));
 // Allowed CORS origins
 const allowedOrigins = [
   "https://starkk.shop",
-  "http://localhost:5173"
+  "http://localhost:5173",
+  "https://starkk.netlify.app",
+  "https://stark-gamma.vercel.app"
 ];
 
 // CORS middleware
