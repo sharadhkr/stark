@@ -8,18 +8,17 @@ const DoubleAdd = React.memo(() => {
   const { cache } = useContext(DataContext);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Normalize and validate ad images
+  // ✅ Use correct key: cache.doubleAds
   const normalizedImages = useMemo(() => {
-    const ads = cache.ads?.data || [];
+    const ads = cache.doubleAds?.data || [];
     return ads
       .filter((img) => img && img.url && !img.disabled)
       .map((img) => ({
         url: img.url.replace(/^http:/, 'https:'),
         alt: `Double Ad ${img._id || img.url.split('/').pop()}`,
       }));
-  }, [cache.ads]);
+  }, [cache.doubleAds]);
 
-  // Create pairs with padding for seamless looping
   const pairs = useMemo(() => {
     if (normalizedImages.length === 0) return [];
     const groups = [];
@@ -31,16 +30,6 @@ const DoubleAdd = React.memo(() => {
 
   const displayIndex = currentIndex + 1;
 
-  // Debug ad data
-  useEffect(() => {
-    console.log('DoubleAdd Debug:', {
-      rawAds: cache.ads?.data,
-      normalizedImages,
-      pairs,
-    });
-  }, [cache.ads?.data, normalizedImages, pairs]);
-
-  // Auto-rotation
   useEffect(() => {
     if (normalizedImages.length <= 2) return;
     const timer = setInterval(() => {
@@ -55,7 +44,6 @@ const DoubleAdd = React.memo(() => {
     return () => clearInterval(timer);
   }, [pairs.length, normalizedImages.length]);
 
-  // Seamless looping
   useEffect(() => {
     if (currentIndex === 0) {
       setTimeout(() => setCurrentIndex(pairs.length - 2), 0);
@@ -64,7 +52,6 @@ const DoubleAdd = React.memo(() => {
     }
   }, [currentIndex, pairs.length]);
 
-  // Swipe handlers
   const handlers = useSwipeable({
     onSwipedLeft: () => {
       setCurrentIndex((prev) => {
@@ -93,7 +80,6 @@ const DoubleAdd = React.memo(() => {
     setCurrentIndex(index + 1);
   };
 
-  // No ads fallback
   if (normalizedImages.length === 0) {
     return (
       <div className="w-full px-2 mb-5 text-center">
@@ -154,7 +140,9 @@ const DoubleAdd = React.memo(() => {
               key={index}
               onClick={() => goToPair(index)}
               className={`w-2 h-2 rounded-full transition-all duration-300 shadow-sm hover:scale-125 ${
-                displayIndex - 1 === index ? 'bg-purple-400 scale-125' : 'bg-gray-300 hover:bg-gray-500/50'
+                displayIndex - 1 === index
+                  ? 'bg-purple-400 scale-125'
+                  : 'bg-gray-300 hover:bg-gray-500/50'
               }`}
               aria-label={`Go to ad pair ${index + 1}`}
             />

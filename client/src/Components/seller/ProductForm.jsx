@@ -52,8 +52,8 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
     } else {
       setProductForm((prev) => {
         let newState = { ...prev, [name]: type === 'checkbox' ? checked : value };
-        if (name === 'isCashOnDeliveryAvailable' && !checked) {
-          newState.onlinePaymentPercentage = 100;
+        if (name === 'isCashOnDeliveryAvailable') {
+          newState.onlinePaymentPercentage = checked ? 0 : 100;
         }
         if (name === 'discount' && value > 0) {
           newState.discountPercentage = 0;
@@ -73,8 +73,8 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
-    if (files.some((file) => !['image/jpeg', 'image/png', 'image/jpg'].includes(file.type))) {
-      toast.error('Only JPEG, PNG, or JPG files allowed');
+    if (files.some((file) => !['image/jpeg', 'image/png', 'image/jpg', 'image/avif', 'image/webp'].includes(file.type))) {
+      toast.error('Only JPEG, PNG, JPG, AVIF, or WebP files allowed');
       return;
     }
     if (files.some((file) => file.size > 5 * 1024 * 1024)) {
@@ -87,7 +87,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
   };
 
   const removeImage = (index) => {
-    const updatedImages = productForm.images.filter((_, Pediatr) => i !== index);
+    const updatedImages = productForm.images.filter((_, i) => i !== index);
     const updatedPreviews = imagePreviews.filter((_, i) => i !== index);
     setProductForm((prev) => ({ ...prev, images: updatedImages }));
     setImagePreviews(updatedPreviews);
@@ -132,10 +132,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
       toast.error('At least one image is required');
       return;
     }
-    if (
-      productForm.isCashOnDeliveryAvailable &&
-      (productForm.onlinePaymentPercentage < 0 || productForm.onlinePaymentPercentage > 100)
-    ) {
+    if (productForm.onlinePaymentPercentage < 0 || productForm.onlinePaymentPercentage > 100) {
       toast.error('Online payment percentage must be between 0 and 100');
       return;
     }
@@ -340,7 +337,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
               required
               aria-label="Product sizes"
             >
-              {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Custom'].map((size) => (
+              {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Free Size', 'Custom'].map((size) => (
                 <option key={size} value={size}>
                   {size}
                 </option>
@@ -428,7 +425,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
               aria-label="Product fit"
             >
               <option value="">Select Fit</option>
-              {['Regular', 'Slim', 'Loose', 'Tailored', 'Oversized', 'Athletic'].map((f) => (
+              {['Regular', 'Slim', 'Loose', 'Tailored', 'Oversized', 'Athletic', 'Relaxed', 'Skinny', 'Custom'].map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -449,7 +446,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Product Images (JPEG, PNG, JPG, max 5MB) *
+              Product Images (JPEG, PNG, JPG, AVIF, WebP, max 5MB) *
             </label>
             <motion.button
               type="button"
@@ -463,7 +460,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
               type="file"
               ref={productImageInputRef}
               multiple
-              accept="image/jpeg,image/png,image/jpg"
+              accept="image/jpeg,image/png,image/jpg,image/avif,image/webp"
               onChange={handleImageChange}
               className="hidden"
             />
@@ -578,7 +575,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
             <label className="text-sm font-medium text-gray-700">Cash on Delivery Available</label>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Online Payment Percentage (%)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Online Payment Percentage (%)</label>
             <input
               type="number"
               name="onlinePaymentPercentage"
@@ -589,7 +586,7 @@ const ProductForm = ({ editingProduct, setProducts, categories, onClose }) => {
               max="100"
               step="1"
               disabled={!productForm.isCashOnDeliveryAvailable}
-              aria-label="Online payment percentage"
+              aria-label="Minimum online payment percentage"
             />
           </div>
           <div className="flex gap-4 mt-6">

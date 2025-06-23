@@ -1690,7 +1690,7 @@ const AdminLayout = ({ categories = [], loading: parentLoading }) => {
           {/* Available Components */}
           <div className="flex-1 max-w-[50%] bg-white p-3 rounded-md shadow-sm">
             <h4 className="text-xs font-medium text-gray-700 mb-3">Available Components</h4>
-            <div className="bg-gray-50 rounded-md p-2 border border-gray-100 h-[calc(100vh-240px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-50">
+            <div className="bg-gray-50 rounded-md p-2 border border-gray-100  scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-50">
               <SortableContext
                 items={memoizedAvailableComponents.map((comp) => comp.id)}
                 strategy={verticalListSortingStrategy}

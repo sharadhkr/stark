@@ -73,7 +73,7 @@ const productSchema = new mongoose.Schema(
       {
         type: String,
         required: true,
-        enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Custom'],
+        enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Free Size', 'Custom'],
       },
     ],
     colors: [
@@ -81,6 +81,7 @@ const productSchema = new mongoose.Schema(
         type: String,
         required: true,
         trim: true,
+        enum: ['Red', 'Blue', 'Green', 'Black', 'White', 'Yellow', 'Gray', 'Other'],
       },
     ],
     material: {
@@ -117,7 +118,7 @@ const productSchema = new mongoose.Schema(
     fit: {
       type: String,
       required: [true, 'Fit type is required'],
-      enum: ['Regular', 'Slim', 'Loose', 'Tailored', 'Oversized', 'Athletic'],
+      enum: ['Regular', 'Slim', 'Loose', 'Tailored', 'Oversized', 'Athletic', 'Relaxed', 'Skinny', 'Custom'],
     },
     careInstructions: {
       type: String,
@@ -164,6 +165,28 @@ const productSchema = new mongoose.Schema(
         },
         message: 'Online payment percentage must be 100 if COD is not available, or between 0-100 if COD is available.',
       },
+    },
+    dimensions: {
+      chest: {
+        type: Number,
+        min: [0, 'Chest dimension cannot be negative'],
+        default: 0,
+      },
+      length: {
+        type: Number,
+        min: [0, 'Length dimension cannot be negative'],
+        default: 0,
+      },
+      sleeve: {
+        type: Number,
+        min: [0, 'Sleeve dimension cannot be negative'],
+        default: 0,
+      },
+    },
+    weight: {
+      type: Number,
+      min: [0, 'Weight cannot be negative'],
+      default: 0,
     },
     tags: [
       {

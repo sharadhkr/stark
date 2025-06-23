@@ -7,24 +7,10 @@ const Order = require('../models/orderModel');
 const { sendOtp, verifyOtp } = require('../utils/otp');
 const jwt = require('jsonwebtoken');
 const authenticateToken = require('../middleware/auth');
-const multer = require('multer');
+const { uploadSingle, uploadMultiple } = require('../config/multerConfig');
 const { uploadToCloudinary } = require('../config/cloudinaryConfig');
 const mongoose = require('mongoose');
 require('dotenv').config();
-
-// Multer setup for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    if (!validTypes.includes(file.mimetype)) {
-      return cb(new Error('Only JPEG, PNG, or JPG files allowed'));
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit per file
-});
 
 // Utility function to generate JWT token
 const generateToken = (id, phoneNumber) => {
@@ -34,9 +20,8 @@ const generateToken = (id, phoneNumber) => {
 // Input validation middleware
 const validateRequiredFields = (fields) => (req, res, next) => {
   const missingFields = fields.filter((field) => {
-    if (field === 'images' || field === 'profilePicture') {
-      return !req.files && !req.file; // Check for single file or array
-    }
+    if (field === 'images') return !req.files || req.files.length === 0;
+    if (field === 'profilePicture') return !req.file;
     return !req.body[field];
   });
   if (missingFields.length > 0) {
@@ -79,7 +64,7 @@ router.post('/send-otp', validateRequiredFields(['phoneNumber']), async (req, re
 // Register Seller
 router.post(
   '/register',
-  upload.single('profilePicture'),
+  uploadSingle('profilePicture'),
   validateRequiredFields(['phoneNumber', 'otp', 'name', 'shopName', 'address', 'password', 'profilePicture']),
   async (req, res) => {
     const { phoneNumber, otp, name, shopName, address, password } = req.body;
@@ -118,7 +103,7 @@ router.post(
         password,
         role: 'seller',
         profilePicture: profilePictureUrl,
-        status: 'pending',
+        status: 'disable',
       });
 
       await seller.save();
@@ -155,9 +140,9 @@ router.post('/login', validateRequiredFields(['phoneNumber', 'password']), async
   const { phoneNumber, password } = req.body;
 
   try {
-    console.log('Login Attempt:', { phoneNumber, password }); // Debug
+    console.log('Login Attempt:', { phoneNumber, password });
     const seller = await Seller.findOne({ phoneNumber }).select('+password');
-    console.log('Seller Found:', seller ? seller.phoneNumber : 'No seller'); // Debug
+    console.log('Seller Found:', seller ? seller.phoneNumber : 'No seller');
     if (!seller || seller.role !== 'seller') {
       return res.status(404).json({
         success: false,
@@ -166,7 +151,7 @@ router.post('/login', validateRequiredFields(['phoneNumber', 'password']), async
     }
 
     const isMatch = await seller.matchPassword(password);
-    console.log('Password Match:', isMatch); // Debug
+    console.log('Password Match:', isMatch);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -201,6 +186,62 @@ router.post('/login', validateRequiredFields(['phoneNumber', 'password']), async
   }
 });
 
+// Temporary Seller Registration Without OTP or Profile Picture
+router.post(
+  '/temp-register',
+  validateRequiredFields(['phoneNumber', 'name', 'shopName', 'address', 'password']),
+  async (req, res) => {
+    const { phoneNumber, name, shopName, address, password } = req.body;
+
+    try {
+      const existingSeller = await Seller.findOne({ phoneNumber });
+      if (existingSeller) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number already registered',
+        });
+      }
+
+      const seller = new Seller({
+        phoneNumber,
+        name: name.trim(),
+        shopName: shopName.trim(),
+        address: address.trim(),
+        password,
+        role: 'seller',
+        profilePicture: '',
+        status: 'disabled',
+      });
+
+      await seller.save();
+      const token = generateToken(seller._id, seller.phoneNumber);
+
+      res.status(201).json({
+        success: true,
+        message: 'Temporary seller registered successfully',
+        data: {
+          seller: {
+            id: seller._id,
+            name: seller.name,
+            phoneNumber: seller.phoneNumber,
+            role: seller.role,
+            profilePicture: seller.profilePicture,
+            status: seller.status,
+          },
+          token,
+        },
+      });
+    } catch (error) {
+      console.error('Temporary registration error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Server error during temporary registration',
+        error: error.message,
+      });
+    }
+  }
+);
+
 // Get Categories
 router.get('/categories', authenticateToken, async (req, res) => {
   try {
@@ -224,7 +265,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
 router.post(
   '/products',
   authenticateToken,
-  upload.array('images'),
+  uploadMultiple('images', 10),
   validateRequiredFields([
     'name', 'category', 'quantity', 'price', 'description', 'images',
     'sizes', 'colors', 'material', 'gender', 'brand', 'fit', 'careInstructions'
@@ -450,7 +491,7 @@ router.get('/products', authenticateToken, async (req, res) => {
 router.put(
   '/products/:id',
   authenticateToken,
-  upload.array('images'),
+  uploadMultiple('images', 10),
   async (req, res) => {
     const { id } = req.params;
     const {
@@ -742,7 +783,7 @@ router.delete('/products/:id', authenticateToken, async (req, res) => {
 });
 
 // Update Seller Profile
-router.put('/profile', authenticateToken, upload.single('profilePicture'), async (req, res) => {
+router.put('/profile', authenticateToken, uploadSingle('profilePicture'), async (req, res) => {
   try {
     const { name, shopName, phoneNumber, address, paymentId, aadharId, bankAccount, upiId, razorpayAccountId } = req.body;
 

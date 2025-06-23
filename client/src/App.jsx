@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, createContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { matchPath } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, matchPath } from 'react-router-dom';
 import BottomNavbar from './Components/Navbar';
 import Bottom from './Components/botttommm';
 import 'leaflet/dist/leaflet.css';
 import axios from './useraxios';
-import lzString from 'lz-string';
 
 const Home = React.lazy(() => import('./pages/Home.jsx'));
 const ProductPage = React.lazy(() => import('./pages/ProductPage.jsx'));
@@ -27,27 +25,10 @@ const SellerProducts = React.lazy(() => import('./pages/SellerProducts.jsx'));
 const SellerOrders = React.lazy(() => import('./pages/SellerOrders.jsx'));
 const SearchResults = React.lazy(() => import('./pages/SearchResults.jsx'));
 
-const DEFAULT_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-product.jpg';
-const DEFAULT_AD_IMAGE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-ad.jpg';
-const DEFAULT_PROFILE_PICTURE = 'https://res.cloudinary.com/your-cloud/image/upload/v123/default-profile.jpg';
-
 export const DataContext = createContext();
-
-const isValidUrl = (() => {
-  const urlRegex = /^https?:\/\/[\S]+$/i;
-  const cache = new Map();
-  return (url) => {
-    if (!url || typeof url !== 'string') return false;
-    if (cache.has(url)) return cache.get(url);
-    const result = urlRegex.test(url);
-    cache.set(url, result);
-    return result;
-  };
-})();
 
 const CACHE_CONFIG = {
   STALE_TIME: 10 * 60 * 1000,
-  STORAGE_PREFIX: 'app_cache_v2_',
 };
 
 const DataProvider = ({ children }) => {
@@ -62,10 +43,7 @@ const DataProvider = ({ children }) => {
   }, []);
 
   const updateCache = useCallback((key, data) => {
-    setCache(prev => ({
-      ...prev,
-      [key]: { data, timestamp: Date.now() },
-    }));
+    setCache(prev => ({ ...prev, [key]: { data, timestamp: Date.now() } }));
   }, []);
 
   const fetchCriticalData = useCallback(async (force = false) => {
@@ -73,21 +51,18 @@ const DataProvider = ({ children }) => {
     isFetchingRef.current = true;
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
-
     try {
-      const response = await axios.get('/api/user/auth/initial-data', {
+      const { data } = await axios.get('/api/user/auth/initial-data', {
         signal: abortControllerRef.current.signal,
       });
-      const { layout, products, comboOffers, ads, tripleAds, sellers, banner, searchSuggestions, trendingSearches } = response.data;
-
-      const updates = { layout, products, comboOffers, ads, tripleAds, sellers, banner, searchSuggestions, trendingSearches };
-      Object.entries(updates).forEach(([key, data]) => {
-        if (data) updateCache(key, data);
-      });
-
+      const keys = [
+        'layout', 'products', 'comboOffers', 'ads',
+        'tripleAds', 'sellers', 'banner', 'searchSuggestions', 'trendingSearches'
+      ];
+      keys.forEach(key => data[key] && updateCache(key, data[key]));
       hasInitializedRef.current = true;
     } catch (err) {
-      if (err.name !== 'AbortError') console.error(err);
+      if (err.name !== 'CanceledError') console.error(err);
     } finally {
       isFetchingRef.current = false;
       setIsInitialLoading(false);
@@ -96,11 +71,8 @@ const DataProvider = ({ children }) => {
 
   useEffect(() => {
     fetchCriticalData();
-    return () => {
-      abortControllerRef.current?.abort();
-      isFetchingRef.current = false;
-    };
-  }, []);
+    return () => abortControllerRef.current?.abort();
+  }, [fetchCriticalData]);
 
   const contextValue = useMemo(() => ({
     cache,
@@ -115,11 +87,9 @@ const DataProvider = ({ children }) => {
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
+  static getDerivedStateFromError() { return { hasError: true }; }
   render() {
-    if (this.state.hasError) return <div>Something went wrong</div>;
+    if (this.state.hasError) return <div className="text-center mt-20 text-red-600">Something went wrong</div>;
     return this.props.children;
   }
 }
@@ -136,11 +106,15 @@ const Layout = React.memo(({ children }) => {
     userRoutes.some(path => matchPath({ path, end: path === '/' }, pathname)),
     [pathname]
   );
-
   return (
     <>
       {children}
-      {showNavbar && <><BottomNavbar /><Bottom /></>}
+      {showNavbar && (
+        <div className="">
+          <BottomNavbar />
+          <Bottom />
+        </div>
+      )}
     </>
   );
 });
@@ -169,8 +143,8 @@ const routes = [
 ];
 
 const LoadingSpinner = React.memo(() => (
-  <div className="flex justify-center items-center h-screen bg-gray-50">
-    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+  <div className="flex justify-center items-center h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
   </div>
 ));
 
