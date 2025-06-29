@@ -4,7 +4,7 @@ import { FaStar } from 'react-icons/fa';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import ProductCard from '../ProductCard4line';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';
@@ -73,7 +73,7 @@ const SponsoredSection = React.memo(() => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="py-6 bg-gray-50"
+      className="py-6 "
       role="region"
       aria-label="Sponsored Products"
     >
@@ -86,7 +86,7 @@ const SponsoredSection = React.memo(() => {
             <div className="flex gap-2">
               <button
                 onClick={scrollLeft}
-                className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                className="p-1 bg-none rounded-full"
                 aria-label="Scroll left"
               >
                 <svg
@@ -106,7 +106,7 @@ const SponsoredSection = React.memo(() => {
               </button>
               <button
                 onClick={scrollRight}
-                className="p-1 bg-gray-200 rounded-full hover:bg-gray-300"
+                className="p-1 bg-gray-200 rounded-full "
                 aria-label="Scroll right"
               >
                 <svg

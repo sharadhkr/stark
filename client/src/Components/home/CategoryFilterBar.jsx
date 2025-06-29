@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const CategoryFilterBar = React.memo(({ onCategoryChange, onPriceRangeChange }) => {
   const { cache } = useContext(DataContext);

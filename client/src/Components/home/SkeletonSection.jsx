@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const SkeletonSection = React.memo(({ sectionType = 'products' }) => {
   const { cache } = useContext(DataContext);

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import debounce from 'lodash.debounce';
 import axios from '../useraxios';
-import { DataContext } from '../App';
+import { DataContext } from '../DataProvider';
 import Loading from '../assets/loading.gif';
 
 // Lazy-loaded components
@@ -161,8 +161,11 @@ const Home = React.memo(() => {
   }, [hasValidCache, updateCache]);
 
   useEffect(() => {
+  if (!hasValidCache) {
     fetchData();
-  }, [fetchData]);
+  }
+}, [hasValidCache, fetchData]);
+
 
   // Debounced server-side search
   const handleSearch = useCallback(

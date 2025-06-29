@@ -5,7 +5,7 @@ import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import Cookies from 'js-cookie';
 import ProductCard from '../ProductCard4line';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';

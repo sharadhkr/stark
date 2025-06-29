@@ -4,7 +4,7 @@ import axios from '../useraxios';
 import toast from 'react-hot-toast';
 import ProductCard from '../ProductCard';
 import GenderFilterBar from './GenderFilterBar';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const FALLBACK_IMAGE = 'https://via.placeholder.com/150?text=No+Image';
 
@@ -105,7 +105,7 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
   }
 
   return (
-    <div className="w-full flex flex-col">
+    <div className="w-full flex flex-col mb-4">
       <GenderFilterBar onGenderChange={onGenderChange} selectedGender={selectedGender} />
       <div className="grid pt-5 grid-cols-2">
         {validFilteredProducts.map((product) => (

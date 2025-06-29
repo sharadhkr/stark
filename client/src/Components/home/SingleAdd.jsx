@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useSwipeable } from 'react-swipeable';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const DEFAULT_IMAGE = 'https://your-server.com/generic-ad-placeholder.jpg';
 

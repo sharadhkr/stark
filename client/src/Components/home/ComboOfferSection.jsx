@@ -1,9 +1,8 @@
 import React, { useMemo, useRef, useContext } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
-// Utility to debounce scroll events
 const debounce = (func, wait) => {
   let timeout;
   return (...args) => {
@@ -15,9 +14,7 @@ const debounce = (func, wait) => {
 const DEFAULT_IMAGE = 'https://your-server.com/generic-combo-placeholder.jpg';
 
 const ComboOfferCard = React.memo(({ offer }) => {
-  if (!offer?._id || !offer.products || offer.products.length < 2) {
-    return null;
-  }
+  if (!offer?._id || !offer.products || offer.products.length < 2) return null;
 
   return (
     <Link to={`/combo/${offer._id}`} aria-label={`View combo offer ${offer.name}`}>
@@ -42,9 +39,9 @@ const ComboOfferCard = React.memo(({ offer }) => {
             />
           ))}
         </div>
-        <div className="bg-gradient-to-br z-10 from-violet-400 to-violet-500 text-white rounded-b-2xl h-12 text-center w-full flex flex-col justify-center">
+        <div className="bg-gradient-to-br z-10 from-violet-400 to-violet-500 text-white rounded-b-2xl h-12 text-center w-full flex flex-col justify-center px-1">
           <h3 className="text-base font-semibold capitalize truncate">{offer.name || 'Unnamed Combo'}</h3>
-          <div className="text-sm flex items-center justify-center gap-1">
+          <div className="text-xs flex items-center justify-center gap-1">
             <span>{offer.discount || 0}% off</span>
             <span className="line-through opacity-70">₹{offer.originalPrice || 0}</span>
             <span className="font-bold">₹{offer.price || 0}</span>
@@ -60,16 +57,22 @@ const ComboOfferSection = React.memo(() => {
   const scrollRef = useRef(null);
 
   const normalizedOffers = useMemo(() => {
-    return (cache.comboOffers?.data || [])
-      .filter((offer) => offer?._id && !offer.disabled && offer.products?.length >= 2)
-      .map((offer) => ({
+    const raw = cache.comboOffers?.data || [];
+
+    return raw
+      .filter(offer => offer?._id && Array.isArray(offer.products) && offer.products.length >= 2)
+      .map(offer => ({
         ...offer,
-        products: (offer.products || []).filter((p) => p?.images?.length > 0).map((p) => ({
+        products: offer.products.map(p => ({
           ...p,
-          images: p.images.map((img) => img || DEFAULT_IMAGE),
-        })),
+          images: (p.images || []).map(img =>
+            img && img !== 'https://via.placeholder.com/150'
+              ? img
+              : DEFAULT_IMAGE
+          )
+        }))
       }));
-  }, [cache.comboOffers?.data]); // Optimized dependency
+  }, [cache.comboOffers?.data]);
 
   const scrollLeft = debounce(() => {
     scrollRef.current?.scrollBy({ left: -224, behavior: 'smooth' });
@@ -116,6 +119,7 @@ const ComboOfferSection = React.memo(() => {
           </div>
         )}
       </div>
+
       <motion.div
         ref={scrollRef}
         className="flex gap-4 py-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory"

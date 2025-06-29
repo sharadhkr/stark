@@ -998,272 +998,6 @@ router.post('/products-by-ids', async (req, res) => {
   }
 });
 
-// Search Routes
-router.get('/searches/recent', userLoggedin, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('recentSearches');
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const searchesWithSimilar = await Promise.all(
-      (user.recentSearches || []).map(async (query) => {
-        let similarProducts = [];
-        if (elasticsearch) {
-          try {
-            const productSearch = await elasticsearch.search({
-              index: 'products',
-              body: {
-                query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
-                size: 4,
-              },
-            });
-            similarProducts = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          } catch (elasticError) {
-            console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
-          }
-        }
-        if (!similarProducts.length) {
-          similarProducts = await Product.find({
-            $or: [
-              { name: { $regex: query, $options: 'i' } },
-              { description: { $regex: query, $options: 'i' } },
-            ],
-          })
-            .limit(4)
-            .select('name price images category sellerId')
-            .populate('sellerId', 'name shopName')
-            .populate('category', 'name');
-        }
-        return { query, similarProducts };
-      })
-    );
-
-    res.json({ success: true, searches: searchesWithSimilar });
-  } catch (error) {
-    console.error('Recent Searches Error:', error);
-    res.status(500).json({ message: 'Failed to fetch recent searches' });
-  }
-});
-
-router.post('/searches', userLoggedin, async (req, res) => {
-  try {
-    const { query } = req.body;
-    if (!query) return res.status(400).json({ message: 'Query is required' });
-
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    if (!user.recentSearches) user.recentSearches = [];
-    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
-    await user.save();
-
-    res.json({ success: true, message: 'Search saved' });
-  } catch (error) {
-    console.error('Save Recent Search Error:', error);
-    res.status(500).json({ message: 'Failed to save search' });
-  }
-});
-
-router.get('/search/recent', userLoggedin, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    const searchesWithSimilar = await Promise.all(
-      (user.recentSearches || []).map(async (query) => {
-        let similarProducts = [];
-        if (elasticsearch) {
-          try {
-            const productSearch = await elasticsearch.search({
-              index: 'products',
-              body: {
-                query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
-                size: 4,
-              },
-            });
-            similarProducts = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          } catch (elasticError) {
-            console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
-          }
-        }
-        if (!similarProducts.length) {
-          similarProducts = await Product.find({
-            $or: [
-              { name: { $regex: query, $options: 'i' } },
-              { description: { $regex: query, $options: 'i' } },
-            ],
-          })
-            .limit(4)
-            .select('name price images category sellerId')
-            .populate('sellerId', 'name shopName')
-            .populate('category', 'name');
-        }
-        return { query, similarProducts };
-      })
-    );
-
-    res.status(200).json({ recentSearches: searchesWithSimilar });
-  } catch (error) {
-    console.error('Recent Searches Error:', error);
-    res.status(500).json({ message: 'Failed to fetch recent searches' });
-  }
-});
-
-router.post('/search/recent', userLoggedin, async (req, res) => {
-  try {
-    const { query } = req.body;
-    const user = await User.findById(req.user.id);
-
-    if (!query) {
-      user.recentSearches = [];
-      await user.save();
-      return res.status(200).json({ message: 'Recent searches cleared' });
-    }
-
-    if (!user.recentSearches) user.recentSearches = [];
-    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
-    await user.save();
-    res.status(200).json({ message: 'Search saved' });
-  } catch (error) {
-    console.error('Save/Clear Recent Search Error:', error);
-    res.status(500).json({ message: 'Failed to save or clear search' });
-  }
-});
-
-router.get('/search/trending', async (req, res) => {
-  try {
-    const trendingSearches = ['phones', 'laptops', 'clothes', 'shoes', 'accessories'];
-    const topSellers = await Seller.find()
-      .sort({ totalOrders: -1 })
-      .limit(5)
-      .select('name shopName _id');
-    const topCategories = await Category.find()
-      .sort({ productCount: -1 })
-      .limit(5)
-      .select('name _id');
-    const topProducts = await Product.find()
-      .sort({ viewCount: -1 })
-      .limit(5)
-      .select('name images _id');
-
-    res.status(200).json({
-      trendingSearches,
-      topSellers,
-      topCategories,
-      topProducts,
-    });
-  } catch (error) {
-    console.error('Trending Data Error:', error);
-    res.status(500).json({ message: 'Failed to fetch trending data' });
-  }
-});
-
-router.get('/search/suggestions', userLoggedin, async (req, res) => {
-  try {
-    const { q } = req.query;
-    const user = await User.findById(req.user.id);
-
-    let products = [];
-    let categories = [];
-    let sellers = [];
-    let recentSearches = q ? [] : user.recentSearches || [];
-
-    if (q) {
-      if (elasticsearch) {
-        try {
-          const [productSearch, categorySearch, sellerSearch] = await Promise.all([
-            elasticsearch.search({
-              index: 'products',
-              body: {
-                query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
-                size: 8,
-              },
-            }),
-            elasticsearch.search({
-              index: 'categories',
-              body: { query: { match: { name: q } }, size: 8 },
-            }),
-            elasticsearch.search({
-              index: 'sellers',
-              body: {
-                query: { multi_match: { query: q, fields: ['name', 'shopName'], fuzziness: 'AUTO' } },
-                size: 8,
-              },
-            }),
-          ]);
-
-          products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          categories = categorySearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          sellers = sellerSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-          console.log('Elasticsearch search successful');
-        } catch (elasticError) {
-          console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
-        }
-      }
-
-      if (!products.length) {
-        const [mongoProducts, mongoCategories, mongoSellers] = await Promise.all([
-          Product.find({ $text: { $search: q } })
-            .limit(8)
-            .select('name images _id'),
-          Category.find({ $text: { $search: q } })
-            .limit(8)
-            .select('name _id'),
-          Seller.find({ $text: { $search: q } })
-            .limit(8)
-            .select('name shopName _id'),
-        ]);
-
-        products = mongoProducts;
-        categories = mongoCategories;
-        sellers = mongoSellers;
-        console.log('MongoDB search successful');
-      }
-    }
-
-    res.status(200).json({
-      recentSearches,
-      products,
-      categories,
-      sellers,
-    });
-  } catch (error) {
-    console.error('Search Suggestions Error:', error);
-    res.status(500).json({ message: 'Failed to fetch suggestions' });
-  }
-});
-
-router.get('/search', userLoggedin, async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ message: 'Query parameter is required' });
-
-    let products = [];
-    if (elasticsearch) {
-      try {
-        const productSearch = await elasticsearch.search({
-          index: 'products',
-          body: {
-            query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
-          },
-        });
-        products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
-        console.log('Elasticsearch full search successful');
-      } catch (elasticError) {
-        console.warn('Elasticsearch unavailable for full search, falling back to MongoDB:', elasticError);
-      }
-    }
-
-    if (!products.length) {
-      products = await Product.find({ $text: { $search: q } })
-        .select('name images _id description')
-        .populate('sellerId', 'name shopName');
-      console.log('MongoDB full search successful');
-    }
-
-    res.status(200).json({ products });
-  } catch (error) {
-    console.error('Search Error:', error);
-    res.status(500).json({ message: 'Failed to perform search' });
-  }
-});
 
 // Order Routes
 router.get('/order/:orderId', userLoggedin, async (req, res) => {
@@ -1874,561 +1608,531 @@ router.get('/sponsored', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch sponsored products', error: error.message });
   }
 });
+
 router.get('/trending', async (req, res) => {
   try {
-    const {
-      timeRange = 'today',
-      startDate,
-      endDate,
-      sortBy = 'trendScore',
-      sortOrder = 'desc',
-      category,
-      limit = 10,
-    } = req.query;
+    console.log('Fetching trending products...');
+    const trendingProducts = await Product.find({ viewCount: { $gt: 100 }, status: 'enabled', quantity: { $gt: 0 } })
+      .select('_id name price discountedPrice images sizes colors brand ratings category material gender fit careInstructions status quantity isReturnable returnPeriod isCashOnDeliveryAvailable onlinePaymentPercentage dimensions weight tags viewCount views orders availabilityDate createdAt updatedAt')
+      .populate('category', '_id name')
+      .sort({ viewCount: -1 })
+      .limit(10)
+      .lean();
 
-    // Validate limit
-    const maxLimit = 50;
-    const parsedLimit = parseInt(limit, 10);
-    if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > maxLimit) {
-      return res.status(400).json({ message: `Limit must be between 1 and ${maxLimit}` });
-    }
+    console.log('Trending products found:', trendingProducts.length);
 
-    // Validate sortBy
-    const validSortFields = ['trendScore', 'orders', 'viewCount', 'price'];
-    if (!validSortFields.includes(sortBy)) {
-      return res.status(400).json({ message: `sortBy must be one of: ${validSortFields.join(', ')}` });
-    }
+    const products = trendingProducts.map((product) => ({
+      ...product,
+      image: product.images?.[0],
+      sizes: product.sizes || ['Free Size'], // Backend fallback
+      colors: product.colors || ['Other'], // Backend fallback
+      brand: product.brand || 'No Brand',
+      ratings: product.ratings || { average: 0, count: 0 },
+      category: product.category || { _id: 'unknown', name: 'Unknown' },
+    }));
 
-    // Validate sortOrder
-    const validSortOrders = ['asc', 'desc'];
-    if (!validSortOrders.includes(sortOrder)) {
-      return res.status(400).json({ message: `sortOrder must be one of: ${validSortOrders.join(', ')}` });
-    }
+    console.log('Formatted trending products:', products.length);
 
-    // Validate category (if provided)
-    let categoryFilter = {};
-    if (category) {
-      if (typeof category !== 'string' || category.trim().length === 0) {
-        return res.status(400).json({ message: 'Category must be a non-empty string' });
-      }
-      categoryFilter = { category: category.trim() };
-    }
-
-    // Determine time range
-    let dateFilter = {};
-    const now = new Date();
-    if (timeRange === 'custom') {
-      if (!startDate || !endDate) {
-        return res.status(400).json({ message: 'startDate and endDate are required for custom timeRange' });
-      }
-      const parsedStartDate = moment(startDate, moment.ISO_8601, true);
-      const parsedEndDate = moment(endDate, moment.ISO_8601, true);
-      if (!parsedStartDate.isValid() || !parsedEndDate.isValid()) {
-        return res.status(400).json({ message: 'startDate and endDate must be valid ISO 8601 dates' });
-      }
-      if (parsedEndDate.isBefore(parsedStartDate)) {
-        return res.status(400).json({ message: 'endDate must be after startDate' });
-      }
-      dateFilter = {
-        updatedAt: {
-          $gte: parsedStartDate.toDate(),
-          $lte: parsedEndDate.toDate(),
-        },
-      };
-    } else {
-      let startDate;
-      switch (timeRange) {
-        case 'today':
-          startDate = new Date(now.setHours(0, 0, 0, 0));
-          break;
-        case 'week':
-          startDate = new Date(now.setDate(now.getDate() - 7));
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'month':
-          startDate = new Date(now.setDate(now.getDate() - 30));
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        default:
-          return res.status(400).json({ message: 'timeRange must be one of: today, week, month, custom' });
-      }
-      const endDate = new Date(now.setHours(23, 59, 59, 999));
-      dateFilter = {
-        updatedAt: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      };
-    }
-
-    // Build aggregation pipeline
-    const pipeline = [
-      {
-        $match: {
-          ...dateFilter,
-          ...categoryFilter,
-          $or: [
-            { orders: { $gt: 0 } },
-            { viewCount: { $gt: 0 } },
-          ],
-        },
-      },
-      {
-        $addFields: {
-          trendScore: { $add: [{ $ifNull: ['$orders', 0] }, { $ifNull: ['$viewCount', 0] }] },
-        },
-      },
-      {
-        $sort: {
-          [sortBy]: sortOrder === 'desc' ? -1 : 1,
-          // Secondary sort by orders and viewCount for consistency
-          orders: -1,
-          viewCount: -1,
-        },
-      },
-      { $limit: parsedLimit },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          price: 1,
-          discountedPrice: 1,
-          images: 1,
-          viewCount: 1,
-          orders: 1,
-          category: 1,
-        },
-      },
-    ];
-
-    // Execute aggregation
-    const trendingProducts = await Product.aggregate(pipeline);
-
-    res.status(200).json({ success: true, products: trendingProducts });
+    res.status(200).json({
+      success: true,
+      products,
+      totalCount: products.length,
+      currentPage: 1,
+      totalPages: 1,
+    });
   } catch (error) {
-    console.error('Fetch Trending Products Error:', error);
-    res.status(500).json({ message: 'Failed to fetch trending products', error: error.message });
+    console.error('List Trending Products Error:', { message: error.message, stack: error.stack });
+    res.status(500).json({ success: false, message: 'Failed to fetch trending products', error: error.message });
   }
 });
 
 
 router.get('/sponsored', async (req, res) => {
   try {
-    const sponsoredProducts = await SponsoredProduct.find().populate('productId', 'name price images');
-    res.status(200).json({ success: true, products: sponsoredProducts });
+    console.log('Fetching sponsored products...');
+    const sponsoredProducts = await SponsoredProduct.find()
+      .populate({
+        path: 'productId',
+        select: '_id name price discountedPrice images sizes colors brand ratings category material gender fit careInstructions status quantity isReturnable returnPeriod isCashOnDeliveryAvailable onlinePaymentPercentage dimensions weight tags viewCount views orders availabilityDate createdAt updatedAt',
+        match: { status: 'enabled', quantity: { $gt: 0 } },
+        populate: {
+          path: 'category',
+          select: '_id name',
+        },
+      })
+      .lean();
+
+    console.log('Sponsored products found:', JSON.stringify(sponsoredProducts, null, 2));
+
+    // Filter out invalid references and flatten response
+    const products = sponsoredProducts
+      .filter((sp) => sp.productId)
+      .map((sp) => ({
+        _id: sp.productId._id,
+        name: sp.productId.name,
+        price: sp.productId.price,
+        discountedPrice: sp.productId.discountedPrice,
+        images: sp.productId.images,
+        sizes: sp.productId.sizes || ['Free Size'], // Backend fallback
+        colors: sp.productId.colors || ['Other'], // Backend fallback
+        brand: sp.productId.brand || 'No Brand',
+        ratings: sp.productId.ratings || { average: 0, count: 0 },
+        category: sp.productId.category || { _id: 'unknown', name: 'Unknown' },
+        material: sp.productId.material,
+        gender: sp.productId.gender,
+        fit: sp.productId.fit,
+        careInstructions: sp.productId.careInstructions || [],
+        status: sp.productId.status || undefined,
+        quantity: sp.productId.quantity || undefined,
+        isReturnable: sp.productId.isReturnable || undefined,
+        returnPeriod: sp.productId.returnPeriod || undefined,
+        isCashOnDeliveryAvailable: sp.productId.isCashOnDeliveryAvailable || undefined,
+        onlinePaymentPercentage: sp.productId.onlinePaymentPercentage || undefined,
+        dimensions: sp.productId.dimensions || undefined,
+        weight: sp.productId.weight || undefined,
+        tags: sp.productId.tags || [],
+        viewCount: sp.productId.viewCount || 0,
+        views: sp.productId.views || [],
+        orders: sp.productId.orders || [],
+        availabilityDate: sp.productId.availabilityDate,
+        createdAt: sp.productId.createdAt,
+        updatedAt: sp.productId.updatedAt,
+        image: sp.productId.images?.[0],
+      }));
+
+    console.log('Formatted products:', JSON.stringify(products, null, 2));
+
+    res.status(200).json({
+      success: true,
+      products,
+      totalCount: products.length,
+      currentPage: 1,
+      totalPages: 1,
+    });
   } catch (error) {
     console.error('List Sponsored Products Error:', { message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: 'Failed to fetch sponsored products', error: error.message });
   }
 });
 
+// Search Routes
+router.get('/searches/recent', userLoggedin, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('recentSearches');
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-// Default images
-const DEFAULT_PRODUCT_IMAGE = 'https://via.placeholder.com/150?text=Product';
-const DEFAULT_COMBO_IMAGE = 'https://via.placeholder.com/150?text=Combo';
-const DEFAULT_AD_IMAGE = 'https://via.placeholder.com/150?text=Ad';
-const DEFAULT_BANNER_IMAGE = 'https://via.placeholder.com/150?text=Banner';
-const DEFAULT_CATEGORY_ICON = 'https://via.placeholder.com/50?text=Category';
-const DEFAULT_PROFILE_PICTURE = 'https://via.placeholder.com/80x80?text=No+Image';
+    const searchesWithSimilar = await Promise.all(
+      (user.recentSearches || []).map(async (query) => {
+        let similarProducts = [];
+        if (elasticsearch) {
+          try {
+            const productSearch = await elasticsearch.search({
+              index: 'products',
+              body: {
+                query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                size: 4,
+              },
+            });
+            similarProducts = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          } catch (elasticError) {
+            console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
+          }
+        }
+        if (!similarProducts.length) {
+          similarProducts = await Product.find({
+            $or: [
+              { name: { $regex: query, $options: 'i' } },
+              { description: { $regex: query, $options: 'i' } },
+            ],
+          })
+            .limit(4)
+            .select('name price images category sellerId')
+            .populate('sellerId', 'name shopName')
+            .populate('category', 'name');
+        }
+        return { query, similarProducts };
+      })
+    );
 
+    res.json({ success: true, searches: searchesWithSimilar });
+  } catch (error) {
+    console.error('Recent Searches Error:', error);
+    res.status(500).json({ message: 'Failed to fetch recent searches' });
+  }
+});
+
+router.post('/searches', userLoggedin, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.status(400).json({ message: 'Query is required' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (!user.recentSearches) user.recentSearches = [];
+    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
+    await user.save();
+
+    res.json({ success: true, message: 'Search saved' });
+  } catch (error) {
+    console.error('Save Recent Search Error:', error);
+    res.status(500).json({ message: 'Failed to save search' });
+  }
+});
+
+router.get('/search/recent', userLoggedin, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const searchesWithSimilar = await Promise.all(
+      (user.recentSearches || []).map(async (query) => {
+        let similarProducts = [];
+        if (elasticsearch) {
+          try {
+            const productSearch = await elasticsearch.search({
+              index: 'products',
+              body: {
+                query: { multi_match: { query, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                size: 4,
+              },
+            });
+            similarProducts = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          } catch (elasticError) {
+            console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
+          }
+        }
+        if (!similarProducts.length) {
+          similarProducts = await Product.find({
+            $or: [
+              { name: { $regex: query, $options: 'i' } },
+              { description: { $regex: query, $options: 'i' } },
+            ],
+          })
+            .limit(4)
+            .select('name price images category sellerId')
+            .populate('sellerId', 'name shopName')
+            .populate('category', 'name');
+        }
+        return { query, similarProducts };
+      })
+    );
+
+    res.status(200).json({ recentSearches: searchesWithSimilar });
+  } catch (error) {
+    console.error('Recent Searches Error:', error);
+    res.status(500).json({ message: 'Failed to fetch recent searches' });
+  }
+});
+
+router.post('/search/recent', userLoggedin, async (req, res) => {
+  try {
+    const { query } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!query) {
+      user.recentSearches = [];
+      await user.save();
+      return res.status(200).json({ message: 'Recent searches cleared' });
+    }
+
+    if (!user.recentSearches) user.recentSearches = [];
+    user.recentSearches = [query, ...user.recentSearches.filter((q) => q !== query)].slice(0, 5);
+    await user.save();
+    res.status(200).json({ message: 'Search saved' });
+  } catch (error) {
+    console.error('Save/Clear Recent Search Error:', error);
+    res.status(500).json({ message: 'Failed to save or clear search' });
+  }
+});
+
+router.get('/search/trending', async (req, res) => {
+  try {
+    const trendingSearches = ['phones', 'laptops', 'clothes', 'shoes', 'accessories'];
+    const topSellers = await Seller.find()
+      .sort({ totalOrders: -1 })
+      .limit(5)
+      .select('name shopName _id');
+    const topCategories = await Category.find()
+      .sort({ productCount: -1 })
+      .limit(5)
+      .select('name _id');
+    const topProducts = await Product.find()
+      .sort({ viewCount: -1 })
+      .limit(5)
+      .select('name images _id');
+
+    res.status(200).json({
+      trendingSearches,
+      topSellers,
+      topCategories,
+      topProducts,
+    });
+  } catch (error) {
+    console.error('Trending Data Error:', error);
+    res.status(500).json({ message: 'Failed to fetch trending data' });
+  }
+});
+
+router.get('/search/suggestions', async (req, res) => {
+  try {
+    const { q } = req.query;
+    const user = await User.findById(req.user.id);
+
+    let products = [];
+    let categories = [];
+    let sellers = [];
+    let recentSearches = q ? [] : user.recentSearches || [];
+
+    if (q) {
+      if (elasticsearch) {
+        try {
+          const [productSearch, categorySearch, sellerSearch] = await Promise.all([
+            elasticsearch.search({
+              index: 'products',
+              body: {
+                query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+                size: 8,
+              },
+            }),
+            elasticsearch.search({
+              index: 'categories',
+              body: { query: { match: { name: q } }, size: 8 },
+            }),
+            elasticsearch.search({
+              index: 'sellers',
+              body: {
+                query: { multi_match: { query: q, fields: ['name', 'shopName'], fuzziness: 'AUTO' } },
+                size: 8,
+              },
+            }),
+          ]);
+
+          products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          categories = categorySearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          sellers = sellerSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+          console.log('Elasticsearch search successful');
+        } catch (elasticError) {
+          console.warn('Elasticsearch unavailable, falling back to MongoDB:', elasticError);
+        }
+      }
+
+      if (!products.length) {
+        const [mongoProducts, mongoCategories, mongoSellers] = await Promise.all([
+          Product.find({ $text: { $search: q } })
+            .limit(8)
+            .select('name images _id'),
+          Category.find({ $text: { $search: q } })
+            .limit(8)
+            .select('name _id'),
+          Seller.find({ $text: { $search: q } })
+            .limit(8)
+            .select('name shopName _id'),
+        ]);
+
+        products = mongoProducts;
+        categories = mongoCategories;
+        sellers = mongoSellers;
+        console.log('MongoDB search successful');
+      }
+    }
+
+    res.status(200).json({
+      recentSearches,
+      products,
+      categories,
+      sellers,
+    });
+  } catch (error) {
+    console.error('Search Suggestions Error:', error);
+    res.status(500).json({ message: 'Failed to fetch suggestions' });
+  }
+});
+
+router.get('/search', userLoggedin, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ message: 'Query parameter is required' });
+
+    let products = [];
+    if (elasticsearch) {
+      try {
+        const productSearch = await elasticsearch.search({
+          index: 'products',
+          body: {
+            query: { multi_match: { query: q, fields: ['name', 'description'], fuzziness: 'AUTO' } },
+          },
+        });
+        products = productSearch.hits.hits.map((hit) => ({ _id: hit._id, ...hit._source }));
+        console.log('Elasticsearch full search successful');
+      } catch (elasticError) {
+        console.warn('Elasticsearch unavailable for full search, falling back to MongoDB:', elasticError);
+      }
+    }
+
+    if (!products.length) {
+      products = await Product.find({ $text: { $search: q } })
+        .select('name images _id description')
+        .populate('sellerId', 'name shopName');
+      console.log('MongoDB full search successful');
+    }
+
+    res.status(200).json({ products });
+  } catch (error) {
+    console.error('Search Error:', error);
+    res.status(500).json({ message: 'Failed to perform search' });
+  }
+});
+// optimized-initial-data.js
+// Updated backend: /initial-data route with improved comboOffers and ads
 router.get('/initial-data', async (req, res) => {
   try {
     const { limit = 20, page = 1 } = req.query;
     const skip = (page - 1) * limit;
     const userId = req.user?._id;
 
-    // Fetch all data in parallel
-    const [
-      layoutResult,
-      products,
-      comboOffers,
-      categories,
-      sellers,
-      sponsoredProducts,
-      adminData,
-      trendingProducts,
-      userData,
-      trendingSearches,
-      categoryProducts,
-    ] = await Promise.all([
-      Layout.findOne()
-        .sort({ updatedAt: -1 })
-        .lean()
-        .select('components')
-        .then((layout) => {
-          if (!layout) console.warn('No Layout document found');
-          return layout || { components: [] };
-        }),
+    // Constants
+    const DEFAULTS = {
+      PRODUCT_IMAGE: 'https://via.placeholder.com/150?text=Product',
+      COMBO_IMAGE: 'https://via.placeholder.com/150?text=Combo',
+      AD_IMAGE: 'https://via.placeholder.com/150?text=Ad',
+      BANNER_IMAGE: 'https://via.placeholder.com/150?text=Banner',
+      CATEGORY_ICON: 'https://via.placeholder.com/50?text=Category',
+      PROFILE_PICTURE: 'https://via.placeholder.com/80x80?text=No+Image',
+    };
 
-      Product.find()
-        .limit(Number(limit))
-        .skip(Number(skip))
-        .lean()
-        .select('_id name price images gender category')
-        .then((prods) => {
-          if (!prods.length) console.warn('No products found');
-          if (prods.some((p) => !p.images || !p.images.length)) {
-            console.warn(`Found ${prods.filter((p) => !p.images || !p.images.length).length} products with missing images`);
-          }
-          return prods || [];
-        }),
+    const sanitizeImage = (img, fallback) => {
+      if (!img || typeof img !== 'string' || img.includes('placeholder')) return fallback;
+      return img;
+    };
 
-      ComboOffer.find()
-        .limit(3)
-        .lean()
-        .select('_id name images products price discount isActive')
-        .populate('products', '_id name images price')
-        .then((offers) => {
-          if (!offers.length) console.warn('No combo offers found');
-          if (offers.some((o) => !o || !o.images || !o.images.length)) {
-            console.warn(`Found ${offers.filter((o) => !o || !o.images || !o.images.length).length} combo offers with missing or invalid data`);
-          }
-          return offers.filter((o) => o && o._id && o.name) || [];
-        }),
+    const getFirstImage = (arr, fallback) => {
+      if (!Array.isArray(arr)) return fallback;
+      const found = arr.find(i => typeof i === 'string' ? i.trim() : i?.url?.trim());
+      return sanitizeImage(found?.url || found, fallback);
+    };
 
-      Category.find()
-        .limit(8)
-        .lean()
-        .select('_id name icon productCount')
-        .then((cats) => {
-          if (!cats.length) console.warn('No categories found');
-          if (cats.some((c) => !c.icon)) {
-            console.warn(`Found ${cats.filter((c) => !c.icon).length} categories with missing icons`);
-          }
-          return cats || [];
-        }),
+    const sanitizeProducts = (prods = []) =>
+      prods.map(p => ({
+        ...p,
+        image: getFirstImage(p.images, DEFAULTS.PRODUCT_IMAGE),
+        sizes: p.sizes || ['Free Size'],
+        colors: p.colors || ['Other'],
+        brand: p.brand || 'No Brand',
+        ratings: p.ratings || { average: 0, count: 0 },
+        category: p.category || { _id: 'unknown', name: 'Unknown' },
+        gender: p.gender || 'Unisex',
+        fit: p.fit || 'Regular',
+        isReturnable: p.isReturnable ?? true,
+        returnPeriod: p.returnPeriod || 7,
+        isCashOnDeliveryAvailable: p.isCashOnDeliveryAvailable ?? true,
+        onlinePaymentPercentage: p.onlinePaymentPercentage || 100,
+        dimensions: p.dimensions || {},
+        weight: p.weight || 0,
+      }));
 
-      Seller.find()
-        .limit(5)
-        .lean()
-        .select('_id name shopName profilePicture')
-        .then((sells) => {
-          if (!sells.length) console.warn('No sellers found');
-          if (sells.some((s) => !s.profilePicture || s.profilePicture.trim() === '')) {
-            console.warn(`Found ${sells.filter((s) => !s.profilePicture || s.profilePicture.trim() === '').length} sellers with missing/empty profilePicture`);
-          }
-          return sells || [];
-        }),
-
-      SponsoredProduct.find()
-        .limit(5)
-        .lean()
-        .populate('productId', '_id name price images')
-        .then((sponsored) => {
-          if (!sponsored.length) {
-            console.warn('No sponsored products found, falling back to regular products');
-            return Product.find()
-              .limit(5)
-              .lean()
-              .select('_id name price images')
-              .then((prods) => prods || []);
-          }
-          return sponsored.map((sp) => sp.productId).filter((p) => p) || [];
-        }),
-
-      Admin.findOne()
-        .lean()
-        .select('singleadd doubleadd tripleadd')
-        .then((admin) => {
-          if (!admin) console.warn('No admin document found');
-          return {
-            singleadd: admin?.singleadd || { images: [] },
-            doubleadd: admin?.doubleadd || { images: [] },
-            tripleadd: admin?.tripleadd || { images: [] },
-          };
-        }),
-
-      Product.find()
-        .sort({ viewCount: -1 })
-        .limit(5)
-        .lean()
-        .select('_id name price images')
-        .then((trending) => {
-          if (!trending.length) console.warn('No trending products found');
-          if (trending.some((p) => !p.images || !p.images.length)) {
-            console.warn(`Found ${trending.filter((p) => !p.images || !p.images.length).length} trending products with missing images`);
-          }
-          return trending || [];
-        }),
-
-      userId
-        ? User.findById(userId)
-            .lean()
-            .select('recentSearches recentlyViewed')
-            .then((user) => {
-              if (!user) console.warn(`No user found for ID: ${userId}`);
-              return {
-                recentSearches: user?.recentSearches || [],
-                recentlyViewed: user?.recentlyViewed || [],
-              };
-            })
-        : Promise.resolve({ recentSearches: [], recentlyViewed: [] }),
-
-      User.aggregate([
-        { $unwind: '$recentSearches' },
-        { $match: { recentSearches: { $ne: '' } } },
-        { $group: { _id: '$recentSearches', count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 5 },
-        { $project: { _id: 0, query: '$_id' } },
-      ])
-        .then((searches) => ({
-          trendingSearches: searches.map((s) => s.query) || [],
-          topSellers: Seller.find().sort({ totalOrders: -1 }).limit(3).lean().select('_id name shopName profilePicture'),
-          topCategories: Category.find().sort({ productCount: -1 }).limit(3).lean().select('_id name icon'),
-          topProducts: Product.find().sort({ viewCount: -1 }).limit(3).lean().select('_id name images'),
-        }))
-        .then(async (trending) => {
-          const result = {
-            trendingSearches: trending.trendingSearches,
-            topSellers: (await trending.topSellers) || [],
-            topCategories: (await trending.topCategories) || [],
-            topProducts: (await trending.topProducts) || [],
-          };
-          if (!result.trendingSearches.length) console.warn('No trending searches found');
-          return result;
-        }),
-
-      Category.find()
-        .lean()
-        .select('_id')
-        .then(async (cats) => {
-          if (!cats.length) {
-            console.warn('No categories found for categoryProducts, using fallback');
-            return { 'fallbackCategory': [] };
-          }
-          const categoryProducts = {};
-          for (const cat of cats) {
-            const prods = await Product.find({ category: cat._id })
-              .limit(10)
-              .lean()
-              .select('_id name price images gender category')
-              .then((p) => {
-                if (!p?.length) console.warn(`No products found for category ${cat._id}`);
-                return p || [];
-              });
-            categoryProducts[cat._id] = prods;
-          }
-          if (Object.keys(categoryProducts).length === 0) {
-            console.warn('No category products found, using fallback');
-            return { 'fallbackCategory': [] };
-          }
-          return categoryProducts;
-        }),
+    // Fetch all core data in parallel
+    const [layout, products, comboOffersRaw, categories, sellers, sponsoredRaw, adminAds, trendingRaw, userData] = await Promise.all([
+      Layout.findOne().sort({ updatedAt: -1 }).select('components').lean(),
+      Product.find({ status: 'enabled', quantity: { $gt: 0 } }).limit(limit).skip(skip).select('-__v').populate(['category', 'sellerId']).lean(),
+      ComboOffer.find({ isActive: true }).limit(3).populate({
+        path: 'products',
+        match: { status: 'enabled', quantity: { $gt: 0 } },
+        populate: ['category', 'sellerId']
+      }).lean(),
+      Category.find().limit(8).lean(),
+      Seller.find().limit(5).lean(),
+      SponsoredProduct.find().limit(5).populate({
+        path: 'productId',
+        match: { status: 'enabled', quantity: { $gt: 0 } },
+        populate: ['category', 'sellerId']
+      }).lean(),
+      Admin.findOne().lean(),
+      Product.find({ viewCount: { $gt: 100 }, status: 'enabled', quantity: { $gt: 0 } }).sort({ viewCount: -1 }).limit(5).populate(['category', 'sellerId']).lean(),
+      userId ? User.findById(userId).select('recentSearches recentlyViewed').lean() : { recentSearches: [], recentlyViewed: [] },
     ]);
 
-    // Sanitize images
-    const sanitizeImage = (image, defaultImage, context = 'unknown') => {
-      if (!image || image.trim() === '' || image.includes('placeholder')) {
-        console.warn(`Invalid or empty image in ${context}: ${image || 'null'}, using default: ${defaultImage}`);
-        return defaultImage;
-      }
-      return image;
-    };
-
-    const getFirstValidImage = (images, defaultImage, context) => {
-      if (!Array.isArray(images)) {
-        console.warn(`Invalid images array in ${context}: ${images}, using default: ${defaultImage}`);
-        return defaultImage;
-      }
-      const validImage = images.find(
-        (img) => (typeof img === 'string' && img && img.trim() !== '' && !img.includes('placeholder')) ||
-                 (img?.url && !img.disabled && img.url.trim() !== '' && !img.url.includes('placeholder'))
-      );
-      return sanitizeImage(validImage?.url || validImage, defaultImage, context);
-    };
-
-    const sanitizedProducts = products.map((product) => ({
-      ...product,
-      image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `product ${product._id}`),
+    // Sanitize combo offers
+    console.log('🧪 Raw Combo Offers:', comboOffersRaw.length);
+    const comboOffers = comboOffersRaw.filter(o => {
+      const valid = o.products?.length >= 2;
+      if (!valid) console.log('❌ Skipped combo (less than 2 valid products):', o._id);
+      return valid;
+    }).map(o => ({
+      ...o,
+      image: getFirstImage(o.images, getFirstImage(o.products?.[0]?.images, DEFAULTS.COMBO_IMAGE)),
+      products: sanitizeProducts(o.products),
     }));
+    console.log('✅ Final sanitized comboOffers:', comboOffers.length);
 
-    const sanitizedComboOffers = comboOffers.map((offer) => {
-      if (!offer || !offer._id || !offer.name) {
-        console.warn(`Skipping invalid combo offer: ${JSON.stringify(offer)}`);
-        return null;
-      }
-      return {
-        ...offer,
-        image: getFirstValidImage(offer.images, DEFAULT_COMBO_IMAGE, `comboOffer ${offer._id}`),
-        products: (offer.products || []).map((p) => ({
-          ...p,
-          image: getFirstValidImage(p.images, DEFAULT_PRODUCT_IMAGE, `comboProduct ${p._id}`),
-        })),
-      };
-    }).filter((offer) => offer);
-
-    const sanitizedSponsoredProducts = sponsoredProducts.map((product) => ({
-      ...product,
-      image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `sponsoredProduct ${product._id}`),
+    // Sanitize ads with corrected casing
+    const ads = ['singleadd', 'doubleadd', 'tripleadd'].map(type => ({
+      type: type.charAt(0).toUpperCase() + type.slice(1).replace('add', ' Ad'),
+      images: (adminAds?.[type]?.images || []).filter(i => i?.url?.trim()).map(i => ({
+        ...i,
+        url: sanitizeImage(i.url, DEFAULTS.AD_IMAGE)
+      }))
     }));
-
-    const sanitizedTrendingProducts = trendingProducts.map((product) => ({
-      ...product,
-      image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `trendingProduct ${product._id}`),
-    }));
-
-    const sanitizedCategories = categories.map((category) => ({
-      ...category,
-      icon: sanitizeImage(category.icon, DEFAULT_CATEGORY_ICON, `category ${category._id}`),
-    }));
-
-    const sanitizedSellers = sellers.map((seller) => ({
-      ...seller,
-      profilePicture: seller.profilePicture && seller.profilePicture.trim() !== ''
-        ? seller.profilePicture
-        : DEFAULT_PROFILE_PICTURE,
-    }));
-
-    const sanitizedCategoryProducts = {};
-    for (const [catId, prods] of Object.entries(categoryProducts)) {
-      sanitizedCategoryProducts[catId] = Array.isArray(prods)
-        ? prods.map((product) => ({
-            ...product,
-            image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `categoryProduct ${product._id}`),
-          }))
-        : [];
-      if (!sanitizedCategoryProducts[catId].length) {
-        console.warn(`No valid products for category ${catId}`);
-      }
-    }
-
-    const sanitizedAds = [
-      {
-        type: 'Single Ad',
-        images: Array.isArray(adminData.singleadd?.images)
-          ? adminData.singleadd.images
-              .filter((img) => !img.disabled && img.url && img.url.trim() !== '')
-              .map((img) => ({
-                _id: img._id || new mongoose.Types.ObjectId().toString(),
-                url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `singleAd ${img._id || 'new'}`),
-                disabled: img.disabled,
-              }))
-          : [],
-      },
-      {
-        type: 'Double Ad',
-        images: Array.isArray(adminData.doubleadd?.images)
-          ? adminData.doubleadd.images
-              .filter((img) => !img.disabled && img.url && img.url.trim() !== '')
-              .map((img) => ({
-                _id: img._id || new mongoose.Types.ObjectId().toString(),
-                url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `doubleAd ${img._id || 'new'}`),
-                disabled: img.disabled,
-              }))
-          : [],
-      },
-      {
-        type: 'Triple Ad',
-        images: Array.isArray(adminData.tripleadd?.images)
-          ? adminData.tripleadd.images
-              .filter((img) => !img.disabled && img.url && img.url.trim() !== '')
-              .map((img) => ({
-                _id: img._id || new mongoose.Types.ObjectId().toString(),
-                url: sanitizeImage(img.url, DEFAULT_AD_IMAGE, `tripleAd ${img._id || 'new'}`),
-                disabled: img.disabled,
-              }))
-          : [],
-      },
-    ];
+    console.log('🪧 Ads processed:', ads.map(a => `${a.type}: ${a.images.length}`));
 
     const banner = {
-      url: adminData.singleadd?.images?.find((img) => !img.disabled && img.url && img.url.trim() !== '')?.url
-        ? sanitizeImage(
-            adminData.singleadd.images.find((img) => !img.disabled && img.url && img.url.trim() !== '').url,
-            DEFAULT_BANNER_IMAGE,
-            'banner'
-          )
-        : DEFAULT_BANNER_IMAGE,
+      url: sanitizeImage(adminAds?.singleadd?.images?.find(i => i?.url?.trim())?.url, DEFAULTS.BANNER_IMAGE)
     };
 
-    const sanitizedSearchSuggestions = {
-      recentSearches: userData.recentSearches.slice(0, 5),
-      categories: await Category.find().limit(3).lean().select('_id name icon').then((cats) =>
-        cats.map((c) => ({
-          ...c,
-          icon: sanitizeImage(c.icon, DEFAULT_CATEGORY_ICON, `searchCategory ${c._id}`),
-        }))
-      ),
-      sellers: await Seller.find()
-        .limit(3)
-        .lean()
-        .select('_id name shopName profilePicture')
-        .then((sells) =>
-          sells.map((s) => ({
-            ...s,
-            profilePicture: s.profilePicture && s.profilePicture.trim() !== ''
-              ? s.profilePicture
-              : DEFAULT_PROFILE_PICTURE,
-          }))
-        ),
-      products: await Product.find()
-        .limit(3)
-        .lean()
-        .select('_id name images')
-        .then((prods) =>
-          prods.map((p) => ({
-            ...p,
-            image: getFirstValidImage(p.images, DEFAULT_PRODUCT_IMAGE, `searchSuggestion ${p._id}`),
-          }))
-        ),
-    };
+    const allCats = await Category.find().lean().select('_id');
+    const catProds = await Promise.all(allCats.map(cat =>
+      Product.find({ category: cat._id, status: 'enabled', quantity: { $gt: 0 } })
+        .limit(10).select('-__v').populate(['category', 'sellerId']).lean()
+        .then(prods => ({ [cat._id]: prods }))
+    ));
+    const categoryProductsMap = Object.assign({}, ...catProds);
 
-    const sanitizedTrendingSearches = {
-      trendingSearches: trendingSearches.trendingSearches,
-      topSellers: trendingSearches.topSellers.map((seller) => ({
-        ...seller,
-        profilePicture: seller.profilePicture && seller.profilePicture.trim() !== ''
-          ? seller.profilePicture
-          : DEFAULT_PROFILE_PICTURE,
-      })),
-      topCategories: trendingSearches.topCategories.map((category) => ({
-        ...category,
-        icon: sanitizeImage(category.icon, DEFAULT_CATEGORY_ICON, `topCategory ${category._id}`),
-      })),
-      topProducts: trendingSearches.topProducts.map((product) => ({
-        ...product,
-        image: getFirstValidImage(product.images, DEFAULT_PRODUCT_IMAGE, `topProduct ${product._id}`),
-      })),
-    };
+    const recentlyViewed = userData.recentlyViewed?.length
+      ? await Product.find({ _id: { $in: userData.recentlyViewed } }).populate(['category', 'sellerId']).lean()
+      : [];
 
-    const response = {
-      layout: { components: layoutResult.components },
-      products: sanitizedProducts,
-      comboOffers: sanitizedComboOffers,
-      categories: sanitizedCategories,
-      sellers: sanitizedSellers,
-      sponsoredProducts: sanitizedSponsoredProducts,
-      ads: sanitizedAds,
-      tripleAds: sanitizedAds.filter((ad) => ad.type === 'Triple Ad'),
-      trendingProducts: sanitizedTrendingProducts,
+    const searches = await User.aggregate([
+      { $unwind: '$recentSearches' },
+      { $match: { recentSearches: { $ne: '' } } },
+      { $group: { _id: '$recentSearches', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      { $project: { _id: 0, query: '$_id' } },
+    ]);
+
+    const trendingProducts = sanitizeProducts(trendingRaw);
+    const sponsoredProducts = sanitizeProducts(sponsoredRaw.map(sp => sp.productId).filter(Boolean));
+    const topProducts = await Product.find({ status: 'enabled', quantity: { $gt: 0 } }).sort({ viewCount: -1 }).limit(3).populate(['category', 'sellerId']).lean();
+
+    return res.json({
+      layout: { components: layout?.components || [] },
+      products: sanitizeProducts(products),
+      comboOffers,
+      categories: categories.map(c => ({ ...c, icon: sanitizeImage(c.icon, DEFAULTS.CATEGORY_ICON) })),
+      sellers: sellers.map(s => ({ ...s, profilePicture: sanitizeImage(s.profilePicture, DEFAULTS.PROFILE_PICTURE) })),
+      sponsoredProducts,
+      trendingProducts,
+      recentlyViewed: sanitizeProducts(recentlyViewed),
+      ads,
+      tripleAds: ads.filter(a => a.type === 'Triple Ad'),
       banner,
-      searchSuggestions: sanitizedSearchSuggestions,
-      trendingSearches: sanitizedTrendingSearches,
-      recentlyViewed: userData.recentlyViewed.slice(0, 10),
-      categoryProducts: sanitizedCategoryProducts,
-    };
-
-    console.log('API response summary:', {
-      products: response.products.length,
-      comboOffers: response.comboOffers.length,
-      sponsoredProducts: response.sponsoredProducts.length,
-      categories: response.categories.length,
-      sellers: response.sellers.length,
-      ads: response.ads.map((ad) => ({ type: ad.type, images: ad.images.length })),
-      tripleAds: response.tripleAds.length,
-      banner: response.banner.url,
-      recentlyViewed: response.recentlyViewed.length,
-      categoryProducts: Object.entries(response.categoryProducts).map(([catId, prods]) => ({
-        category: catId,
-        productCount: prods.length,
-      })),
+      searchSuggestions: {
+        recentSearches: userData.recentSearches?.slice(0, 5) || [],
+        categories: categories.slice(0, 3).map(c => ({ ...c, icon: sanitizeImage(c.icon, DEFAULTS.CATEGORY_ICON) })),
+        sellers: sellers.slice(0, 3).map(s => ({ ...s, profilePicture: sanitizeImage(s.profilePicture, DEFAULTS.PROFILE_PICTURE) })),
+        products: sanitizeProducts(topProducts),
+      },
+      trendingSearches: {
+        trendingSearches: searches.map(s => s.query),
+        topSellers: sellers.slice(0, 3).map(s => ({ ...s, profilePicture: sanitizeImage(s.profilePicture, DEFAULTS.PROFILE_PICTURE) })),
+        topCategories: categories.slice(0, 3).map(c => ({ ...c, icon: sanitizeImage(c.icon, DEFAULTS.CATEGORY_ICON) })),
+        topProducts: sanitizeProducts(topProducts),
+      },
+      categoryProducts: Object.fromEntries(
+        Object.entries(categoryProductsMap).map(([catId, prods]) => [catId, sanitizeProducts(prods)])
+      ),
     });
-
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching initial data:', error);
-    res.status(500).json({ error: 'Failed to fetch initial data', details: error.message });
+  } catch (err) {
+    console.error('Initial data fetch error:', err);
+    return res.status(500).json({ error: 'Failed to load data', details: err.message });
   }
 });
 

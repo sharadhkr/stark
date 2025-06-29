@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { motion } from 'framer-motion';
 import CategoryCard from '../CategoryCard';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },

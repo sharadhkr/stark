@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider';
 import axios from '../useraxios';
 import Cookies from 'js-cookie';
 import ProductCard from '../ProductCard4line';
@@ -117,7 +117,7 @@ const CategorySectionn = ({ categoryId, categoryName }) => {
       initial="hidden"
       animate="visible"
       variants={fadeIn}
-      className="py-4  bg-gray-50"
+      className="py-4 "
     >
       <div className="max-w-7xl mx-auto">
         <div className="flex px-[13px] justify-between items-center">

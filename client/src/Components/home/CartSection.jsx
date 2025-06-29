@@ -3,20 +3,24 @@ import { motion } from 'framer-motion';
 import { FaShoppingCart } from 'react-icons/fa';
 import axios from '../useraxios';
 import toast from 'react-hot-toast';
-import { DataContext } from '../../App';
+import { DataContext } from '../../DataProvider'; // ✅ Corrected path
 
-const fadeIn = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+};
+
 const DEFAULT_IMAGE = 'https://your-server.com/generic-product-placeholder.jpg';
 
 const CartSection = React.memo(() => {
   const { cache } = useContext(DataContext);
-  const cartItems = cache.cart.data || [];
-  const isLoading = cache.cart.isLoading || false;
+  const cartItems = cache.cart?.data || [];
+  const isLoading = cache.cart?.isLoading || false;
 
   const validItems = useMemo(() => {
     return Array.isArray(cartItems)
       ? cartItems
-          .filter((item) => item && item.product && item.product._id)
+          .filter((item) => item?.product?._id)
           .map((item) => ({
             ...item,
             product: {
@@ -24,7 +28,8 @@ const CartSection = React.memo(() => {
               images: [
                 {
                   url:
-                    item.product.images?.[0]?.url && item.product.images[0].url !== 'https://via.placeholder.com/150'
+                    item.product.images?.[0]?.url &&
+                    !item.product.images[0].url.includes('placeholder')
                       ? item.product.images[0].url
                       : DEFAULT_IMAGE,
                 },
@@ -85,7 +90,9 @@ const CartSection = React.memo(() => {
                     }
                   }}
                 />
-                <h3 className="text-md font-semibold text-gray-700">{item.product.name || 'Unnamed Product'}</h3>
+                <h3 className="text-md font-semibold text-gray-700">
+                  {item.product.name || 'Unnamed Product'}
+                </h3>
                 <p className="text-sm text-gray-600">₹{item.product.price || 0}</p>
                 <p className="text-sm text-gray-600">Quantity: {item.quantity || 1}</p>
                 <motion.button
