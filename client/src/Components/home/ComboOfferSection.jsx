@@ -19,8 +19,7 @@ const ComboOfferCard = React.memo(({ offer }) => {
   return (
     <Link to={`/combo/${offer._id}`} aria-label={`View combo offer ${offer.name}`}>
       <motion.div
-        className="flex flex-col items-center shadow-[0px_0px_20px_-12px] shadow-gray-900/60 w-52 bg-slate-200 rounded-2xl hover:scale-105 transition-transform duration-300"
-        whileHover={{ scale: 1.05 }}
+        className="flex flex-col items-center shadow-[0px_9px_20px_-12px] shadow-gray-900/60 w-52 bg-slate-200 rounded-2xl hover:scale-105 transition-transform duration-300"
       >
         <div className="flex justify-center -space-x-2 mt-2 -mb-4">
           {offer.products.slice(0, 2).map((product, idx) => (

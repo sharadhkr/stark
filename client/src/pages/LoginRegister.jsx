@@ -230,6 +230,7 @@ import { Input } from '../../@/components/ui/input';
 import { Card, CardContent, CardHeader } from '../../@/components/ui/card';
 import { Label } from '../../@/components/ui/label';
 import bgimage from '../assets/login.jpeg';
+import { FaGreaterThan } from 'react-icons/fa';
 
 const LoginRegister = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -277,10 +278,10 @@ const LoginRegister = () => {
           err.response?.status === 404
             ? 'User not found. Please register.'
             : err.response?.status === 401
-            ? 'Invalid credentials.'
-            : err.code === 'ECONNABORTED'
-            ? 'Request timed out. Check your network.'
-            : err.response?.data?.message || 'An error occurred';
+              ? 'Invalid credentials.'
+              : err.code === 'ECONNABORTED'
+                ? 'Request timed out. Check your network.'
+                : err.response?.data?.message || 'An error occurred';
         console.error('API Call Error:', {
           url: err.config?.url,
           status: err.response?.status,
@@ -361,83 +362,90 @@ const LoginRegister = () => {
           <div className="w-[26%] bg-gray-300 h-[2px]"></div>
         </CardHeader>
         <CardContent className="px-8 pb-10">
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber" className="text-sm font-semibold text-gray-700">
-                Phone Number
-              </Label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-lg">🇮🇳</span>
-                <Input
-                  id="phoneNumber"
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '');
-                    if (value.length <= 10) setPhoneNumber(value);
-                  }}
-                  placeholder="Enter 10-digit number"
-                  className="h-12 pl-10 pr-16 text-sm font-semibold border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 rounded-lg transition-all duration-300 hover:border-purple-300"
-                />
-                <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm font-semibold text-purple-700">
-                  {countryCode}
-                </span>
+          <div className="flex flex-col">
+            <button className='flex items-center justify-end  '>
+              <div className="px-2 py-1 flex items-center gap-2  font-normal bg-gray-300 rounded-lg border  border-gray-500 text-gray-700">
+                <h1>skip</h1>
+             <FaGreaterThan />
               </div>
-            </div>
-
-            {showPinInput && (
+            </button>
+            <div className="space-y-6">
               <div className="space-y-2">
-                <Label className="text-sm font-semibold text-gray-700">Enter 6-digit PIN</Label>
-                <div className="flex justify-between gap-2">
-                  {pin.map((digit, index) => (
-                    <Input
-                      key={index}
-                      ref={(el) => (pinRefs.current[index] = el)}
-                      type="text"
-                      value={digit}
-                      onChange={(e) => handlePinChange(index, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, index)}
-                      onPaste={(e) => handlePinPaste(e, index)}
-                      maxLength={1}
-                      className="w-12 h-12 text-center text-lg font-mono border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300 hover:border-purple-300"
-                      aria-label={`PIN digit ${index + 1}`}
-                    />
-                  ))}
+                <Label htmlFor="phoneNumber" className="text-sm font-semibold text-gray-700">
+                  Phone Number
+                </Label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-lg">🇮🇳</span>
+                  <Input
+                    id="phoneNumber"
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      if (value.length <= 10) setPhoneNumber(value);
+                    }}
+                    placeholder="Enter 10-digit number"
+                    className="h-12 pl-10 pr-16 text-sm font-semibold border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 rounded-lg transition-all duration-300 hover:border-purple-300"
+                  />
+                  <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm font-semibold text-purple-700">
+                    {countryCode}
+                  </span>
                 </div>
               </div>
-            )}
 
-            <Button
-              onClick={showPinInput ? handleLoginRegister : handleContinue}
-              disabled={loading}
-              className={`w-full h-12 text-white tracking-wide font-semibold rounded-lg transition-all duration-300 shadow-lg ${
-                loading
+              {showPinInput && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-gray-700">Enter 6-digit PIN</Label>
+                  <div className="flex justify-between gap-2">
+                    {pin.map((digit, index) => (
+                      <Input
+                        key={index}
+                        ref={(el) => (pinRefs.current[index] = el)}
+                        type="text"
+                        value={digit}
+                        onChange={(e) => handlePinChange(index, e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, index)}
+                        onPaste={(e) => handlePinPaste(e, index)}
+                        maxLength={1}
+                        className="w-12 h-12 text-center text-lg font-mono border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300 hover:border-purple-300"
+                        aria-label={`PIN digit ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={showPinInput ? handleLoginRegister : handleContinue}
+                disabled={loading}
+                className={`w-full h-12 text-white tracking-wide font-semibold rounded-lg transition-all duration-300 shadow-lg ${loading
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-purple-500 hover:bg-purple-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2'
-              } ${loading ? 'animate-pulse' : 'hover:scale-[1.02]'}`}
-            >
-              {showPinInput ? 'Login/Register' : 'Continue'}
-            </Button>
-            <p className="text-xs text-gray-500 text-center">
-              By continuing, you agree to our{' '}
-              <a
-                href="/terms-of-use"
-                className="text-purple-600 hover:underline font-semibold"
-                target="_blank"
-                rel="noopener noreferrer"
+                  } ${loading ? 'animate-pulse' : 'hover:scale-[1.02]'}`}
               >
-                Terms of Use
-              </a>{' '}
-              and{' '}
-              <a
-                href="/privacy-policy"
-                className="text-purple-600 hover:underline font-semibold"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Privacy Policy
-              </a>.
-            </p>
+                {showPinInput ? 'Login/Register' : 'Continue'}
+              </Button>
+              <p className="text-xs text-gray-500 text-center">
+                By continuing, you agree to our{' '}
+                <a
+                  href="/terms-of-use"
+                  className="text-purple-600 hover:underline font-semibold"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Terms of Use
+                </a>{' '}
+                and{' '}
+                <a
+                  href="/privacy-policy"
+                  className="text-purple-600 hover:underline font-semibold"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Privacy Policy
+                </a>.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

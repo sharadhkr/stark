@@ -65,7 +65,6 @@ const CategoryDrawer = ({ isOpen, onClose }) => {
         </DrawerHeader>
 
         <div className="flex flex-col h-full p-4 overflow-y-auto">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Categories</h3>
           {loading ? (
             <p className="text-gray-600">Loading categories...</p>
           ) : error ? (
@@ -73,31 +72,27 @@ const CategoryDrawer = ({ isOpen, onClose }) => {
           ) : categories.length === 0 ? (
             <p className="text-gray-600">No categories available</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-4 gap-5">
               {categories.map((category) => (
-                <motion.div
+                <div className="flex flex-col items-center justify-center text-center" key={category._id}>
+                  <motion.div
                   key={category._id}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                  className="bg-gray-50 rounded-full w-14 h-14 flex flex-col drop-shadow-md overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
                   onClick={() => handleNavigate(category._id)}
                 >
                   {category.icon && (
                     <img
                       src={category.icon}
                       alt={`${category.name} icon`}
-                      className="w-full h-24 object-cover"
+                      className="w-full p-2 bg-slate-50 object-cover"
                       onError={(e) => (e.target.src = 'https://via.placeholder.com/150?text=Category')}
                     />
                   )}
-                  <div className="p-4">
-                    <h4 className="text-md font-semibold text-gray-900 truncate">{category.name}</h4>
-                    {category.description && (
-                      <p className="text-sm text-gray-600 mt-1 truncate">{category.description}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-2">Products: {category.productCount}</p>
-                  </div>
                 </motion.div>
+                  <div className="pt-3">
+                    <h4 className="text-md font-normal text-gray-900 truncate">{category.name}</h4>
+                  </div>
+                </div>
               ))}
             </div>
           )}

@@ -161,11 +161,8 @@ const Home = React.memo(() => {
   }, [hasValidCache, updateCache]);
 
   useEffect(() => {
-  if (!hasValidCache) {
     fetchData();
-  }
-}, [hasValidCache, fetchData]);
-
+  }, [fetchData]);
 
   // Debounced server-side search
   const handleSearch = useCallback(

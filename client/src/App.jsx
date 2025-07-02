@@ -3,7 +3,7 @@ import React, { Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { routes } from './routes';
 import { Layout } from './Layout.jsx';
-import LoadingSpinner from './Components/LoadingSpinner'; // You can customize this spinner
+import LoadingSpinner from './Components/LoadingSpinner';
 
 function App() {
   return (

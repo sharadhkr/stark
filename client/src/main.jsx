@@ -9,7 +9,6 @@ import { DataProvider } from './DataProvider.jsx';
 import { ErrorBoundary } from './ErrorBoundary.jsx'; // Create this file if not already
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
     <Router>
       <ErrorBoundary>
         <DataProvider>
@@ -17,5 +16,4 @@ createRoot(document.getElementById('root')).render(
         </DataProvider>
       </ErrorBoundary>
     </Router>
-  </StrictMode>
 );
