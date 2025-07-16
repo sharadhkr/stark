@@ -161,8 +161,10 @@ const Home = React.memo(() => {
   }, [hasValidCache, updateCache]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Only fetch if cache is missing
+  if (!hasValidCache) fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []); 
 
   // Debounced server-side search
   const handleSearch = useCallback(

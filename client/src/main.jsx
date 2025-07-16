@@ -9,11 +9,11 @@ import { DataProvider } from './DataProvider.jsx';
 import { ErrorBoundary } from './ErrorBoundary.jsx'; // Create this file if not already
 
 createRoot(document.getElementById('root')).render(
-    <Router>
-      <ErrorBoundary>
-        <DataProvider>
-          <App />
-        </DataProvider>
-      </ErrorBoundary>
-    </Router>
+  <Router>
+    <ErrorBoundary>
+      <DataProvider>
+        <App />
+      </DataProvider>
+    </ErrorBoundary>
+  </Router>
 );
