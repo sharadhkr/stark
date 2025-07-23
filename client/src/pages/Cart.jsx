@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,13 +21,19 @@ const CartPage = React.memo(() => {
   const [cart, setCart] = useState({ items: [], savedForLater: [] });
   const [loading, setLoading] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const toastRef = useRef({}); // Track toast notifications to prevent duplicates
 
   const fetchCart = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        toast.error('Please log in to view your cart');
+        if (!toastRef.current['login-error']) {
+          toastRef.current['login-error'] = true;
+          toast.error('Please log in to view your cart', {
+            onClose: () => delete toastRef.current['login-error'],
+          });
+        }
         navigate('/login');
         return;
       }
@@ -35,13 +41,11 @@ const CartPage = React.memo(() => {
         axios.get('/api/user/auth/cart', { headers: { Authorization: `Bearer ${token}` } }),
         axios.get('/api/user/auth/save-for-later', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      console.log('Cart API response:', JSON.stringify(cartResponse.data, null, 2));
-      console.log('Saved for Later response:', JSON.stringify(savedResponse.data, null, 2));
 
       const cartItems = (cartResponse.data.cart?.items || [])
-        .filter((item) => item.product?._id) // Filter invalid products
+        .filter((item) => item.product?._id)
         .map((item, index) => ({
-          cartItemId: index, // For unique key
+          cartItemId: index,
           productId: item.product?._id || item.productId,
           name: item.product?.name || 'Unnamed Product',
           price: item.product?.price || 0,
@@ -75,7 +79,12 @@ const CartPage = React.memo(() => {
         console.warn('Cart is empty after fetch');
       }
     } catch (error) {
-      toast.error('Failed to fetch cart: ' + (error.response?.data?.message || error.message));
+      if (!toastRef.current['fetch-error']) {
+        toastRef.current['fetch-error'] = true;
+        toast.error('Failed to fetch cart: ' + (error.response?.data?.message || error.message), {
+          onClose: () => delete toastRef.current['fetch-error'],
+        });
+      }
       console.error('Fetch Cart Error:', error.response?.data || error);
       setCart({ items: [], savedForLater: [] });
     } finally {
@@ -90,7 +99,12 @@ const CartPage = React.memo(() => {
   const updateQuantity = useCallback(
     async (productId, newQuantity, size, color) => {
       if (newQuantity < 1) {
-        toast.error('Quantity must be at least 1');
+        if (!toastRef.current[`quantity-error-${productId}-${size}-${color}`]) {
+          toastRef.current[`quantity-error-${productId}-${size}-${color}`] = true;
+          toast.error('Quantity must be at least 1', {
+            onClose: () => delete toastRef.current[`quantity-error-${productId}-${size}-${color}`],
+          });
+        }
         return;
       }
 
@@ -99,12 +113,22 @@ const CartPage = React.memo(() => {
         (item) => item.productId === productId && item.size === size && item.color === color
       );
       if (!itemToUpdate) {
-        toast.error('Item not found in cart');
+        if (!toastRef.current[`item-not-found-${productId}-${size}-${color}`]) {
+          toastRef.current[`item-not-found-${productId}-${size}-${color}`] = true;
+          toast.error('Item not found in cart', {
+            onClose: () => delete toastRef.current[`item-not-found-${productId}-${size}-${color}`],
+          });
+        }
         return;
       }
 
       if (newQuantity > itemToUpdate.stock) {
-        toast.error(`Only ${itemToUpdate.stock} items available in stock!`);
+        if (!toastRef.current[`stock-error-${productId}-${size}-${color}`]) {
+          toastRef.current[`stock-error-${productId}-${size}-${color}`] = true;
+          toast.error(`Only ${itemToUpdate.stock} items available in stock!`, {
+            onClose: () => delete toastRef.current[`stock-error-${productId}-${size}-${color}`],
+          });
+        }
         return;
       }
 
@@ -125,10 +149,20 @@ const CartPage = React.memo(() => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         await fetchCart();
-        toast.success('Quantity updated!');
+        if (!toastRef.current[`quantity-success-${productId}-${size}-${color}`]) {
+          toastRef.current[`quantity-success-${productId}-${size}-${color}`] = true;
+          toast.success('Quantity updated!', {
+            onClose: () => delete toastRef.current[`quantity-success-${productId}-${size}-${color}`],
+          });
+        }
       } catch (error) {
         setCart(originalCart);
-        toast.error('Failed to update quantity: ' + (error.response?.data?.message || error.message));
+        if (!toastRef.current[`quantity-error-${productId}-${size}-${color}`]) {
+          toastRef.current[`quantity-error-${productId}-${size}-${color}`] = true;
+          toast.error('Failed to update quantity: ' + (error.response?.data?.message || error.message), {
+            onClose: () => delete toastRef.current[`quantity-error-${productId}-${size}-${color}`],
+          });
+        }
         console.error('Update Quantity Error:', error.response?.data || error);
       }
     },
@@ -153,10 +187,20 @@ const CartPage = React.memo(() => {
           data: { size, color },
         });
         await fetchCart();
-        toast.success('Item removed!');
+        if (!toastRef.current[`remove-success-${productId}-${size}-${color}`]) {
+          toastRef.current[`remove-success-${productId}-${size}-${color}`] = true;
+          toast.success('Item removed!', {
+            onClose: () => delete toastRef.current[`remove-success-${productId}-${size}-${color}`],
+          });
+        }
       } catch (error) {
         setCart(originalCart);
-        toast.error('Failed to remove item: ' + (error.response?.data?.message || error.message));
+        if (!toastRef.current[`remove-error-${productId}-${size}-${color}`]) {
+          toastRef.current[`remove-error-${productId}-${size}-${color}`] = true;
+          toast.error('Failed to remove item: ' + (error.response?.data?.message || error.message), {
+            onClose: () => delete toastRef.current[`remove-error-${productId}-${size}-${color}`],
+          });
+        }
         console.error('Remove Item Error:', error.response?.data || error);
       }
     },
@@ -169,7 +213,12 @@ const CartPage = React.memo(() => {
         (item) => item.productId === productId && item.size === size && item.color === color
       );
       if (!item) {
-        toast.error('Item not found in cart');
+        if (!toastRef.current[`save-not-found-${productId}-${size}-${color}`]) {
+          toastRef.current[`save-not-found-${productId}-${size}-${color}`] = true;
+          toast.error('Item not found in cart', {
+            onClose: () => delete toastRef.current[`save-not-found-${productId}-${size}-${color}`],
+          });
+        }
         return;
       }
 
@@ -199,10 +248,20 @@ const CartPage = React.memo(() => {
           }),
         ]);
         await fetchCart();
-        toast.success(`${item.name} saved for later!`);
+        if (!toastRef.current[`save-success-${productId}-${size}-${color}`]) {
+          toastRef.current[`save-success-${productId}-${size}-${color}`] = true;
+          toast.success(`${item.name} saved for later!`, {
+            onClose: () => delete toastRef.current[`save-success-${productId}-${size}-${color}`],
+          });
+        }
       } catch (error) {
         setCart(originalCart);
-        toast.error('Failed to save for later: ' + (error.response?.data?.message || error.message));
+        if (!toastRef.current[`save-error-${productId}-${size}-${color}`]) {
+          toastRef.current[`save-error-${productId}-${size}-${color}`] = true;
+          toast.error('Failed to save for later: ' + (error.response?.data?.message || error.message), {
+            onClose: () => delete toastRef.current[`save-error-${productId}-${size}-${color}`],
+          });
+        }
         console.error('Save For Later Error:', error.response?.data || error);
       }
     },
@@ -215,7 +274,12 @@ const CartPage = React.memo(() => {
         (item) => item.productId === productId && item.size === size && item.color === color
       );
       if (!item) {
-        toast.error('Item not found in saved for later');
+        if (!toastRef.current[`move-not-found-${productId}-${size}-${color}`]) {
+          toastRef.current[`move-not-found-${productId}-${size}-${color}`] = true;
+          toast.error('Item not found in saved for later', {
+            onClose: () => delete toastRef.current[`move-not-found-${productId}-${size}-${color}`],
+          });
+        }
         return;
       }
 
@@ -233,7 +297,7 @@ const CartPage = React.memo(() => {
         const token = localStorage.getItem('token');
         await Promise.all([
           axios.post(
-            '/api/user/auth/cart',
+            '/api/user/auth/cart/add',
             { productId, quantity, size, color },
             { headers: { Authorization: `Bearer ${token}` } }
           ),
@@ -243,10 +307,20 @@ const CartPage = React.memo(() => {
           }),
         ]);
         await fetchCart();
-        toast.success(`${item.name} moved to cart!`);
+        if (!toastRef.current[`move-success-${productId}-${size}-${color}`]) {
+          toastRef.current[`move-success-${productId}-${size}-${color}`] = true;
+          toast.success(`${item.name} moved to cart!`, {
+            onClose: () => delete toastRef.current[`move-success-${productId}-${size}-${color}`],
+          });
+        }
       } catch (error) {
         setCart(originalCart);
-        toast.error('Failed to move to cart: ' + (error.response?.data?.message || error.message));
+        if (!toastRef.current[`move-error-${productId}-${size}-${color}`]) {
+          toastRef.current[`move-error-${productId}-${size}-${color}`] = true;
+          toast.error('Failed to move to cart: ' + (error.response?.data?.message || error.message), {
+            onClose: () => delete toastRef.current[`move-error-${productId}-${size}-${color}`],
+          });
+        }
         console.error('Move To Cart Error:', error.response?.data || error);
       }
     },
@@ -256,13 +330,23 @@ const CartPage = React.memo(() => {
   const handleCheckout = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) {
-      toast.error('Please login to proceed to checkout');
+      if (!toastRef.current['checkout-login-error']) {
+        toastRef.current['checkout-login-error'] = true;
+        toast.error('Please login to proceed to checkout', {
+          onClose: () => delete toastRef.current['checkout-login-error'],
+        });
+      }
       navigate('/login');
       return;
     }
 
     if (cart.items.length === 0) {
-      toast.error('Your cart is empty!');
+      if (!toastRef.current['empty-cart-error']) {
+        toastRef.current['empty-cart-error'] = true;
+        toast.error('Your cart is empty!', {
+          onClose: () => delete toastRef.current['empty-cart-error'],
+        });
+      }
       setIsCheckoutModalOpen(false);
       return;
     }

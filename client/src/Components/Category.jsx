@@ -19,15 +19,15 @@ const CategoryDrawer = ({ isOpen, onClose }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+ 
   useEffect(() => {
     if (isOpen) {
       const fetchCategories = async () => {
         try {
           setLoading(true);
           const response = await axios.get('/api/categories');
-          console.log('API Response:', response.data); // Debug raw response
-          const validCategories = response.data.categories; // Remove filter for testing
+          console.log('API Response:', response.data);
+          const validCategories = response.data.categories;
           setCategories(validCategories);
           setLoading(false);
         } catch (err) {
