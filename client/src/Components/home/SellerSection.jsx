@@ -34,7 +34,8 @@ const SellerSection = React.memo(() => {
           </div>
           <span className="opacity-40 text-xl">TOP SELLERS</span>
         </h2>
-        <div className="flex overflow-x-auto scrollbar-hide w-full justify-around scroll-smooth snap-x items-start">
+        <div className="flex overflow-x-auto scrollbar-hide w-full justify-around scroll-smooth snap-x items-start
+          md:justify-start">
           {loading ? (
             Array(3)
               .fill()
@@ -45,7 +46,10 @@ const SellerSection = React.memo(() => {
             </p>
           ) : (
             sellers.map((seller) => (
-              <div key={seller._id} className="px-3 snap-start">
+              <div
+                key={seller._id}
+                className="snap-start min-w-[100px] sm:min-w-[80px] md:min-w-[100px]"
+              >
                 <SellerCard seller={seller} />
               </div>
             ))
@@ -53,10 +57,10 @@ const SellerSection = React.memo(() => {
         </div>
       </motion.section>
       <div className="absolute w-full -z-10 opacity-100 top-0 left-0 flex items-center justify-center blur-2xl">
-        <div className="w-[30%] h-36 bg-purple-400"></div>
-        <div className="w-[30%] h-36 bg-pink-400"></div>
-        <div className="w-[30%] h-36 bg-orange-400"></div>
-        <div className="w-[30%] h-36 bg-green-400"></div>
+        <div className="w-[30%] h-36 bg-purple-400 sm:h-20"></div>
+        <div className="w-[30%] h-36 bg-pink-400 sm:h-20"></div>
+        <div className="w-[30%] h-36 bg-orange-400 sm:h-20"></div>
+        <div className="w-[30%] h-36 bg-green-400 sm:h-20"></div>
       </div>
     </div>
   );
