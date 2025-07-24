@@ -22,7 +22,7 @@ import axios from '../useraxios';
 import agroLogo from '../assets/profile.png';
 import ProductCardSkeleton from '../Components/ProductCardSkeleton';
 import { MdArrowBack } from 'react-icons/md';
-import { BaggageClaim, ChevronRight, Edit, Edit2, Heart, HeartIcon, HelpCircle, LocateIcon, MapIcon, MapPin, MapPinCheck, Package, Package2, Pointer, Settings, ShoppingCart, User2 } from 'lucide-react';
+import { BaggageClaim, ChevronRight, Edit, Edit2, Heart, HeartIcon, HelpCircle, LocateIcon, MapIcon, MapPin, MapPinCheck, Package, Package2, Pointer, Settings, ShoppingCart, Trash, Trash2, User2 } from 'lucide-react';
 
 // Animation Variants
 const fadeIn = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } } };
@@ -594,7 +594,7 @@ const UserDashboard = () => {
                       />
                       <label
                         htmlFor="profilePicture"
-                        className="absolute bottom-0 right-0 bg-pink-600 text-white p-2 rounded-full cursor-pointer hover:bg-pink-700 transition-all duration-200"
+                        className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 transition-all duration-200"
                       >
                         <FaCamera className="w-4 h-4" />
                         <input
@@ -615,7 +615,7 @@ const UserDashboard = () => {
                         type="text"
                         value={profile.firstName}
                         onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                         disabled={loading}
                       />
                     </div>
@@ -625,7 +625,7 @@ const UserDashboard = () => {
                         type="text"
                         value={profile.lastName}
                         onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                         disabled={loading}
                       />
                     </div>
@@ -636,7 +636,7 @@ const UserDashboard = () => {
                       type="email"
                       value={profile.email}
                       onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                       disabled={loading}
                       required
                     />
@@ -661,7 +661,7 @@ const UserDashboard = () => {
                               newAddresses[index].street = e.target.value;
                               setProfile({ ...profile, addresses: newAddresses });
                             }}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                             disabled={loading}
                           />
                           <input
@@ -673,7 +673,7 @@ const UserDashboard = () => {
                               newAddresses[index].city = e.target.value;
                               setProfile({ ...profile, addresses: newAddresses });
                             }}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                             disabled={loading}
                           />
                           <input
@@ -685,7 +685,7 @@ const UserDashboard = () => {
                               newAddresses[index].state = e.target.value;
                               setProfile({ ...profile, addresses: newAddresses });
                             }}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                             disabled={loading}
                           />
                           <input
@@ -697,7 +697,7 @@ const UserDashboard = () => {
                               newAddresses[index].postalCode = e.target.value;
                               setProfile({ ...profile, addresses: newAddresses });
                             }}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                             disabled={loading}
                           />
                           <input
@@ -709,7 +709,7 @@ const UserDashboard = () => {
                               newAddresses[index].country = e.target.value;
                               setProfile({ ...profile, addresses: newAddresses });
                             }}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-pink-600 focus:border-pink-600 outline-none transition-all duration-200"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-600 outline-none transition-all duration-200"
                             disabled={loading}
                           />
                         </div>
@@ -739,7 +739,7 @@ const UserDashboard = () => {
                               className="text-red-600 hover:text-red-700 flex items-center gap-1 text-sm font-medium"
                               disabled={loading}
                             >
-                              <FaTrash className="w-4 h-4" /> Remove
+                              <Trash2 className="w-4 h-4" /> Remove
                             </motion.button>
                           )}
                         </div>
@@ -748,7 +748,7 @@ const UserDashboard = () => {
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => handleAddCurrentLocation(index)}
-                          className="text-pink-600 hover:text-pink-700 font-medium flex items-center gap-1 bg-gray-100 px-3 py-2 rounded-lg transition-all duration-200 w-full"
+                          className="text-green-600 font-medium flex items-center gap-1 bg-gray-100 px-3 py-2 rounded-lg transition-all duration-200 w-full"
                           disabled={loading}
                         >
                           <FaMapMarkerAlt className="w-4 h-4" /> Use Current Location
@@ -760,10 +760,10 @@ const UserDashboard = () => {
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={addNewAddress}
-                      className="w-full text-pink-600 hover:text-pink-700 font-medium flex items-center justify-center gap-1 bg-gray-100 px-3 py-2 rounded-lg transition-all duration-200"
+                      className="w-full text-blue-600 font-medium flex items-center justify-center gap-1 bg-gray-100 px-3 py-2 rounded-lg transition-all duration-200"
                       disabled={loading}
                     >
-                      <FaPlus className="w-4 h-4" /> Add Address
+                      <FaPlus className="w-4 h-4" /> Add new Address
                     </motion.button>
                   </div>
                   <div className="flex gap-3">
@@ -772,7 +772,7 @@ const UserDashboard = () => {
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       disabled={loading}
-                      className={`flex-1 py-2 rounded-lg text-white font-medium transition-all duration-200 ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-pink-600 hover:bg-pink-700'}`}
+                      className={`flex-1 py-2 rounded-lg text-white font-medium transition-all duration-200 ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 '}`}
                     >
                       {loading ? 'Saving...' : 'Save'}
                     </motion.button>
