@@ -10,13 +10,10 @@ const TermsOfUse = () => {
 
       <ul className="list-disc list-inside text-gray-700 space-y-2">
         <li>
-          <a href="/cancellation-return" className="text-blue-600 hover:underline">Cancellation & Return Policy</a>
+          <a href="/CancellationReturn" className="text-blue-600 hover:underline">Cancellation & Return Policy</a>
         </li>
         <li>
-          <a href="/shipping-delivery" className="text-blue-600 hover:underline">Shipping & Delivery Policy</a>
-        </li>
-        <li>
-          <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>
+          <a href="/ShippingDelivery" className="text-blue-600 hover:underline">Shipping & Delivery Policy</a>
         </li>
       </ul>
     </div>
