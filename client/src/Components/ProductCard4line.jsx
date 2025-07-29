@@ -1,9 +1,8 @@
-// Optimized ProductCard Component (mobile-first, no hover/tap effects)
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IoHeartOutline, IoHeart, IoCartOutline } from 'react-icons/io5';
-import { FaCartPlus } from 'react-icons/fa';
+import { Heart, HeartOff, ShoppingCart, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { debounce } from 'lodash';
 import axios from '../useraxios';
 import placeholderImage from '../assets/logo.png';
 import {
@@ -33,50 +32,63 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
 
   const { _id } = product;
 
+  // Memoize product details to prevent unnecessary re-renders
+  const productData = useMemo(() => ({
+    name: productDetails?.name || product.name || 'Product',
+    description: productDetails?.description || product.description || 'Lorem ipsum dolor sit amet',
+    price: productDetails?.price || product.price || 225,
+    images: productDetails?.images || product.images || [],
+    sizes: productDetails?.sizes || product.sizes || ['L', 'X', 'XL'],
+    colors: productDetails?.colors || product.colors || [],
+    material: productDetails?.material || product.material || 'Polyester',
+    discount: productDetails?.discount || product.discount || 0,
+    discountPercentage: productDetails?.discountPercentage || product.discountPercentage || 0,
+    quantityAvailable: productDetails?.quantityAvailable || product.quantityAvailable || 10,
+  }), [product, productDetails]);
+
+  // Calculate discounted price
+  const discountedPrice = useMemo(() => 
+    productData.discount > 0
+      ? productData.price - productData.discount
+      : productData.discountPercentage > 0
+      ? productData.price * (1 - productData.discountPercentage / 100)
+      : productData.price,
+  [productData.price, productData.discount, productData.discountPercentage]);
+
+  // Memoize display image
+  const displayImage = useMemo(() => 
+    Array.isArray(productData.images) && productData.images[0] 
+      ? productData.images[0].replace(/^http:/, 'https:') 
+      : placeholderImage,
+  [productData.images]);
+
+  // Debounced API call for fetching product details
+  const fetchProductDetails = useCallback(debounce(async (id) => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const response = await axios.get(`/api/user/auth/products/${id}`);
+      setProductDetails(response.data.product);
+    } catch (error) {
+      setFetchError(error.response?.data?.message || 'Failed to load product details');
+      toast.error('Failed to load product details');
+    } finally {
+      setLoading(false);
+    }
+  }, 300), []);
+
   useEffect(() => {
-    const fetchProductDetails = async () => {
-      if (!_id) return;
-      setLoading(true);
-      try {
-        const response = await axios.get(`/api/user/auth/products/${_id}`);
-        setProductDetails(response.data.product);
-      } catch (error) {
-        setFetchError(error.response?.data?.message || 'Failed to load product details');
-        toast.error('Failed to load product details');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProductDetails();
-  }, [_id]);
+    fetchProductDetails(_id);
+    return () => fetchProductDetails.cancel(); // Cleanup debounce
+  }, [_id, fetchProductDetails]);
 
   useEffect(() => {
     setIsWishlisted(wishlist.includes(String(_id)));
     setIsInCart(cart.includes(String(_id)));
   }, [wishlist, cart, _id]);
 
-  const {
-    name = 'Product',
-    description = 'Lorem ipsum dolor sit amet',
-    price = 225,
-    images = [],
-    sizes = ['L', 'X', 'XL'],
-    colors = [],
-    material = 'Polyester',
-    discount = 0,
-    discountPercentage = 0,
-    quantityAvailable = 10,
-  } = productDetails || product;
-
-  const discountedPrice = discount > 0
-    ? price - discount
-    : discountPercentage > 0
-    ? price * (1 - discountPercentage / 100)
-    : price;
-
-  const displayImage = Array.isArray(images) && images[0] ? images[0].replace(/^http:/, 'https:') : placeholderImage;
-
-  const handleToggleWishlist = useCallback(async (e) => {
+  // Debounced wishlist toggle
+  const handleToggleWishlist = useCallback(debounce(async (e) => {
     e.stopPropagation();
     e.preventDefault();
     const token = localStorage.getItem('token');
@@ -95,7 +107,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
     } finally {
       setLoading(false);
     }
-  }, [_id, isWishlisted, navigate]);
+  }, 300), [_id, isWishlisted, navigate]);
 
   const handleAddToCartClick = useCallback((e) => {
     e.stopPropagation();
@@ -103,19 +115,25 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please login to add to cart');
-      navigate('/login');
       return;
     }
     if (isInCart) return navigate('/cart');
-    setSelectedSize(sizes[0] || '');
-    setSelectedColor(colors[0] || '');
+    setSelectedSize(productData.sizes[0] || '');
+    setSelectedColor(productData.colors[0] || '');
     setIsDrawerOpen(true);
-  }, [isInCart, navigate, sizes, colors]);
+  }, [isInCart, navigate, productData.sizes, productData.colors]);
 
-  const handleAddToCart = useCallback(async () => {
-    if (!selectedSize || !selectedColor) return toast.error('Select size and color');
+  // Debounced add to cart
+  const handleAddToCart = useCallback(debounce(async () => {
+    if (!selectedSize || !selectedColor) {
+      toast.error('Select size and color');
+      return;
+    }
     const token = localStorage.getItem('token');
-    if (!token) return navigate('/login');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
     setLoading(true);
     try {
       const payload = { productId: _id, quantity, size: selectedSize, color: selectedColor };
@@ -129,7 +147,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
     } finally {
       setLoading(false);
     }
-  }, [_id, quantity, selectedSize, selectedColor, navigate, onAddToCart]);
+  }, 300), [_id, quantity, selectedSize, selectedColor, navigate, onAddToCart]);
 
   const handleProductClick = useCallback(() => navigate(`/product/${_id}`), [_id, navigate]);
 
@@ -137,8 +155,8 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
 
   return (
     <div
-      className="w-[185px] p-3 flex flex-col rounded-xl drop-shadow-sm"
-      aria-label={`Product: ${name}`}
+      className="w-[185px] p-3 flex flex-col rounded-xl drop-shadow-sm bg-white"
+      aria-label={`Product: ${productData.name}`}
     >
       <div className="relative w-full h-40 mb-3 rounded" onClick={handleProductClick}>
         {imageLoading && (
@@ -148,7 +166,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
         )}
         <img
           src={displayImage}
-          alt={name}
+          alt={productData.name}
           className={cn(
             'w-full h-full rounded-xl drop-shadow-md object-cover transition-opacity duration-300',
             imageLoading ? 'opacity-0' : 'opacity-100'
@@ -166,7 +184,11 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
           disabled={loading}
           aria-label={isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
         >
-          {isWishlisted ? <IoHeart size={20} className="text-red-600" /> : <IoHeartOutline size={20} />}
+          {isWishlisted ? (
+            <Heart size={20} className="text-red-600 fill-red-600" />
+          ) : (
+            <Heart size={20} />
+          )}
         </button>
         <button
           onClick={handleAddToCartClick}
@@ -175,31 +197,31 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
           aria-label={isInCart ? 'Go to Cart' : 'Add to Cart'}
         >
           <span className="text-xs">{isInCart ? 'In Cart' : 'Add'}</span>
-          {isInCart ? <IoCartOutline size={14} /> : <FaCartPlus size={14} />}
+          {isInCart ? <CheckCircle size={14} className="text-green-600" /> : <ShoppingCart size={14} />}
         </button>
       </div>
       <div className="flex-1">
         <span className="inline-block bg-violet-100 text-violet-600 text-xs px-1.5 py-0.5 rounded-md mb-1">
-          {material}
+          {productData.material}
         </span>
-        <h3 className="text-sm font-semibold text-gray-800 truncate" title={name}>
-          {name}
+        <h3 className="text-sm font-semibold text-gray-800 truncate" title={productData.name}>
+          {productData.name}
         </h3>
-        <p className="text-xs text-gray-600 truncate">{description}</p>
+        <p className="text-xs text-gray-600 truncate">{productData.description}</p>
         <div className="flex items-center gap-2 mt-1">
           <span className="font-semibold text-sm text-black">₹{Math.round(discountedPrice)}</span>
-          {(discount > 0 || discountPercentage > 0) && (
+          {(productData.discount > 0 || productData.discountPercentage > 0) && (
             <>
-              <span className="text-xs text-gray-500 line-through">₹{Math.round(price)}</span>
+              <span className="text-xs text-gray-500 line-through">₹{Math.round(productData.price)}</span>
               <span className="text-xs text-green-600 font-medium">
-                {discount > 0 ? `₹${Math.round(discount)} OFF` : `${discountPercentage}% OFF`}
+                {productData.discount > 0 ? `₹${Math.round(productData.discount)} OFF` : `${productData.discountPercentage}% OFF`}
               </span>
             </>
           )}
         </div>
-        {sizes?.length > 0 && (
+        {productData.sizes?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
-            {sizes.map((s) => (
+            {productData.sizes.map((s) => (
               <span key={s} className="bg-gray-100 text-xs text-gray-600 px-2 py-0.5 rounded">
                 {s}
               </span>
@@ -211,9 +233,9 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <DrawerContent className="bg-white p-4 rounded-t-3xl max-h-[80vh] overflow-y-auto">
           <DrawerHeader className="text-center">
-            <DrawerTitle className="text-lg font-semibold">Add {name} to Cart</DrawerTitle>
+            <DrawerTitle className="text-lg font-semibold">Add {productData.name} to Cart</DrawerTitle>
             <DrawerDescription className="text-sm text-gray-500">
-              Select options to add {name} to your cart.
+              Select options to add {productData.name} to your cart.
             </DrawerDescription>
           </DrawerHeader>
           <div className="space-y-4">
@@ -221,19 +243,19 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
               <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
               <input
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Math.min(quantityAvailable, Number(e.target.value) || 1)))}
+                onChange={(e) => setQuantity(Math.max(1, Math.min(productData.quantityAvailable, Number(e.target.value) || 1)))}
                 type="number"
                 min="1"
-                max={quantityAvailable}
+                max={productData.quantityAvailable}
                 className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">Available: {quantityAvailable}</p>
+              <p className="text-xs text-gray-500 mt-1">Available: {productData.quantityAvailable}</p>
             </div>
-            {sizes?.length > 0 && (
+            {productData.sizes?.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
                 <div className="flex gap-2 flex-wrap">
-                  {sizes.map((size) => (
+                  {productData.sizes.map((size) => (
                     <button
                       key={size}
                       onClick={() => setSelectedSize(size)}
@@ -248,11 +270,11 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
                 </div>
               </div>
             )}
-            {colors?.length > 0 && (
+            {productData.colors?.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
                 <div className="flex gap-2 flex-wrap">
-                  {colors.map((color) => (
+                  {productData.colors.map((color) => (
                     <button
                       key={color}
                       onClick={() => setSelectedColor(color)}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdArrowBack, MdFavorite } from 'react-icons/md';
+import { ArrowLeft, Heart } from 'lucide-react';
+import { debounce } from 'lodash';
 import axios from '../useraxios';
 import WishlistProductCard from '../Components/WishlistProductCard';
 import ProductCardSkeleton from '../Components/ProductCardSkeleton';
@@ -10,24 +11,33 @@ import ProductCardSkeleton from '../Components/ProductCardSkeleton';
 // Animation Variants
 const fadeIn = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.9, ease: 'easeInOut' } } };
 
-const WishlistPage = () => {
+const WishlistPage = React.memo(() => {
   const navigate = useNavigate();
   const [wishlist, setWishlist] = useState({ items: [] });
   const [loading, setLoading] = useState(false);
+  const toastRef = useRef({}); // Track toast notifications
+  const isMounted = useRef(false); // Track component mount state
 
-  const fetchWishlist = useCallback(async () => {
+  // Debounced fetchWishlist to prevent multiple rapid API calls
+  const fetchWishlist = useCallback(debounce(async () => {
+    if (!isMounted.current) return;
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        toast.error('Please log in to view your wishlist', { duration: 5000 });
+        if (!toastRef.current['login-error']) {
+          toastRef.current['login-error'] = toast.error('Please log in to view your wishlist', {
+            duration: 5000,
+            style: { background: '#FF4D4F', color: '#fff', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+            onClose: () => delete toastRef.current['login-error'],
+          });
+        }
         navigate('/login');
         return;
       }
       const response = await axios.get('/api/user/wishlist', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('Wishlist API response:', JSON.stringify(response.data, null, 2));
 
       const wishlistItems = (response.data.wishlist || [])
         .filter((item) => item.productId?._id)
@@ -47,24 +57,40 @@ const WishlistPage = () => {
         }));
 
       setWishlist({ items: wishlistItems });
-      if (wishlistItems.length === 0) {
-        console.warn('Wishlist is empty after fetch');
+      if (wishlistItems.length === 0 && !toastRef.current['empty-wishlist']) {
+        toastRef.current['empty-wishlist'] = toast('Your wishlist is empty', {
+          icon: '🩶',
+          duration: 3000,
+          style: { background: '#f3f4f6', color: '#333', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+          onClose: () => delete toastRef.current['empty-wishlist'],
+        });
       }
     } catch (error) {
-      toast.error('Failed to fetch wishlist: ' + (error.response?.data?.message || error.message), { duration: 5000 });
+      if (!toastRef.current['fetch-error']) {
+        toastRef.current['fetch-error'] = toast.error('Failed to fetch wishlist: ' + (error.response?.data?.message || error.message), {
+          duration: 5000,
+          style: { background: '#FF4D4F', color: '#fff', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+          onClose: () => delete toastRef.current['fetch-error'],
+        });
+      }
       console.error('Fetch Wishlist Error:', error.response?.data || error);
       setWishlist({ items: [] });
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, 300), [navigate]);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchWishlist();
+    return () => {
+      isMounted.current = false;
+      fetchWishlist.cancel(); // Cleanup debounce
+    };
   }, [fetchWishlist]);
 
   const removeFromWishlist = useCallback(
-    async (productId) => {
+    debounce(async (productId) => {
       const originalWishlist = { ...wishlist };
       setWishlist((prev) => ({
         items: prev.items.filter((item) => item.productId !== productId),
@@ -74,37 +100,47 @@ const WishlistPage = () => {
         await axios.delete(`/api/user/wishlist/${productId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        toast.success('Item removed from wishlist!', { icon: '💔', duration: 3000 });
+        if (!toastRef.current[`remove-success-${productId}`]) {
+          toastRef.current[`remove-success-${productId}`] = toast.success('Item removed from wishlist!', {
+            icon: '💔',
+            duration: 3000,
+            style: { background: '#f3f4f6', color: '#10b981', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+            onClose: () => delete toastRef.current[`remove-success-${productId}`],
+          });
+        }
       } catch (error) {
         setWishlist(originalWishlist);
-        toast.error('Failed to remove item from wishlist: ' + (error.response?.data?.message || error.message), {
-          duration: 5000,
-        });
+        if (!toastRef.current[`remove-error-${productId}`]) {
+          toastRef.current[`remove-error-${productId}`] = toast.error('Failed to remove item from wishlist: ' + (error.response?.data?.message || error.message), {
+            duration: 5000,
+            style: { background: '#FF4D4F', color: '#fff', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+            onClose: () => delete toastRef.current[`remove-error-${productId}`],
+          });
+        }
         console.error('Remove Wishlist Error:', error.response?.data || error);
-        throw error;
       }
-    },
+    }, 300),
     [wishlist]
   );
 
   const moveToCart = useCallback(
-    async (productId, size, color, quantity = 1) => {
-      const originalWishlist = { ...wishlist };
+    debounce(async (productId, size, color, quantity = 1) => {
       const item = wishlist.items.find((item) => item.productId === productId);
       if (!item) {
-        toast.error('Item not found in wishlist', {
-          style: {
-            background: '#FF4D4F',
-            color: '#fff',
-            borderRadius: '12px',
-            padding: '8px 16px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-            fontSize: '14px',
-            fontWeight: '500',
-          },
-        });
+        if (!toastRef.current[`move-not-found-${productId}`]) {
+          toastRef.current[`move-not-found-${productId}`] = toast.error('Item not found in wishlist', {
+            duration: 5000,
+            style: { background: '#FF4D4F', color: '#fff', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+            onClose: () => delete toastRef.current[`move-not-found-${productId}`],
+          });
+        }
         return;
       }
+
+      const originalWishlist = { ...wishlist };
+      setWishlist((prev) => ({
+        items: prev.items.filter((item) => item.productId !== productId),
+      }));
 
       try {
         const token = localStorage.getItem('token');
@@ -114,57 +150,45 @@ const WishlistPage = () => {
         await axios.post('/api/user/wishlist/move-to-cart', { productId, quantity, size, color }, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setWishlist((prev) => ({
-          items: prev.items.filter((item) => item.productId !== productId),
-        }));
-        toast.success(`${item.name} moved to cart!`, {
-          duration: 1500,
-          style: {
-            background: '#f3f4f6',
-            color: '#10b981',
-            borderRadius: '12px',
-            padding: '8px 16px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-            fontSize: '14px',
-            fontWeight: '500',
-          },
-        });
+        if (!toastRef.current[`move-success-${productId}`]) {
+          toastRef.current[`move-success-${productId}`] = toast.success(`${item.name} moved to cart!`, {
+            duration: 3000,
+            style: { background: '#f3f4f6', color: '#10b981', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+            onClose: () => delete toastRef.current[`move-success-${productId}`],
+          });
+        }
       } catch (error) {
         setWishlist(originalWishlist);
-        toast.error('Failed to move item to cart: ' + (error.response?.data?.message || error.message), {
-          duration: 5000,
-          style: {
-            background: '#FF4D4F',
-            color: '#fff',
-            borderRadius: '12px',
-            padding: '8px 16px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-            fontSize: '14px',
-            fontWeight: '500',
-          },
-        });
+        if (!toastRef.current[`move-error-${productId}`]) {
+          toastRef.current[`move-error-${productId}`] = toast.error('Failed to move item to cart: ' + (error.response?.data?.message || error.message), {
+            duration: 5000,
+            style: { background: '#FF4D4F', color: '#fff', borderRadius: '12px', padding: '8px 16px', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)', fontSize: '14px', fontWeight: '500' },
+            onClose: () => delete toastRef.current[`move-error-${productId}`],
+          });
+        }
         console.error('Move to Cart Error:', error.response?.data || error);
-        throw error;
       }
-    },
+    }, 300),
     [wishlist]
   );
 
-  const { subtotal, discountTotal } = wishlist.items.reduce(
-    (acc, item) => {
-      const discountedPrice =
-        item.discount > 0
-          ? item.price - item.discount
-          : item.discountPercentage > 0
-          ? item.price * (1 - item.discountPercentage / 100)
-          : item.price;
-      return {
-        subtotal: acc.subtotal + item.price,
-        discountTotal: acc.discountTotal + (item.price - discountedPrice),
-      };
-    },
-    { subtotal: 0, discountTotal: 0 }
-  );
+  const { subtotal, discountTotal } = useMemo(() => {
+    return wishlist.items.reduce(
+      (acc, item) => {
+        const discountedPrice =
+          item.discount > 0
+            ? item.price - item.discount
+            : item.discountPercentage > 0
+            ? item.price * (1 - item.discountPercentage / 100)
+            : item.price;
+        return {
+          subtotal: acc.subtotal + item.price,
+          discountTotal: acc.discountTotal + (item.price - discountedPrice),
+        };
+      },
+      { subtotal: 0, discountTotal: 0 }
+    );
+  }, [wishlist.items]);
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 font-sans">
@@ -174,6 +198,7 @@ const WishlistPage = () => {
           className: 'text-sm font-medium',
           style: { background: '#fff', color: '#333', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
           error: { style: { background: '#FF4D4F', color: '#fff' } },
+          success: { style: { background: '#10B981', color: '#fff' } },
         }}
       />
 
@@ -186,7 +211,7 @@ const WishlistPage = () => {
             onClick={() => navigate('/')}
             className="text-gray-600"
           >
-            <MdArrowBack size={24} />
+            <ArrowLeft size={24} />
           </motion.button>
           <h1 className="text-xl font-bold text-gray-800">Your Wishlist</h1>
           <div className="w-10" />
@@ -206,7 +231,7 @@ const WishlistPage = () => {
             animate={{ opacity: 1 }}
             className="text-center py-16 bg-white rounded-lg shadow-sm"
           >
-            <MdFavorite className="mx-auto text-gray-400" size={48} />
+            <Heart className="mx-auto text-gray-400" size={48} />
             <p className="text-gray-600 mt-4 text-lg">Your wishlist is empty</p>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -273,6 +298,6 @@ const WishlistPage = () => {
       </main>
     </div>
   );
-};
+});
 
 export default WishlistPage;

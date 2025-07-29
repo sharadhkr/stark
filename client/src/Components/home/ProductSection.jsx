@@ -107,7 +107,7 @@ const ProductSection = React.memo(({ products = [], filteredProducts = [], setFi
   return (
     <div className="w-full flex flex-col mb-4">
       <GenderFilterBar onGenderChange={onGenderChange} selectedGender={selectedGender} />
-      <div className="grid pt-5 grid-cols-2">
+      <div className="grid pt-5 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 m-auto">
         {validFilteredProducts.map((product) => (
           <ProductCard
             key={product._id}

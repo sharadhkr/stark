@@ -137,10 +137,13 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
 
   return (
     <div
-      className="w-[185px] p-3 flex flex-col rounded-xl drop-shadow-sm"
+      className="w-44 gap-3 sm:w-56 md:w-64 flex flex-col rounded-xl drop-shadow-sm"
       aria-label={`Product: ${name}`}
     >
-      <div className="relative w-full h-40 mb-3 rounded" onClick={handleProductClick}>
+      <div
+        className="relative w-full h-40 sm:h-48 md:h-56 mb-3 rounded"
+        onClick={handleProductClick}
+      >
         {imageLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -178,20 +181,20 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
           {isInCart ? <IoCartOutline size={14} /> : <FaCartPlus size={14} />}
         </button>
       </div>
-      <div className="flex-1">
+      <div className="flex-1 px-1 sm:px-2">
         <span className="inline-block bg-violet-100 text-violet-600 text-xs px-1.5 py-0.5 rounded-md mb-1">
           {material}
         </span>
-        <h3 className="text-sm font-semibold text-gray-800 truncate" title={name}>
+        <h3 className="text-sm md:text-base font-semibold text-gray-800 truncate" title={name}>
           {name}
         </h3>
-        <p className="text-xs text-gray-600 truncate">{description}</p>
+        <p className="text-xs md:text-sm text-gray-600 truncate">{description}</p>
         <div className="flex items-center gap-2 mt-1">
-          <span className="font-semibold text-sm text-black">₹{Math.round(discountedPrice)}</span>
+          <span className="font-semibold text-sm md:text-base text-black">₹{Math.round(discountedPrice)}</span>
           {(discount > 0 || discountPercentage > 0) && (
             <>
-              <span className="text-xs text-gray-500 line-through">₹{Math.round(price)}</span>
-              <span className="text-xs text-green-600 font-medium">
+              <span className="text-xs md:text-sm text-gray-500 line-through">₹{Math.round(price)}</span>
+              <span className="text-xs md:text-sm text-green-600 font-medium">
                 {discount > 0 ? `₹${Math.round(discount)} OFF` : `${discountPercentage}% OFF`}
               </span>
             </>
@@ -200,7 +203,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
         {sizes?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {sizes.map((s) => (
-              <span key={s} className="bg-gray-100 text-xs text-gray-600 px-2 py-0.5 rounded">
+              <span key={s} className="bg-gray-100 text-xs md:text-sm text-gray-600 px-2 py-0.5 rounded">
                 {s}
               </span>
             ))}
@@ -209,7 +212,7 @@ const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddT
       </div>
 
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <DrawerContent className="bg-white p-4 rounded-t-3xl max-h-[80vh] overflow-y-auto">
+        <DrawerContent className="bg-white p-4 rounded-t-3xl max-h-[80vh] overflow-y-auto w-full sm:w-[400px] mx-auto">
           <DrawerHeader className="text-center">
             <DrawerTitle className="text-lg font-semibold">Add {name} to Cart</DrawerTitle>
             <DrawerDescription className="text-sm text-gray-500">

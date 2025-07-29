@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdArrowBack, MdShoppingCart } from 'react-icons/md';
-import { FaSpinner } from 'react-icons/fa';
+import { ArrowLeft, ShoppingCart, LoaderCircle } from 'lucide-react';
+import { debounce } from 'lodash';
 import axios from '../useraxios';
 import CartProductCard from '../Components/CartProductCard';
 import ProductCardSkeleton from '../Components/ProductCardSkeleton';
@@ -21,16 +21,18 @@ const CartPage = React.memo(() => {
   const [cart, setCart] = useState({ items: [], savedForLater: [] });
   const [loading, setLoading] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-  const toastRef = useRef({}); // Track toast notifications to prevent duplicates
+  const toastRef = useRef({}); // Track toast notifications
+  const isMounted = useRef(false); // Track component mount state
 
-  const fetchCart = useCallback(async () => {
+  // Debounced fetchCart to prevent multiple rapid API calls
+  const fetchCart = useCallback(debounce(async () => {
+    if (!isMounted.current) return;
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) {
         if (!toastRef.current['login-error']) {
-          toastRef.current['login-error'] = true;
-          toast.error('Please log in to view your cart', {
+          toastRef.current['login-error'] = toast.error('Please log in to view your cart', {
             onClose: () => delete toastRef.current['login-error'],
           });
         }
@@ -75,13 +77,15 @@ const CartPage = React.memo(() => {
         }));
 
       setCart({ items: cartItems, savedForLater: savedItems });
-      if (cartItems.length === 0) {
-        console.warn('Cart is empty after fetch');
+      if (cartItems.length === 0 && !toastRef.current['empty-cart']) {
+        toastRef.current['empty-cart'] = toast('Your cart is empty', {
+          icon: '🛒',
+          onClose: () => delete toastRef.current['empty-cart'],
+        });
       }
     } catch (error) {
       if (!toastRef.current['fetch-error']) {
-        toastRef.current['fetch-error'] = true;
-        toast.error('Failed to fetch cart: ' + (error.response?.data?.message || error.message), {
+        toastRef.current['fetch-error'] = toast.error('Failed to fetch cart: ' + (error.response?.data?.message || error.message), {
           onClose: () => delete toastRef.current['fetch-error'],
         });
       }
@@ -90,32 +94,34 @@ const CartPage = React.memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, 300), [navigate]);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchCart();
+    return () => {
+      isMounted.current = false;
+      fetchCart.cancel(); // Cleanup debounce
+    };
   }, [fetchCart]);
 
   const updateQuantity = useCallback(
-    async (productId, newQuantity, size, color) => {
+    debounce(async (productId, newQuantity, size, color) => {
       if (newQuantity < 1) {
         if (!toastRef.current[`quantity-error-${productId}-${size}-${color}`]) {
-          toastRef.current[`quantity-error-${productId}-${size}-${color}`] = true;
-          toast.error('Quantity must be at least 1', {
+          toastRef.current[`quantity-error-${productId}-${size}-${color}`] = toast.error('Quantity must be at least 1', {
             onClose: () => delete toastRef.current[`quantity-error-${productId}-${size}-${color}`],
           });
         }
         return;
       }
 
-      const originalCart = { ...cart };
       const itemToUpdate = cart.items.find(
         (item) => item.productId === productId && item.size === size && item.color === color
       );
       if (!itemToUpdate) {
         if (!toastRef.current[`item-not-found-${productId}-${size}-${color}`]) {
-          toastRef.current[`item-not-found-${productId}-${size}-${color}`] = true;
-          toast.error('Item not found in cart', {
+          toastRef.current[`item-not-found-${productId}-${size}-${color}`] = toast.error('Item not found in cart', {
             onClose: () => delete toastRef.current[`item-not-found-${productId}-${size}-${color}`],
           });
         }
@@ -124,14 +130,14 @@ const CartPage = React.memo(() => {
 
       if (newQuantity > itemToUpdate.stock) {
         if (!toastRef.current[`stock-error-${productId}-${size}-${color}`]) {
-          toastRef.current[`stock-error-${productId}-${size}-${color}`] = true;
-          toast.error(`Only ${itemToUpdate.stock} items available in stock!`, {
+          toastRef.current[`stock-error-${productId}-${size}-${color}`] = toast.error(`Only ${itemToUpdate.stock} items available in stock!`, {
             onClose: () => delete toastRef.current[`stock-error-${productId}-${size}-${color}`],
           });
         }
         return;
       }
 
+      const originalCart = { ...cart };
       setCart((prev) => ({
         ...prev,
         items: prev.items.map((item) =>
@@ -148,29 +154,26 @@ const CartPage = React.memo(() => {
           { quantity: newQuantity, size, color },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        await fetchCart();
         if (!toastRef.current[`quantity-success-${productId}-${size}-${color}`]) {
-          toastRef.current[`quantity-success-${productId}-${size}-${color}`] = true;
-          toast.success('Quantity updated!', {
+          toastRef.current[`quantity-success-${productId}-${size}-${color}`] = toast.success('Quantity updated!', {
             onClose: () => delete toastRef.current[`quantity-success-${productId}-${size}-${color}`],
           });
         }
       } catch (error) {
         setCart(originalCart);
         if (!toastRef.current[`quantity-error-${productId}-${size}-${color}`]) {
-          toastRef.current[`quantity-error-${productId}-${size}-${color}`] = true;
-          toast.error('Failed to update quantity: ' + (error.response?.data?.message || error.message), {
+          toastRef.current[`quantity-error-${productId}-${size}-${color}`] = toast.error('Failed to update quantity: ' + (error.response?.data?.message || error.message), {
             onClose: () => delete toastRef.current[`quantity-error-${productId}-${size}-${color}`],
           });
         }
         console.error('Update Quantity Error:', error.response?.data || error);
       }
-    },
-    [cart, fetchCart]
+    }, 300),
+    [cart]
   );
 
   const removeItem = useCallback(
-    async (productId, size, color, isSavedForLater = false) => {
+    debounce(async (productId, size, color, isSavedForLater = false) => {
       const originalCart = { ...cart };
       setCart((prev) => ({
         ...prev,
@@ -186,36 +189,32 @@ const CartPage = React.memo(() => {
           headers: { Authorization: `Bearer ${token}` },
           data: { size, color },
         });
-        await fetchCart();
         if (!toastRef.current[`remove-success-${productId}-${size}-${color}`]) {
-          toastRef.current[`remove-success-${productId}-${size}-${color}`] = true;
-          toast.success('Item removed!', {
+          toastRef.current[`remove-success-${productId}-${size}-${color}`] = toast.success('Item removed!', {
             onClose: () => delete toastRef.current[`remove-success-${productId}-${size}-${color}`],
           });
         }
       } catch (error) {
         setCart(originalCart);
         if (!toastRef.current[`remove-error-${productId}-${size}-${color}`]) {
-          toastRef.current[`remove-error-${productId}-${size}-${color}`] = true;
-          toast.error('Failed to remove item: ' + (error.response?.data?.message || error.message), {
+          toastRef.current[`remove-error-${productId}-${size}-${color}`] = toast.error('Failed to remove item: ' + (error.response?.data?.message || error.message), {
             onClose: () => delete toastRef.current[`remove-error-${productId}-${size}-${color}`],
           });
         }
         console.error('Remove Item Error:', error.response?.data || error);
       }
-    },
-    [cart, fetchCart]
+    }, 300),
+    [cart]
   );
 
   const saveForLater = useCallback(
-    async (productId, quantity, size, color) => {
+    debounce(async (productId, quantity, size, color) => {
       const item = cart.items.find(
         (item) => item.productId === productId && item.size === size && item.color === color
       );
       if (!item) {
         if (!toastRef.current[`save-not-found-${productId}-${size}-${color}`]) {
-          toastRef.current[`save-not-found-${productId}-${size}-${color}`] = true;
-          toast.error('Item not found in cart', {
+          toastRef.current[`save-not-found-${productId}-${size}-${color}`] = toast.error('Item not found in cart', {
             onClose: () => delete toastRef.current[`save-not-found-${productId}-${size}-${color}`],
           });
         }
@@ -247,36 +246,32 @@ const CartPage = React.memo(() => {
             data: { size, color },
           }),
         ]);
-        await fetchCart();
         if (!toastRef.current[`save-success-${productId}-${size}-${color}`]) {
-          toastRef.current[`save-success-${productId}-${size}-${color}`] = true;
-          toast.success(`${item.name} saved for later!`, {
+          toastRef.current[`save-success-${productId}-${size}-${color}`] = toast.success(`${item.name} saved for later!`, {
             onClose: () => delete toastRef.current[`save-success-${productId}-${size}-${color}`],
           });
         }
       } catch (error) {
         setCart(originalCart);
         if (!toastRef.current[`save-error-${productId}-${size}-${color}`]) {
-          toastRef.current[`save-error-${productId}-${size}-${color}`] = true;
-          toast.error('Failed to save for later: ' + (error.response?.data?.message || error.message), {
+          toastRef.current[`save-error-${productId}-${size}-${color}`] = toast.error('Failed to save for later: ' + (error.response?.data?.message || error.message), {
             onClose: () => delete toastRef.current[`save-error-${productId}-${size}-${color}`],
           });
         }
         console.error('Save For Later Error:', error.response?.data || error);
       }
-    },
-    [cart, fetchCart]
+    }, 300),
+    [cart]
   );
 
   const moveToCart = useCallback(
-    async (productId, quantity, size, color) => {
+    debounce(async (productId, quantity, size, color) => {
       const item = cart.savedForLater.find(
         (item) => item.productId === productId && item.size === size && item.color === color
       );
       if (!item) {
         if (!toastRef.current[`move-not-found-${productId}-${size}-${color}`]) {
-          toastRef.current[`move-not-found-${productId}-${size}-${color}`] = true;
-          toast.error('Item not found in saved for later', {
+          toastRef.current[`move-not-found-${productId}-${size}-${color}`] = toast.error('Item not found in saved for later', {
             onClose: () => delete toastRef.current[`move-not-found-${productId}-${size}-${color}`],
           });
         }
@@ -306,33 +301,29 @@ const CartPage = React.memo(() => {
             data: { size, color },
           }),
         ]);
-        await fetchCart();
         if (!toastRef.current[`move-success-${productId}-${size}-${color}`]) {
-          toastRef.current[`move-success-${productId}-${size}-${color}`] = true;
-          toast.success(`${item.name} moved to cart!`, {
+          toastRef.current[`move-success-${productId}-${size}-${color}`] = toast.success(`${item.name} moved to cart!`, {
             onClose: () => delete toastRef.current[`move-success-${productId}-${size}-${color}`],
           });
         }
       } catch (error) {
         setCart(originalCart);
         if (!toastRef.current[`move-error-${productId}-${size}-${color}`]) {
-          toastRef.current[`move-error-${productId}-${size}-${color}`] = true;
-          toast.error('Failed to move to cart: ' + (error.response?.data?.message || error.message), {
+          toastRef.current[`move-error-${productId}-${size}-${color}`] = toast.error('Failed to move to cart: ' + (error.response?.data?.message || error.message), {
             onClose: () => delete toastRef.current[`move-error-${productId}-${size}-${color}`],
           });
         }
         console.error('Move To Cart Error:', error.response?.data || error);
       }
-    },
-    [cart, fetchCart]
+    }, 300),
+    [cart]
   );
 
   const handleCheckout = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       if (!toastRef.current['checkout-login-error']) {
-        toastRef.current['checkout-login-error'] = true;
-        toast.error('Please login to proceed to checkout', {
+        toastRef.current['checkout-login-error'] = toast.error('Please login to proceed to checkout', {
           onClose: () => delete toastRef.current['checkout-login-error'],
         });
       }
@@ -342,8 +333,7 @@ const CartPage = React.memo(() => {
 
     if (cart.items.length === 0) {
       if (!toastRef.current['empty-cart-error']) {
-        toastRef.current['empty-cart-error'] = true;
-        toast.error('Your cart is empty!', {
+        toastRef.current['empty-cart-error'] = toast.error('Your cart is empty!', {
           onClose: () => delete toastRef.current['empty-cart-error'],
         });
       }
@@ -389,6 +379,7 @@ const CartPage = React.memo(() => {
           className: 'text-sm font-medium',
           style: { background: '#fff', color: '#333', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
           error: { style: { background: '#FF4D4F', color: '#fff' } },
+          success: { style: { background: '#10B981', color: '#fff' } },
         }}
       />
 
@@ -401,7 +392,7 @@ const CartPage = React.memo(() => {
               onClick={() => navigate('/')}
               className="text-gray-600"
             >
-              <MdArrowBack size={24} />
+              <ArrowLeft size={24} />
             </motion.button>
             {/* <img src={agroLogo} alt="Agro Logo" className="h-10" /> */}
           </div>
@@ -423,7 +414,7 @@ const CartPage = React.memo(() => {
             animate={{ opacity: 1 }}
             className="text-center py-16 bg-white rounded-lg shadow-sm"
           >
-            <MdShoppingCart className="mx-auto text-gray-400" size={48} />
+            <ShoppingCart className="mx-auto text-gray-400" size={48} />
             <p className="text-gray-600 mt-4 text-lg">Your bag is empty</p>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -446,7 +437,7 @@ const CartPage = React.memo(() => {
                     <AnimatePresence>
                       {cart.items.map((item) => (
                         <motion.div
-                          key={`cart-${item.cartItemId}-${item.productId}-${item.size}`}
+                          key={`cart-${item.cartItemId}-${item.productId}-${item.size}-${item.color}`}
                           layout
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -476,7 +467,7 @@ const CartPage = React.memo(() => {
                     <AnimatePresence>
                       {cart.savedForLater.map((item) => (
                         <motion.div
-                          key={`saved-${item.cartItemId}-${item.productId}-${item.size}`}
+                          key={`saved-${item.cartItemId}-${item.productId}-${item.size}-${item.color}`}
                           layout
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -541,7 +532,7 @@ const CartPage = React.memo(() => {
             className="w-11/12 max-w-md bg-green-500 text-white px-6 py-3 shadow-lg m-auto mt-4 rounded-md font-medium hover:bg-green-600 transition-all duration-300 flex items-center justify-center z-50"
             disabled={cart.items.length === 0 || loading}
           >
-            {loading ? <FaSpinner className="animate-spin" size={20} /> : 'Place Order'}
+            {loading ? <LoaderCircle className="animate-spin" size={20} /> : 'Place Order'}
           </motion.button>
         )}
       </main>

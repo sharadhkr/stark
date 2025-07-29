@@ -20,6 +20,10 @@ const OrderDetails = React.lazy(() => import('./pages/OrderDetails.jsx'));
 const SellerProducts = React.lazy(() => import('./pages/SellerProducts.jsx'));
 const SellerOrders = React.lazy(() => import('./pages/SellerOrders.jsx'));
 const SearchResults = React.lazy(() => import('./pages/SearchResults.jsx'));
+const FAQs = React.lazy(() => import('./pages/FAQs.jsx'));
+const AboutUs = React.lazy(() => import('./pages/AboutUs.jsx'));
+const TermsOfUse = React.lazy(() => import('./pages/TermsOfUse.jsx'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy.jsx'));
 
 export const routes = [
   { path: '/', element: <Home />, layout: true },
@@ -42,4 +46,8 @@ export const routes = [
   { path: '/seller/dashboard', element: <SellerDashboard />, layout: false },
   { path: '/admin/login', element: <AdminAuth />, layout: false },
   { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
+  { path: '/faq', element: <FAQs />, layout: true },
+  { path: '/about', element: <AboutUs />, layout: true },
+  { path: '/terms', element: <TermsOfUse />, layout: true },
+  { path: '/privacy', element: <PrivacyPolicy />, layout: true },
 ];
