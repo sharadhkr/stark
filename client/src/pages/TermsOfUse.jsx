@@ -13,7 +13,7 @@ const TermsOfUse = () => {
           <a href="/CancellationReturn" className="text-blue-600 hover:underline">Cancellation & Return Policy</a>
         </li>
         <li>
-          <a href="/ShippingDelivery" className="text-blue-600 hover:underline">Shipping & Delivery Policy</a>
+          <a href="/Shipping&Delivery" className="text-blue-600 hover:underline">Shipping & Delivery Policy</a>
         </li>
       </ul>
     </div>

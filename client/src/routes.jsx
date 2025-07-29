@@ -53,5 +53,5 @@ export const routes = [
   { path: '/terms', element: <TermsOfUse />, layout: true },
   { path: '/privacy', element: <PrivacyPolicy />, layout: true },
   { path: '/CancellationReturn', element: <CancellationReturn />, layout: true },
-  { path: '/ShippingDelivery', element: <ShippingDelivery />, layout: true },
+  { path: '/Shipping&Delivery', element: <ShippingDelivery />, layout: true },
 ];
