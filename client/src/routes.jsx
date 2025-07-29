@@ -24,6 +24,8 @@ const FAQs = React.lazy(() => import('./pages/FAQs.jsx'));
 const AboutUs = React.lazy(() => import('./pages/AboutUs.jsx'));
 const TermsOfUse = React.lazy(() => import('./pages/TermsOfUse.jsx'));
 const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy.jsx'));
+const ShippingDelivery = React.lazy(() => import('./pages/ShippingDelivery.jsx'));
+const CancellationReturn = React.lazy(() => import('./pages/CancellationReturn.jsx'));
 
 export const routes = [
   { path: '/', element: <Home />, layout: true },
@@ -50,4 +52,6 @@ export const routes = [
   { path: '/about', element: <AboutUs />, layout: true },
   { path: '/terms', element: <TermsOfUse />, layout: true },
   { path: '/privacy', element: <PrivacyPolicy />, layout: true },
+  { path: '/CancellationReturn', element: <CancellationReturn />, layout: true },
+  { path: '/ShippingDelivery', element: <ShippingDelivery />, layout: true },
 ];
