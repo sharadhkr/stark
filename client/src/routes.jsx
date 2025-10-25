@@ -1,4 +1,3 @@
-// ✅ src/routes.js
 import React from 'react';
 
 const Home = React.lazy(() => import('./pages/Home.jsx'));
@@ -27,25 +26,30 @@ const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy.jsx'));
 const ShippingDelivery = React.lazy(() => import('./pages/ShippingDelivery.jsx'));
 const CancellationReturn = React.lazy(() => import('./pages/CancellationReturn.jsx'));
 
+// Import route guards
+import ProtectedRoute from './Middleware/Protectedroute.jsx';
+import AdminProtectedRoute from './Middleware/AdminProtectedRoute.jsx';
+// If you have seller auth, import SellerProtectedRoute as well
+
 export const routes = [
   { path: '/', element: <Home />, layout: true },
-  { path: '/cart', element: <Cart />, layout: true },
-  { path: '/wishlist', element: <WishlistPage />, layout: true },
-  { path: '/dashboard', element: <UserDashboard />, layout: true },
-  { path: '/seller/products', element: <SellerProducts />, layout: true },
-  { path: '/seller/orders', element: <SellerOrders />, layout: true },
-  { path: '/order/:orderId', element: <OrderDetails />, layout: true },
+  { path: '/cart', element: <ProtectedRoute><Cart /></ProtectedRoute>, layout: true },
+  { path: '/wishlist', element: <ProtectedRoute><WishlistPage /></ProtectedRoute>, layout: true },
+  { path: '/dashboard', element: <ProtectedRoute><UserDashboard /></ProtectedRoute>, layout: true },
+  { path: '/seller/products', element: <ProtectedRoute><SellerProducts /></ProtectedRoute>, layout: true },
+  { path: '/seller/orders', element: <ProtectedRoute><SellerOrders /></ProtectedRoute>, layout: true },
+  { path: '/order/:orderId', element: <ProtectedRoute><OrderDetails /></ProtectedRoute>, layout: true },
   { path: '/category/:categoryName', element: <WrappedCategoryPage />, layout: true },
   { path: '/seller/:sellerId', element: <OwnerProfilePage />, layout: true },
   { path: '/product/:productId', element: <ProductPage />, layout: true },
   { path: '/search', element: <SearchResults />, layout: true },
   { path: '/combo/:comboId', element: <ComboPage />, layout: true },
-  { path: '/checkout', element: <CheckoutPage />, layout: false },
-  { path: '/checkout/:productId', element: <CheckoutPage />, layout: false },
-  { path: '/order-confirmation', element: <OrderConfirmation />, layout: false },
+  { path: '/checkout', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute>, layout: false },
+  { path: '/checkout/:productId', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute>, layout: false },
+  { path: '/order-confirmation', element: <ProtectedRoute><OrderConfirmation /></ProtectedRoute>, layout: false },
   { path: '/login', element: <LoginRegister />, layout: false },
   { path: '/seller/login', element: <SellerAuth />, layout: false },
-  { path: '/seller/dashboard', element: <SellerDashboard />, layout: false },
+  { path: '/seller/dashboard', element: <ProtectedRoute><SellerDashboard /></ProtectedRoute>, layout: false },
   { path: '/admin/login', element: <AdminAuth />, layout: false },
   { path: '/admin/dashboard', element: <AdminDashboard />, layout: false },
   { path: '/faq', element: <FAQs />, layout: true },

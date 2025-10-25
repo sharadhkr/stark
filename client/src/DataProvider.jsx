@@ -4,7 +4,7 @@ import axios from './useraxios';
 export const DataContext = createContext();
 
 const CACHE_CONFIG = {
-  STALE_TIME: 10 * 60 * 1000, // 10 minutes
+  STALE_TIME: 10 * 60 * 1000, 
 };
 
 export const DataProvider = ({ children }) => {
@@ -37,7 +37,7 @@ export const DataProvider = ({ children }) => {
       console.log('📦 Full initial-data response:', data);
       console.log('📦 Raw comboOffers from backend:', data.comboOffers);
 
-      // ✅ Match backend ad types exactly as provided in JSON
+      
       const singleAds = (data.ads || []).find(ad => ad.type === 'Single Ad')?.images || [];
       const doubleAds = (data.ads || []).find(ad => ad.type === 'Double Ad')?.images || [];
       const tripleAds = (data.ads || []).find(ad => ad.type === 'Triple Ad')?.images || [];
@@ -106,8 +106,7 @@ export const DataProvider = ({ children }) => {
     fetchCriticalData();
     return () => abortControllerRef.current?.abort();
   }, [fetchCriticalData]);
-
-  // 🔍 Debug comboOffers whenever they change
+  
   useEffect(() => {
     console.log('🧠 Final cached comboOffers:', cache.comboOffers);
   }, [cache.comboOffers]);

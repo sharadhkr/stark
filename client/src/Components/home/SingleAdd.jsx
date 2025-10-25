@@ -101,7 +101,7 @@ const SingleAdd = React.memo(() => {
               className="min-w-full h-full flex items-center justify-center"
             >
               <img
-                className="w-full h-full object-cover rounded-2xl scale-100 transition-transform duration-500 hover:scale-105"
+                className="w-full h-full object-cover rounded-2xl scale-100 "
                 src={image.url}
                 alt={image.alt}
                 loading="lazy"

@@ -222,7 +222,7 @@
 
 // export default React.memo(LoginRegister);
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from '../axios';
 import { toast, Toaster } from 'react-hot-toast';
 import { Button } from '../../@/components/ui/button';
@@ -239,7 +239,8 @@ const LoginRegister = () => {
   const [loading, setLoading] = useState(false);
   const pinRefs = useRef([]);
   const navigate = useNavigate();
-  const countryCode = '+91'; // Fixed country code
+  const location = useLocation();
+  const countryCode = '+91';
 
   const fullPhoneNumber = `${countryCode}${phoneNumber}`;
 
@@ -257,20 +258,32 @@ const LoginRegister = () => {
       setLoading(true);
       try {
         const res = await callback();
+        console.log('API Response:', res.data); // Debug API response
         toast.dismiss(loadingToast);
         toast.success(res.data.message || successMessage, { duration: 3000 });
         if (res.data.token) {
-          console.log('Token set:', res.data.token);
           localStorage.setItem('token', res.data.token);
+          console.log('Token stored:', res.data.token); // Debug token
           try {
-            const profileRes = await axios.get('/api/user/auth/profile');
-            console.log('Profile response:', profileRes.data);
-            navigate('/');
+            const profileRes = await axios.get('/api/user/auth/profile', {
+              headers: { Authorization: `Bearer ${res.data.token}` },
+            });
+            console.log('Profile Response:', profileRes.data); // Debug profile
+            if (location.pathname !== '/') {
+              console.log('Navigating to /');
+              navigate('/', { replace: true });
+            }
           } catch (err) {
             console.error('Profile check failed:', err.response?.data || err.message);
-            toast.error('Please complete your profile.');
-            navigate('/');
+            toast.error('Profile fetch failed, proceeding to home.');
+            if (location.pathname !== '/') {
+              console.log('Navigating to / after profile failure');
+              navigate('/', { replace: true });
+            }
           }
+        } else {
+          console.warn('No token received in response');
+          toast.error('Login failed: No token received');
         }
       } catch (err) {
         toast.dismiss(loadingToast);
@@ -293,7 +306,7 @@ const LoginRegister = () => {
         setLoading(false);
       }
     },
-    [navigate]
+    [navigate, location]
   );
 
   const handleContinue = useCallback(() => {
@@ -348,6 +361,16 @@ const LoginRegister = () => {
     if (showPinInput && pinRefs.current[0]) pinRefs.current[0].focus();
   }, [showPinInput]);
 
+  // Prevent redirect to /admin/login if token exists
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    console.log('Current path:', location.pathname, 'Token:', !!token); // Debug
+    if (token && location.pathname === '/admin/login') {
+      console.log('Token found, redirecting to /');
+      navigate('/', { replace: true });
+    }
+  }, [location, navigate]);
+
   return (
     <div className="min-h-screen flex items-start relative justify-center bg-gradient-to-br from-purple-200 via-purple-200 to-purple-300">
       <Toaster position="top-center" toastOptions={{ className: 'text-sm sm:text-base font-medium' }} />
@@ -363,19 +386,15 @@ const LoginRegister = () => {
         </CardHeader>
         <CardContent className="px-8 pb-10">
           <div className="flex flex-col">
-            <button className='flex items-center justify-end  '>
-              <div className="px-2 py-1 flex items-center gap-2  font-normal bg-gray-300 rounded-lg border  border-gray-500 text-gray-700">
-                <h1>skip</h1>
-             <FaGreaterThan />
-              </div>
-            </button>
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="phoneNumber" className="text-sm font-semibold text-gray-700">
                   Phone Number
                 </Label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-lg">🇮🇳</span>
+                  <span className="absolute inset-y-0 left-2 flex items-center pr-3 text-sm font-semibold text-purple-700">
+                    {countryCode}
+                  </span>
                   <Input
                     id="phoneNumber"
                     type="tel"
@@ -387,9 +406,6 @@ const LoginRegister = () => {
                     placeholder="Enter 10-digit number"
                     className="h-12 pl-10 pr-16 text-sm font-semibold border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 rounded-lg transition-all duration-300 hover:border-purple-300"
                   />
-                  <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm font-semibold text-purple-700">
-                    {countryCode}
-                  </span>
                 </div>
               </div>
 
@@ -425,6 +441,13 @@ const LoginRegister = () => {
               >
                 {showPinInput ? 'Login/Register' : 'Continue'}
               </Button>
+              <Button
+                variant="link"
+                onClick={() => navigate('/')}
+                className="w-full m-0 p-0 text-purple-600 font-semibold hover:underline"
+              >
+                Skip for now
+              </Button>
               <p className="text-xs text-gray-500 text-center">
                 By continuing, you agree to our{' '}
                 <a
@@ -450,7 +473,6 @@ const LoginRegister = () => {
         </CardContent>
       </Card>
 
-      {/* Custom CSS for animations and enhanced styling */}
       <style jsx>{`
         .min-h-screen {
           background: linear-gradient(135deg, #e9d5ff 0%, #ede9fe 50%, #d8b4fe 100%);

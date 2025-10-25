@@ -11,7 +11,7 @@ const sendOtp = async (phoneNumber) => {
 
   // Generate a 6-digit OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
+                                                                                                                 
   // Store OTP temporarily
   otps.set(phoneNumber, otp);
 

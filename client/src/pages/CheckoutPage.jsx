@@ -690,7 +690,7 @@ const CheckoutPage = () => {
           throw new Error('Razorpay order creation failed');
         }
 
-        const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY || 'rzp_live_q3VDcaCSe5gBVo';
+        const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY || 'rzp_live_An2Y3brifzg0yN';
         const options = {
           key: RAZORPAY_KEY,
           amount: totalAmount * 100,

@@ -227,7 +227,7 @@ const Home = React.memo(() => {
               }}
               searchQuery={searchQuery}
               setSearchQuery={handleSearchChange}
-              placeholder={props.placeholder || 'Search for products, sellers, or categories...'}
+              placeholder={props.placeholder || 'Hey Stark'}
             />
           );
 
@@ -378,7 +378,7 @@ const Home = React.memo(() => {
   }, [cache.layout?.data, loading, errors, renderComponent, LoadingUI, defaultLayout, fetchData]);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen overflow-x-hidden bg-white">
       <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
       <main className="container mx-auto">{renderedLayout}</main>
     </div>

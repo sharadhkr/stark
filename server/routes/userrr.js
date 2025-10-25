@@ -150,6 +150,7 @@ router.post('/verify-otp', async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+
 router.post('/login-register', async (req, res) => {
   const { phoneNumber, pin } = req.body;
   if (!phoneNumber || !pin) return res.status(400).json({ message: 'Phone number and PIN are required' });

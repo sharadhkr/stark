@@ -364,25 +364,25 @@ const UserDashboard = () => {
         )}
       </header>
 
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl w-full mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <motion.div variants={fadeIn} initial="initial" animate="animate" className="space-y-6">
           {isAuthenticated ? (
             <>
-              <div className=" flex items-center gap-4">
-                <motion.img
-                  src={profile.profilePicture || agroLogo}
-                  alt="Profile"
-                  className="w-28 h-28 drop-shadow-sm rounded-full object-cover border-2 border-gray-200"
-                  onError={(e) => (e.target.src = agroLogo)}
-                />
-                <div>
+              <div className="flex items-center gap-4">
+                <div className="w-36">
+                  <motion.img
+                    src={profile.profilePicture || agroLogo}
+                    alt="Profile"
+                    className="w-24 h-24 drop-shadow-sm rounded-full object-cover border-2 border-gray-200"
+                    onError={(e) => (e.target.src = agroLogo)}
+                  />
+                </div>
+                <div className="flex flex-col w-full">
                   <p className="text-xl font-semibold text-gray-900">{`${profile.firstName} ${profile.lastName}`.trim() || 'User'}</p>
                   <p className="text-sm text-gray-500">{profile.email}</p>
                   <p className="text-sm text-gray-500">{profile.phoneNumber || 'No phone number'}</p>
-                </div>
-                <div className="w-[35%] h-24 flex items-end justify-end mb-4 ">
                   <div
-                    className="px-4 drop-shadow-md py-2 bg-blue-500 cursor-pointer text-white rounded-xl"
+                    className="px-4 drop-shadow-md py-2 w-fit my-2 bg-blue-500 cursor-pointer text-white rounded-xl"
                     onClick={() => setShowEditProfilePanel(true)}
                   >
                     Edit profile
@@ -460,7 +460,7 @@ const UserDashboard = () => {
                       onClick={() => navigate(path)}
                       className="text-sm text-gray-600 flex gap-3 transition-colors duration-200 text-left"
                     >
-                        <h1>●</h1>
+                      <h1>●</h1>
                       {label}
                     </button>
                   ))}

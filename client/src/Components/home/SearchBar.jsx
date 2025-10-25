@@ -18,7 +18,7 @@ const expandVariants = {
   visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
 };
 
-const SearchBar = ({ placeholder = "Search for products, sellers, or categories..." }) => {
+const SearchBar = ({ placeholder = "search by category, name, id" }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [suggestions, setSuggestions] = useState({
@@ -37,6 +37,17 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
   const navigate = useNavigate();
   const searchRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Animation variants
+  const inputVariants = {
+    initial: { scale: 1, boxShadow: "0 0 0 0 rgba(168,85,247,0)" },
+    focus: { scale: 1.03, boxShadow: "0 4px 24px 0 rgba(168,85,247,0.15)" },
+  };
+
+  const suggestionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { staggerChildren: 0.05, duration: 0.4 } },
+  };
 
   // Fetch trending data on mount
   useEffect(() => {
@@ -198,11 +209,15 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
   };
 
   const TagItem = ({ text, onRemove, onClick }) => {
-    if (typeof text !== 'string') return null; // Skip rendering if text is not a string
+    if (typeof text !== 'string') return null;
     return (
-      <div
-        className="inline-flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2 mb-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+      <motion.div
+        className="inline-flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2 mb-2 text-sm  text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
         onClick={onClick}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
+        layout
       >
         <span>{text}</span>
         {onRemove && (
@@ -214,18 +229,22 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
             }}
           />
         )}
-      </div>
+      </motion.div>
     );
   };
 
   const BlockItem = ({ icon, text, onClick }) => (
-    <div
+    <motion.div
       className="flex items-center bg-gray-50 rounded-lg p-2 mb-2 cursor-pointer hover:bg-gray-100 transition-colors"
       onClick={onClick}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      layout
     >
       <div className="w-8 h-8 flex items-center justify-center bg-white rounded-md mr-2">{icon}</div>
       <span className="text-sm text-gray-700 truncate">{text}</span>
-    </div>
+    </motion.div>
   );
 
   const hasResults = () =>
@@ -238,36 +257,56 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
       <div ref={searchRef} className="relative mt-4 mb-5 px-2 mx-auto z-20">
         <motion.form
           onSubmit={handleSearch}
-          initial="hidden"
-          animate="visible"
-          variants={fadeIn}
-          className="flex w-full items-center bg-gray-50/85 rounded-2xl shadow-md px-8 py-3 border border-gray-200"
+          initial="initial"
+          animate={isExpanded ? "focus" : "initial"}
+          variants={inputVariants}
+          className="flex w-full items-center bg-white/85 rounded-2xl drop-shadow-lg px-8 py-3 border border-gray-200"
         >
           <div className="flex w-full items-center">
             <div className="relative w-15 flex h-full rounded-full shadow-inner">
-              <div className="-top-[14px] z-10 -left-8 w-32 absolute">
+              <motion.div
+                className="-top-[14px] z-10 -left-8 w-32 absolute"
+                initial={{ rotate: 0 }}
+                animate={isExpanded ? { rotate: 10 } : { rotate: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              >
                 <img className="drop-shadow-lg w-full" src={slogo} alt="Logo" />
-              </div>
+              </motion.div>
             </div>
-            <input
+            <motion.input
               ref={inputRef}
-              className="flex-1 w-[60%] ml-16 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
+              className="flex-1 w-[60%] ml-14 text-base font-medium text-gray-800 bg-transparent outline-none placeholder-gray-400"
               placeholder={placeholder}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setIsExpanded(true)}
+              initial={{ opacity: 0.7 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
             />
             {searchQuery && (
-              <FaTimes
-                className="text-gray-500 cursor-pointer mr-3 hover:text-gray-700 transition-colors"
-                onClick={clearSearch}
-              />
+              <motion.div
+                initial={{ scale: 0.7, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.7, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <FaTimes
+                  className="text-gray-500 cursor-pointer mr-3 hover:text-gray-700 transition-colors"
+                  onClick={clearSearch}
+                />
+              </motion.div>
             )}
           </div>
-          <button type="submit" className="text-purple-400 text-xl drop-shadow-lg hover:text-purple-500 transition-colors">
+          <motion.button
+            type="submit"
+            className="text-purple-400 text-xl drop-shadow-lg hover:text-purple-500 transition-colors"
+            whileTap={{ scale: 0.85 }}
+            whileHover={{ scale: 1.15 }}
+          >
             <FaArrowRight />
-          </button>
+          </motion.button>
         </motion.form>
 
         {isExpanded && (
@@ -278,280 +317,314 @@ const SearchBar = ({ placeholder = "Search for products, sellers, or categories.
               variants={expandVariants}
               className="absolute left-0 right-0 mt-2 bg-white/90 backdrop-blur-md rounded-xl shadow-lg mx-2 z-20 p-6 max-h-[450px] overflow-y-auto border border-gray-100"
             >
-              {loading && searchQuery.trim() ? (
-                <p className="text-gray-500 text-center py-4">Searching...</p>
-              ) : searchQuery.trim() ? (
-                <>
-                  {Array.isArray(suggestions.products) && suggestions.products.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaShoppingBag className="mr-2 text-blue-500" /> Products
-                      </h3>
-                      {suggestions.products.map((product) => (
-                        <div
-                          key={product._id}
-                          className="flex items-center gap-3 py-2 px-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-                          onClick={() => handleQuickSearch('product', product)}
-                        >
-                          <img
-                            src={product.image?.[0] || agroLogo}
-                            alt={product.name}
-                            className="w-10 h-10 object-cover rounded-md"
-                            onError={(e) => (e.target.src = agroLogo)}
-                          />
-                          <span className="text-sm text-gray-700">{product.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {Array.isArray(suggestions.categories) && suggestions.categories.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaTag className="mr-2 text-green-500" /> Categories
-                      </h3>
-                      {suggestions.categories.map((cat) => (
-                        <BlockItem
-                          key={cat._id}
-                          icon={<FaTag className="text-green-500" />}
-                          text={cat.name}
-                          onClick={() => handleQuickSearch('category', cat)}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {Array.isArray(suggestions.sellers) && suggestions.sellers.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaStar className="mr-2 text-yellow-500" /> Sellers
-                      </h3>
-                      {suggestions.sellers.map((seller) => (
-                        <BlockItem
-                          key={seller._id}
-                          icon={<FaUser className="text-yellow-500" />}
-                          text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
-                          onClick={() => handleQuickSearch('seller', seller)}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {!hasResults() && !loading && (
-                    <p className="text-gray-500 text-center py-4">No results found</p>
-                  )}
-
-                  {hasResults() && (
-                    <>
-                      {Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
-                        <div className="mb-6">
-                          <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-sm font-semibold text-gray-700 flex items-center">
-                              <FaSearch className="mr-2 text-gray-500" /> Recent Searches
-                            </h3>
-                            <button
-                              className="text-xs text-red-500 hover:text-red-600 flex items-center transition-colors"
-                              onClick={clearAllRecent}
-                            >
-                              <FaTrash className="mr-1" /> Clear All
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap">
-                            {suggestions.recentSearches.map((search, index) => (
-                              <TagItem
-                                key={index}
-                                text={typeof search === 'string' ? search : search.query || 'Unknown'}
-                                onRemove={() => removeRecentSearch(search)}
-                                onClick={() => handleQuickSearch('recent', search)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {Array.isArray(trending.trendingSearches) && trending.trendingSearches.length > 0 && (
-                        <div className="mb-6">
-                          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                            <FaFire className="mr-2 text-red-500" /> Trending Searches
-                          </h3>
-                          <div className="flex flex-wrap">
-                            {trending.trendingSearches.map((search, index) => (
-                              <TagItem
-                                key={index}
-                                text={typeof search === 'string' ? search : search.query || 'Unknown'}
-                                onClick={() => handleQuickSearch('trending', search)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {Array.isArray(trending.topCategories) && trending.topCategories.length > 0 && (
-                        <div className="mb-6">
-                          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                            <FaTag className="mr-2 text-green-500" /> Top Categories
-                          </h3>
-                          {trending.topCategories.map((cat) => (
-                            <BlockItem
-                              key={cat._id}
-                              icon={<FaTag className="text-green-500" />}
-                              text={cat.name}
-                              onClick={() => handleQuickSearch('category', cat)}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {Array.isArray(trending.topSellers) && trending.topSellers.length > 0 && (
-                        <div className="mb-6">
-                          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                            <FaStar className="mr-2 text-yellow-500" /> Top Sellers
-                          </h3>
-                          {trending.topSellers.map((seller) => (
-                            <BlockItem
-                              key={seller._id}
-                              icon={<FaUser className="text-yellow-500" />}
-                              text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
-                              onClick={() => handleQuickSearch('seller', seller)}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {Array.isArray(trending.topProducts) && trending.topProducts.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                            <FaShoppingBag className="mr-2 text-blue-500" /> Top Products
-                          </h3>
-                          {trending.topProducts.map((product) => (
-                            <div
-                              key={product._id}
-                              className="flex items-center gap-3 py-2 px-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-                              onClick={() => handleQuickSearch('product', product)}
-                            >
-                              <img
-                                src={product.image?.[0] || agroLogo}
-                                alt={product.name}
-                                className="w-10 h-10 object-cover rounded-md"
-                                onError={(e) => (e.target.src = agroLogo)}
-                              />
-                              <span className="text-sm text-gray-700">{product.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  {Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
-                    <div className="mb-6">
-                      <div className="flex justify-between items-center mb-3">
-                        <h3 className="text-sm font-semibold text-gray-700 flex items-center">
-                          <FaSearch className="mr-2 text-gray-500" /> Recent Searches
+              <motion.div
+                variants={suggestionVariants}
+                initial="hidden"
+                animate="visible"
+              >
+                {loading && searchQuery.trim() ? (
+                  <motion.p className="text-gray-500 text-center py-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    Searching...
+                  </motion.p>
+                ) : searchQuery.trim() ? (
+                  <>
+                    {Array.isArray(suggestions.products) && suggestions.products.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaShoppingBag className="mr-2 text-blue-500" /> Products
                         </h3>
-                        <button
-                          className="text-xs text-red-500 hover:text-red-600 flex items-center transition-colors"
-                          onClick={clearAllRecent}
-                        >
-                          <FaTrash className="mr-1" /> Clear All
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap">
-                        {suggestions.recentSearches.map((search, index) => (
-                          <TagItem
-                            key={index}
-                            text={typeof search === 'string' ? search : search.query || 'Unknown'}
-                            onRemove={() => removeRecentSearch(search)}
-                            onClick={() => handleQuickSearch('recent', search)}
+                        {suggestions.products.map((product) => (
+                          <motion.div
+                            key={product._id}
+                            className="flex items-center gap-3 py-2 px-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                            onClick={() => handleQuickSearch('product', product)}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <img
+                              src={product.image?.[0] || agroLogo}
+                              alt={product.name}
+                              className="w-10 h-10 object-cover rounded-md"
+                              onError={(e) => (e.target.src = agroLogo)}
+                            />
+                            <span className="text-sm text-gray-700">{product.name}</span>
+                          </motion.div>
+                        ))}
+                      </motion.div>
+                    )}
+
+                    {Array.isArray(suggestions.categories) && suggestions.categories.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaTag className="mr-2 text-green-500" /> Categories
+                        </h3>
+                        {suggestions.categories.map((cat) => (
+                          <BlockItem
+                            key={cat._id}
+                            icon={<FaTag className="text-green-500" />}
+                            text={cat.name}
+                            onClick={() => handleQuickSearch('category', cat)}
                           />
                         ))}
-                      </div>
-                    </div>
-                  )}
+                      </motion.div>
+                    )}
 
-                  {Array.isArray(trending.trendingSearches) && trending.trendingSearches.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaFire className="mr-2 text-red-500" /> Trending Searches
-                      </h3>
-                      <div className="flex flex-wrap">
-                        {trending.trendingSearches.map((search, index) => (
-                          <TagItem
-                            key={index}
-                            text={typeof search === 'string' ? search : search.query || 'Unknown'}
-                            onClick={() => handleQuickSearch('trending', search)}
+                    {Array.isArray(suggestions.sellers) && suggestions.sellers.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaStar className="mr-2 text-yellow-500" /> Sellers
+                        </h3>
+                        {suggestions.sellers.map((seller) => (
+                          <BlockItem
+                            key={seller._id}
+                            icon={<FaUser className="text-yellow-500" />}
+                            text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
+                            onClick={() => handleQuickSearch('seller', seller)}
                           />
                         ))}
-                      </div>
-                    </div>
-                  )}
+                      </motion.div>
+                    )}
 
-                  {Array.isArray(trending.topCategories) && trending.topCategories.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaTag className="mr-2 text-green-500" /> Top Categories
-                      </h3>
-                      {trending.topCategories.map((cat) => (
-                        <BlockItem
-                          key={cat._id}
-                          icon={<FaTag className="text-green-500" />}
-                          text={cat.name}
-                          onClick={() => handleQuickSearch('category', cat)}
-                        />
-                      ))}
-                    </div>
-                  )}
+                    {!hasResults() && !loading && (
+                      <motion.p className="text-gray-500 text-center py-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        No results found
+                      </motion.p>
+                    )}
 
-                  {Array.isArray(trending.topSellers) && trending.topSellers.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaStar className="mr-2 text-yellow-500" /> Top Sellers
-                      </h3>
-                      {trending.topSellers.map((seller) => (
-                        <BlockItem
-                          key={seller._id}
-                          icon={<FaUser className="text-yellow-500" />}
-                          text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
-                          onClick={() => handleQuickSearch('seller', seller)}
-                        />
-                      ))}
-                    </div>
-                  )}
+                    {hasResults() && (
+                      <>
+                        {Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
+                          <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                            <div className="flex justify-between items-center mb-3">
+                              <h3 className="text-sm font-semibold text-gray-700 flex items-center">
+                                <FaSearch className="mr-2 text-gray-500" /> Recent Searches
+                              </h3>
+                              <button
+                                className="text-xs text-red-500 hover:text-red-600 flex items-center transition-colors"
+                                onClick={clearAllRecent}
+                              >
+                                <FaTrash className="mr-1" /> Clear All
+                              </button>
+                            </div>
+                            <motion.div className="flex flex-wrap" layout>
+                              {suggestions.recentSearches.map((search, index) => (
+                                <TagItem
+                                  key={index}
+                                  text={typeof search === 'string' ? search : search.query || 'Unknown'}
+                                  onRemove={() => removeRecentSearch(search)}
+                                  onClick={() => handleQuickSearch('recent', search)}
+                                />
+                              ))}
+                            </motion.div>
+                          </motion.div>
+                        )}
 
-                  {Array.isArray(trending.topProducts) && trending.topProducts.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                        <FaShoppingBag className="mr-2 text-blue-500" /> Top Products
-                      </h3>
-                      {trending.topProducts.map((product) => (
-                        <div
-                          key={product._id}
-                          className="flex items-center gap-3 py-2 px-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-                          onClick={() => handleQuickSearch('product', product)}
-                        >
-                          <img
-                            src={product.image?.[0] || agroLogo}
-                            alt={product.name}
-                            className="w-10 h-10 object-cover rounded-md"
-                            onError={(e) => (e.target.src = agroLogo)}
-                          />
-                          <span className="text-sm text-gray-700">{product.name}</span>
+                        {Array.isArray(trending.trendingSearches) && trending.trendingSearches.length > 0 && (
+                          <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                              <FaFire className="mr-2 text-red-500" /> Trending Searches
+                            </h3>
+                            <motion.div className="flex flex-wrap" layout>
+                              {trending.trendingSearches.map((search, index) => (
+                                <TagItem
+                                  key={index}
+                                  text={typeof search === 'string' ? search : search.query || 'Unknown'}
+                                  onClick={() => handleQuickSearch('trending', search)}
+                                />
+                              ))}
+                            </motion.div>
+                          </motion.div>
+                        )}
+
+                        {Array.isArray(trending.topCategories) && trending.topCategories.length > 0 && (
+                          <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                              <FaTag className="mr-2 text-green-500" /> Top Categories
+                            </h3>
+                            {trending.topCategories.map((cat) => (
+                              <BlockItem
+                                key={cat._id}
+                                icon={<FaTag className="text-green-500" />}
+                                text={cat.name}
+                                onClick={() => handleQuickSearch('category', cat)}
+                              />
+                            ))}
+                          </motion.div>
+                        )}
+
+                        {Array.isArray(trending.topSellers) && trending.topSellers.length > 0 && (
+                          <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                              <FaStar className="mr-2 text-yellow-500" /> Top Sellers
+                            </h3>
+                            {trending.topSellers.map((seller) => (
+                              <BlockItem
+                                key={seller._id}
+                                icon={<FaUser className="text-yellow-500" />}
+                                text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
+                                onClick={() => handleQuickSearch('seller', seller)}
+                              />
+                            ))}
+                          </motion.div>
+                        )}
+
+                        {Array.isArray(trending.topProducts) && trending.topProducts.length > 0 && (
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                              <FaShoppingBag className="mr-2 text-blue-500" /> Top Products
+                            </h3>
+                            {trending.topProducts.map((product) => (
+                              <motion.div
+                                key={product._id}
+                                className="flex items-center gap-3 py-2 px-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                                onClick={() => handleQuickSearch('product', product)}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                <img
+                                  src={product.image?.[0] || agroLogo}
+                                  alt={product.name}
+                                  className="w-10 h-10 object-cover rounded-md"
+                                  onError={(e) => (e.target.src = agroLogo)}
+                                />
+                                <span className="text-sm text-gray-700">{product.name}</span>
+                              </motion.div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {Array.isArray(suggestions.recentSearches) && suggestions.recentSearches.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="text-sm font-semibold text-gray-700 flex items-center">
+                            <FaSearch className="mr-2 text-gray-500" /> Recent Searches
+                          </h3>
+                          <button
+                            className="text-xs text-red-500 hover:text-red-600 flex items-center transition-colors"
+                            onClick={clearAllRecent}
+                          >
+                            <FaTrash className="mr-1" /> Clear All
+                          </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+                        <motion.div className="flex flex-wrap" layout>
+                          {suggestions.recentSearches.map((search, index) => (
+                            <TagItem
+                              key={index}
+                              text={typeof search === 'string' ? search : search.query || 'Unknown'}
+                              onRemove={() => removeRecentSearch(search)}
+                              onClick={() => handleQuickSearch('recent', search)}
+                            />
+                          ))}
+                        </motion.div>
+                      </motion.div>
+                    )}
+
+                    {Array.isArray(trending.trendingSearches) && trending.trendingSearches.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaFire className="mr-2 text-red-500" /> Trending Searches
+                        </h3>
+                        <motion.div className="flex flex-wrap" layout>
+                          {trending.trendingSearches.map((search, index) => (
+                            <TagItem
+                              key={index}
+                              text={typeof search === 'string' ? search : search.query || 'Unknown'}
+                              onClick={() => handleQuickSearch('trending', search)}
+                            />
+                          ))}
+                        </motion.div>
+                      </motion.div>
+                    )}
+
+                    {Array.isArray(trending.topCategories) && trending.topCategories.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaTag className="mr-2 text-green-500" /> Top Categories
+                        </h3>
+                        {trending.topCategories.map((cat) => (
+                          <BlockItem
+                            key={cat._id}
+                            icon={<FaTag className="text-green-500" />}
+                            text={cat.name}
+                            onClick={() => handleQuickSearch('category', cat)}
+                          />
+                        ))}
+                      </motion.div>
+                    )}
+
+                    {Array.isArray(trending.topSellers) && trending.topSellers.length > 0 && (
+                      <motion.div className="mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaStar className="mr-2 text-yellow-500" /> Top Sellers
+                        </h3>
+                        {trending.topSellers.map((seller) => (
+                          <BlockItem
+                            key={seller._id}
+                            icon={<FaUser className="text-yellow-500" />}
+                            text={`${seller.name} ${seller.shopName ? `(${seller.shopName})` : ''}`}
+                            onClick={() => handleQuickSearch('seller', seller)}
+                          />
+                        ))}
+                      </motion.div>
+                    )}
+
+                    {Array.isArray(trending.topProducts) && trending.topProducts.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <FaShoppingBag className="mr-2 text-blue-500" /> Top Products
+                        </h3>
+                        {trending.topProducts.map((product) => (
+                          <motion.div
+                            key={product._id}
+                            className="flex items-center gap-3 py-2 px-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                            onClick={() => handleQuickSearch('product', product)}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <img
+                              src={product.image?.[0] || agroLogo}
+                              alt={product.name}
+                              className="w-10 h-10 object-cover rounded-md"
+                              onError={(e) => (e.target.src = agroLogo)}
+                            />
+                            <span className="text-sm text-gray-700">{product.name}</span>
+                          </motion.div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </>
+                )}
+              </motion.div>
             </motion.div>
           </div>
         )}
       </div>
       <div className="absolute w-full z-0 opacity-40 top-0 left-0 flex items-center justify-center blur-xl">
-        <div className="w-[30%] h-20 bg-purple-400"></div>
-        <div className="w-[40%] h-20 skew-x-12 bg-pink-400"></div>
-        <div className="w-[30%] h-20 bg-yellow-400"></div>
+        <motion.div
+          className="w-[30%] h-20 bg-purple-400"
+          initial={{ scale: 0.8, opacity: 0.5 }}
+          animate={{ scale: isExpanded ? 1.1 : 0.8, opacity: isExpanded ? 0.7 : 0.5 }}
+          transition={{ duration: 0.6 }}
+        ></motion.div>
+        <motion.div
+          className="w-[40%] h-20 skew-x-12 bg-pink-400"
+          initial={{ scale: 0.8, opacity: 0.5 }}
+          animate={{ scale: isExpanded ? 1.1 : 0.8, opacity: isExpanded ? 0.7 : 0.5 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+        ></motion.div>
+        <motion.div
+          className="w-[30%] h-20 bg-yellow-400"
+          initial={{ scale: 0.8, opacity: 0.5 }}
+          animate={{ scale: isExpanded ? 1.1 : 0.8, opacity: isExpanded ? 0.7 : 0.5 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        ></motion.div>
       </div>
     </div>
   );

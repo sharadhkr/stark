@@ -3,60 +3,102 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../useraxios';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
-import { FaHeart, FaShoppingCart, FaArrowLeft, FaPlus, FaMinus, FaChevronLeft, FaChevronRight, FaRuler, FaWeightHanging, FaTag, FaUser, FaBoxOpen, FaUndo, FaMoneyBillWave, FaCreditCard, FaTruck, FaExchangeAlt } from 'react-icons/fa';
+import { FaHeart, FaShoppingBag, FaArrowLeft, FaPlus, FaMinus, FaStar, FaCheckCircle, FaTruck, FaUndo, FaExchangeAlt, FaMoneyBillWave } from 'react-icons/fa';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Pagination, Thumbs, FreeMode } from 'swiper/modules';
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/pagination';
+import 'swiper/css/thumbs';
 import placeholderImage from '../assets/logo.png';
 import RelatedProducts from '../Components/RelatedProducts';
 
-// Animation Variants
-const pageVariants = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0, transition: { duration: 0.3 } } };
-const sectionVariants = { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.3 } } };
-const buttonVariants = { hover: { scale: 1.05 }, tap: { scale: 0.95 } };
+// Animation Variants for a smoother feel
+const pageVariants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.5 } },
+};
+const sectionVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.5, staggerChildren: 0.1 } },
+};
+const itemVariants = {
+  initial: { opacity: 0, y: 15 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+};
+const buttonVariants = {
+  hover: { scale: 1.03 },
+  tap: { scale: 0.97 },
+};
 
-// Skeleton Loader Component
+// Skeleton Loader Component - Myntra Style
 const SkeletonLoader = () => (
-  <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col md:flex-row gap-4 animate-pulse">
-    <div className="w-full md:w-1/2 h-80 bg-gray-200 rounded-lg" />
-    <div className="w-full md:w-1/2 space-y-3">
-      <div className="h-8 bg-gray-200 rounded w-3/4" />
-      <div className="h-6 bg-gray-200 rounded w-1/2" />
-      <div className="h-10 bg-gray-200 rounded w-full" />
-      <div className="h-20 bg-gray-200 rounded w-full" />
+  <motion.div variants={pageVariants} initial="initial" animate="animate" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 animate-pulse">
+      {/* Image Skeleton */}
+      <div className="lg:col-span-3">
+        <div className="w-full h-[550px] bg-gray-200 rounded-lg"></div>
+        <div className="flex gap-4 mt-4">
+          <div className="w-24 h-24 bg-gray-200 rounded-md"></div>
+          <div className="w-24 h-24 bg-gray-200 rounded-md"></div>
+          <div className="w-24 h-24 bg-gray-200 rounded-md"></div>
+          <div className="w-24 h-24 bg-gray-200 rounded-md"></div>
+        </div>
+      </div>
+      {/* Info Skeleton */}
+      <div className="lg:col-span-2 space-y-6">
+        <div className="h-10 bg-gray-200 rounded w-4/5"></div>
+        <div className="h-6 bg-gray-200 rounded w-3/5"></div>
+        <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+        <div className="h-4 bg-gray-200 rounded w-full"></div>
+        <hr />
+        <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+        <div className="flex gap-4">
+          <div className="h-12 w-16 bg-gray-200 rounded-md"></div>
+          <div className="h-12 w-16 bg-gray-200 rounded-md"></div>
+          <div className="h-12 w-16 bg-gray-200 rounded-md"></div>
+        </div>
+        <div className="h-14 bg-gray-200 rounded-lg w-full"></div>
+        <div className="h-14 bg-gray-200 rounded-lg w-full"></div>
+      </div>
     </div>
-  </div>
+  </motion.div>
 );
+
 
 const ProductPage = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
+  
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
   const [inWishlist, setInWishlist] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [thumbsSwiper, setThumbsSwiper] = useState(null);
+  
   const token = localStorage.getItem('token');
 
   useEffect(() => {
     const fetchProductData = async () => {
+      setLoading(true);
       try {
         const objectIdPattern = /^[0-9a-fA-F]{24}$/;
         if (!objectIdPattern.test(productId)) throw new Error('Invalid product ID');
 
         const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-        const endpoint = `/api/user/auth/products/${productId}`;
-        const productResponse = await axios.get(endpoint, config);
+        const productResponse = await axios.get(`/api/user/auth/products/${productId}`, config);
         const fetchedProduct = productResponse.data.product;
 
         setProduct(fetchedProduct);
-        setSelectedSize(fetchedProduct.sizes?.[0] || '');
-        setSelectedColor(fetchedProduct.colors?.[0] || '');
+        if (fetchedProduct.sizes?.length > 0) setSelectedSize(fetchedProduct.sizes[0]);
+        if (fetchedProduct.colors?.length > 0) setSelectedColor(fetchedProduct.colors[0]);
 
         if (token) {
           try {
             const wishlistResponse = await axios.get('/api/user/auth/wishlist', config);
-            const wishlist = wishlistResponse.data.wishlist || [];
-            const wishlistIds = wishlist.map((item) => item.productId?._id?.toString() || item.productId.toString());
+            const wishlistIds = (wishlistResponse.data.wishlist || []).map(item => item.productId?._id?.toString() || item.productId.toString());
             setInWishlist(wishlistIds.includes(productId));
           } catch (error) {
             console.error('Error fetching wishlist:', error);
@@ -64,88 +106,60 @@ const ProductPage = () => {
         }
       } catch (error) {
         console.error('Error fetching product data:', error);
-        if (token && error.response?.status === 401) {
-          localStorage.removeItem('token');
-          toast.error('Session expired, please login again');
-          navigate('/login');
-        } else {
-          toast.error(error.response?.data?.message || 'Failed to load product');
-        }
+        toast.error(error.response?.data?.message || 'Failed to load product');
       } finally {
         setLoading(false);
       }
     };
 
     fetchProductData();
-  }, [productId, navigate, token]);
+    window.scrollTo(0, 0);
+  }, [productId, token]);
 
   const handleAddToCart = async () => {
     if (!product) return;
 
-    if (!selectedSize || !selectedColor) {
-      toast.error('Please select a size and color');
+    if (!selectedSize && product.sizes?.length > 0) {
+      toast.error('Please select a size');
+      return;
+    }
+     if (!selectedColor && product.colors?.length > 0) {
+      toast.error('Please select a color');
       return;
     }
     if (quantity > product.quantity) {
       toast.error('Selected quantity exceeds available stock');
       return;
     }
+
+    const cartItem = { 
+      productId, 
+      quantity, 
+      price: product.price, 
+      name: product.name, 
+      size: selectedSize, 
+      color: selectedColor,
+      image: product.images?.[0] || placeholderImage,
+    };
 
     if (token) {
       try {
-        await axios.post(
-          '/api/user/auth/cart/add',
-          { productId, quantity, price: product.price, name: product.name, size: selectedSize, color: selectedColor },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        toast.success('Added to Cart');
+        await axios.post('/api/user/auth/cart/add', cartItem, { headers: { Authorization: `Bearer ${token}` } });
+        toast.success('Added to Bag!');
       } catch (error) {
-        toast.error(error.response?.data?.message || 'Failed to add to cart');
+        toast.error(error.response?.data?.message || 'Failed to add to bag');
       }
     } else {
-      const cartItem = {
-        productId,
-        name: product.name,
-        price: product.price,
-        quantity,
-        image: product.images || [placeholderImage],
-        size: selectedSize,
-        color: selectedColor,
-      };
       const existingCart = JSON.parse(localStorage.getItem('guestCart') || '[]');
       const updatedCart = [...existingCart, cartItem];
       localStorage.setItem('guestCart', JSON.stringify(updatedCart));
-      toast.success('Added to Cart');
+      toast.success('Added to Bag!');
     }
-  };
-
-  const handleBuyNow = () => {
-    if (!product) return;
-
-    if (!selectedSize || !selectedColor) {
-      toast.error('Please select a size and color');
-      return;
-    }
-    if (quantity > product.quantity) {
-      toast.error('Selected quantity exceeds available stock');
-      return;
-    }
-
-    const cartItem = {
-      productId,
-      name: product.name,
-      price: product.price,
-      quantity,
-      image: product.images || [placeholderImage],
-      size: selectedSize,
-      color: selectedColor,
-    };
-    navigate('/checkout', { state: { cart: [cartItem] } });
   };
 
   const handleToggleWishlist = async () => {
     if (!token) {
-      toast.error('Please login to add to wishlist');
+      toast.error('Please login to use your wishlist');
       return;
     }
     if (!product) return;
@@ -163,306 +177,216 @@ const ProductPage = () => {
     setQuantity((prev) => {
       const newQuantity = prev + change;
       if (newQuantity < 1) return 1;
-      if (newQuantity > product.quantity) return product.quantity;
+      if (newQuantity > product.quantity) {
+        toast.error('Maximum stock quantity reached');
+        return product.quantity;
+      }
       return newQuantity;
     });
   };
 
-  const handleImageSwipe = (direction) => {
-    if (!product?.images?.length) return;
-    setCurrentImageIndex((prev) => {
-      const newIndex = prev + direction;
-      if (newIndex < 0) return product.images.length - 1;
-      if (newIndex >= product.images.length) return 0;
-      return newIndex;
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white pt-4 pb-8">
-        <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-        <div className="max-w-5xl mx-auto px-4"><SkeletonLoader /></div>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonLoader />;
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-        <div className="text-gray-600 text-lg">Product not found</div>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center text-center px-4">
+        <Toaster position="top-center" toastOptions={{ duration: 2000 }} />
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">Product Not Found</h2>
+        <p className="text-gray-500 mb-6">We couldn't find the product you're looking for.</p>
+        <motion.button
+          onClick={() => navigate('/')}
+          className="flex items-center bg-rose-500 text-white py-2 px-6 rounded-lg font-semibold shadow-md hover:bg-rose-600"
+          variants={buttonVariants} whileHover="hover" whileTap="tap"
+        >
+          <FaArrowLeft className="mr-2" /> Go to Homepage
+        </motion.button>
       </div>
     );
   }
 
-  const actualPrice = product.discount > 0 ? (product.price / (1 - product.discount / 100)).toFixed(2) : product.price.toFixed(2);
-  const savings = product.discount > 0 ? (actualPrice - product.price).toFixed(2) : 0;
+  const actualPrice = product.discount > 0 ? (product.price / (1 - product.discount / 100)) : product.price;
+  const savings = actualPrice - product.price;
 
   return (
-    <div className="min-h-screen bg-white pt-4 pb-20">
-      <Toaster position="top-center" toastOptions={{ duration: 1500 }} />
-      <motion.main initial="initial" animate="animate" variants={pageVariants} className="max-w-5xl mx-auto px-4 sm:px-6">
-        {/* Back Button */}
-        <motion.button
-          onClick={() => navigate(-1)}
-          className="mb-3 flex items-center text-gray-600 hover:text-green-600 font-medium text-sm"
-          variants={buttonVariants}
-          whileHover="hover"
-          whileTap="tap"
-        >
-          <FaArrowLeft className="mr-2" /> Back to Products
-        </motion.button>
-
-        {/* Product Details */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* Image Carousel */}
-          <motion.div variants={sectionVariants} className="md:col-span-3">
-            <div className="relative bg-white rounded-lg shadow-sm p-3">
-              <motion.img
-                key={currentImageIndex}
-                src={product.images?.[currentImageIndex] || placeholderImage}
-                alt={`${product.name} - Image ${currentImageIndex + 1}`}
-                className="w-full h-64 sm:h-80 md:h-96 object-contain rounded-lg"
-                onError={(e) => (e.target.src = placeholderImage)}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-                loading="lazy"
-              />
-              {product.images?.length > 1 && (
-                <>
-                  <motion.button
-                    onClick={() => handleImageSwipe(-1)}
-                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white text-gray-600 p-2 rounded-full shadow-sm hover:bg-gray-100"
-                    variants={buttonVariants}
-                    whileHover="hover"
-                    whileTap="tap"
-                    aria-label="Previous image"
-                  >
-                    <FaChevronLeft size={16} />
-                  </motion.button>
-                  <motion.button
-                    onClick={() => handleImageSwipe(1)}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white text-gray-600 p-2 rounded-full shadow-sm hover:bg-gray-100"
-                    variants={buttonVariants}
-                    whileHover="hover"
-                    whileTap="tap"
-                    aria-label="Next image"
-                  >
-                    <FaChevronRight size={16} />
-                  </motion.button>
-                  <div className="flex gap-2 justify-center mt-3">
-                    {product.images.map((img, idx) => (
-                      <motion.img
-                        key={idx}
-                        src={img}
-                        alt={`Thumbnail ${idx + 1}`}
-                        className={`w-12 h-12 object-cover rounded-md border ${idx === currentImageIndex ? 'border-green-500' : 'border-gray-200'} cursor-pointer`}
-                        onClick={() => setCurrentImageIndex(idx)}
-                        whileHover={{ scale: 1.1 }}
-                        transition={{ duration: 0.2 }}
-                        onError={(e) => (e.target.src = placeholderImage)}
-                      />
-                    ))}
-                  </div>
-                </>
+    <div className="bg-white">
+      <Toaster position="top-center" toastOptions={{ duration: 2000 }} />
+      <motion.main
+        initial="initial" animate="animate" variants={pageVariants}
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
+          {/* Left Column: Image Gallery */}
+          <motion.div variants={sectionVariants} className="lg:col-span-3">
+            <Swiper
+              modules={[Navigation, Pagination, Thumbs, FreeMode]}
+              spaceBetween={10}
+              navigation
+              pagination={{ clickable: true }}
+              thumbs={{ swiper: thumbsSwiper && !thumbsSwiper.destroyed ? thumbsSwiper : null }}
+              className="w-full h-[400px] md:h-[550px] rounded-lg overflow-hidden border border-gray-200"
+            >
+              {product.images?.length > 0 ? (
+                product.images.map((img, idx) => (
+                  <SwiperSlide key={idx}>
+                    <img src={img} alt={`${product.name} ${idx + 1}`} className="w-full h-full object-contain" onError={(e) => (e.target.src = placeholderImage)} />
+                  </SwiperSlide>
+                ))
+              ) : (
+                <SwiperSlide><img src={placeholderImage} alt={product.name} className="w-full h-full object-contain" /></SwiperSlide>
               )}
-            </div>
+            </Swiper>
+            {/* Thumbnails */}
+            <Swiper
+              onSwiper={setThumbsSwiper}
+              spaceBetween={10}
+              slidesPerView={4}
+              freeMode={true}
+              watchSlidesProgress={true}
+              modules={[FreeMode, Navigation, Thumbs]}
+              className="mt-4 h-24"
+            >
+              {product.images?.map((img, idx) => (
+                 <SwiperSlide key={idx} className="cursor-pointer rounded-md overflow-hidden border-2 border-transparent hover:border-rose-400 focus:ring-2 focus:ring-rose-500 focus:ring-offset-2">
+                   <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" onError={(e) => (e.target.src = placeholderImage)} />
+                 </SwiperSlide>
+              ))}
+            </Swiper>
           </motion.div>
 
-          {/* Product Info */}
-          <motion.div variants={sectionVariants} className="md:col-span-2 space-y-4">
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              {/* Product Name and Brand */}
-              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 leading-tight">{product.name}</h1>
-              <p className="text-sm text-gray-500 mt-1">{product.brand || 'No Brand'}</p>
-
-              {/* Price and Discount */}
-              {!!product.discount && (
-                <div className="mt-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-bold text-gray-900">₹{product.price.toFixed(2)}</span>
-                    <span className="text-sm text-gray-500 line-through">₹{actualPrice}</span>
-                    <span className="text-xs font-medium text-white bg-orange-500 px-2 py-1 rounded-full">{product.discount}% OFF</span>
-                  </div>
-                  {savings > 0 && (
-                    <p className="text-sm text-green-600 mt-1">You Save: ₹{savings}</p>
-                  )}
-                </div>
-              )}
-              {!product.discount && (
-                <div className="mt-2">
-                    <span className="text-xl font-bold text-gray-900">₹{product.price.toFixed(2)}</span>
-                </div>
-              )}
-              <p className="text-xs text-gray-500 mt-1">Inclusive of all taxes</p>
-
-              {/* Policies */}
-              <div className="mt-4 bg-gray-50 rounded-lg p-3 space-y-2 text-sm text-gray-700">
-                <p className="flex items-center gap-2">
-                  <FaTruck className="text-green-500" />
-                  <span><strong>Free Delivery</strong> by {new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
-                </p>
-                <p className="flex items-center gap-2">
-                  <FaUndo className="text-green-500" />
-                  <span><strong>7-Day Returns</strong> for eligible items</span>
-                </p>
-                <p className="flex items-center gap-2">
-                  <FaExchangeAlt className="text-green-500" />
-                  <span><strong>7-Day Exchange</strong> for eligible items</span>
-                </p>
-                <p className="flex items-center gap-2">
-                  <FaMoneyBillWave className="text-green-500" />
-                  <span><strong>Cash on Delivery</strong>: {product.isCashOnDeliveryAvailable ? 'Available' : 'Not Available'}</span>
-                </p>
-                {product.onlinePaymentPercentage && (
-                  <p className="flex items-center gap-2">
-                    <FaCreditCard className="text-green-500" />
-                    <span><strong>Payment Split</strong>: {product.onlinePaymentPercentage}% Online, {100 - product.onlinePaymentPercentage}% on Delivery</span>
-                  </p>
-                )}
+          {/* Right Column: Product Info & Actions */}
+          <motion.div variants={sectionVariants} className="lg:col-span-2 flex flex-col gap-6">
+            <motion.div variants={itemVariants}>
+              <h1 className="text-2xl font-bold text-gray-800">{product.name}</h1>
+              <p className="text-lg text-gray-500 mt-1">{product.brand || "Generic Brand"}</p>
+              {/* Add a placeholder for ratings */}
+              <div className="flex items-center gap-2 mt-2">
+                <FaStar className="text-amber-400" />
+                <span className="font-semibold text-gray-700">4.5</span>
+                <span className="text-gray-400">|</span>
+                <span className="text-sm text-gray-500">2.3k Ratings</span>
               </div>
-
-              {/* Selectors */}
-              <div className="space-y-3 mt-4">
-                {product.sizes?.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-sm font-medium text-gray-700">Size</span>
-                    <div className="flex flex-wrap gap-2">
-                      {product.sizes.map((size) => (
-                        <motion.button
-                          key={size}
-                          onClick={() => setSelectedSize(size)}
-                          className={`px-3 py-1.5 rounded-md border text-sm font-medium transition-all duration-200 ${
-                            selectedSize === size ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
-                          }`}
-                          variants={buttonVariants}
-                          whileHover="hover"
-                          whileTap="tap"
-                        >
-                          {size}
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {product.colors?.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-sm font-medium text-gray-700">Color</span>
-                    <div className="flex flex-wrap gap-2">
-                      {product.colors.map((color) => (
-                        <motion.button
-                          key={color}
-                          onClick={() => setSelectedColor(color)}
-                          className={`px-3 py-1.5 rounded-md border text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                            selectedColor === color ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
-                          }`}
-                          variants={buttonVariants}
-                          whileHover="hover"
-                          whileTap="tap"
-                        >
-                          <span
-                            className="w-4 h-4 rounded-full border border-gray-200"
-                            style={{ backgroundColor: color.toLowerCase() }}
-                          />
-                          {color}
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700">Qty</span>
-                  <div className="flex items-center bg-white border border-gray-200 rounded-md">
-                    <motion.button
-                      onClick={() => handleQuantityChange(-1)}
-                      className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-l-md"
-                      disabled={quantity <= 1}
-                      variants={buttonVariants}
-                      whileHover="hover"
-                      whileTap="tap"
-                    >
-                      <FaMinus size={12} />
-                    </motion.button>
-                    <span className="px-3 py-2 text-gray-800 font-medium">{quantity}</span>
-                    <motion.button
-                      onClick={() => handleQuantityChange(1)}
-                      className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-r-md"
-                      disabled={quantity >= product.quantity}
-                      variants={buttonVariants}
-                      whileHover="hover"
-                      whileTap="tap"
-                    >
-                      <FaPlus size={12} />
-                    </motion.button>
-                  </div>
-                  <span className="text-xs text-gray-500">({product.quantity} in stock)</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-4 sticky bottom-0 bg-white py-3 -mx-4 border-t border-gray-200 md:static md:border-t-0 md:p-0">
-                <motion.button
-                  onClick={handleAddToCart}
-                  className={`flex-1 bg-green-500 text-white py-2.5 rounded-md font-medium flex items-center justify-center gap-2 ${product.quantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'hover:bg-green-600'}`}
-                  disabled={product.quantity === 0}
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                >
-                  Add to Cart <FaShoppingCart size={16} />
-                </motion.button>
-                <motion.button
-                  onClick={handleBuyNow}
-                  className={`flex-1 bg-orange-500 text-white py-2.5 rounded-md font-medium ${product.quantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'hover:bg-orange-600'}`}
-                  disabled={product.quantity === 0}
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                >
-                  Buy Now
-                </motion.button>
-                <motion.button
-                  onClick={handleToggleWishlist}
-                  className={`p-2.5 bg-white border border-gray-200 rounded-md ${inWishlist && token ? 'text-red-500' : 'text-gray-600'} ${!token ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-                  disabled={!token}
-                  variants={buttonVariants}
-                  whileHover={token ? "hover" : {}}
-                  whileTap={token ? "tap" : {}}
-                  title={token ? (inWishlist ? 'Remove from Wishlist' : 'Add to Wishlist') : 'Login to add to wishlist'}
-                >
-                  <FaHeart size={16} fill={inWishlist && token ? 'currentColor' : 'none'} />
-                </motion.button>
-              </div>
-            </div>
-
-            {/* Product Details */}
-            <motion.div variants={sectionVariants} className="bg-white rounded-lg shadow-sm p-4 mt-4">
-              <h2 className="text-base font-semibold text-gray-900">Product Details</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 text-sm text-gray-600">
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Category:</strong> {product.category?.name || 'General'}</p>
-                <p className="flex items-center gap-2"><FaBoxOpen className="text-green-500" /> <strong>Stock:</strong> {product.quantity > 0 ? `${product.quantity} available` : 'Out of Stock'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Sizes:</strong> {product.sizes?.join(', ') || 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Colors:</strong> {product.colors?.join(', ') || 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Material:</strong> {product.material || 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Gender:</strong> {product.gender || 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Brand:</strong> {product.brand || 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Fit:</strong> {product.fit || 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaTag className="text-green-500" /> <strong>Care Instructions:</strong> {product.careInstructions || 'N/A'}</p>
-                {product.dimensions && (
-                  <p className="flex items-center gap-2"><FaRuler className="text-green-500" /> <strong>Dimensions:</strong> Chest: {product.dimensions.chest || 'N/A'} in, Length: {product.dimensions.length || 'N/A'} in, Sleeve: {product.dimensions.sleeve || 'N/A'} in</p>
-                )}
-                <p className="flex items-center gap-2"><FaWeightHanging className="text-green-500" /> <strong>Weight:</strong> {product.weight ? `${product.weight} g` : 'N/A'}</p>
-                <p className="flex items-center gap-2"><FaUser className="text-green-500" /> <strong>Seller:</strong> {product.sellerId ? `${product.sellerId.name || 'Unknown'} (${product.sellerId.shopName || 'Unnamed Shop'})` : 'Unknown Seller'}</p>
-              </div>
-              <p className="text-sm text-gray-600 mt-3 pt-3 border-t border-gray-200"><strong>Description:</strong> {product.description || 'No description provided.'}</p>
             </motion.div>
+            
+            <hr/>
+
+            <motion.div variants={itemVariants}>
+                <div className="flex items-baseline gap-3">
+                    <span className="text-3xl font-bold text-gray-900">₹{product.price.toFixed(2)}</span>
+                    {product.discount > 0 && (
+                        <span className="text-xl text-gray-400 line-through">₹{actualPrice.toFixed(2)}</span>
+                    )}
+                </div>
+                 {product.discount > 0 && (
+                    <div className="flex items-baseline gap-3 mt-1">
+                        <span className="text-lg font-semibold text-orange-500">{product.discount}% OFF</span>
+                        <span className="text-sm font-semibold text-green-600">You save ₹{savings.toFixed(2)}</span>
+                    </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">inclusive of all taxes</p>
+            </motion.div>
+
+            {/* Size Selector */}
+            {product.sizes?.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h3 className="text-sm font-bold uppercase text-gray-800 mb-2">Select Size</h3>
+                <div className="flex flex-wrap gap-2">
+                  {product.sizes.map(size => (
+                    <motion.button
+                      key={size} onClick={() => setSelectedSize(size)}
+                      className={`px-4 py-2 rounded-md border text-sm font-semibold transition-all ${selectedSize === size ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-gray-700 border-gray-300 hover:border-gray-500'}`}
+                      variants={buttonVariants} whileHover="hover" whileTap="tap"
+                    >
+                      {size}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+             
+            {/* Color Selector */}
+            {product.colors?.length > 0 && (
+                <motion.div variants={itemVariants}>
+                    <h3 className="text-sm font-bold uppercase text-gray-800 mb-2">Select Color</h3>
+                    <div className="flex flex-wrap gap-3">
+                        {product.colors.map(color => (
+                            <motion.button
+                                key={color} onClick={() => setSelectedColor(color)}
+                                className={`w-10 h-10 rounded-full border-2 transition-all flex items-center justify-center ${selectedColor === color ? 'border-rose-500' : 'border-gray-300 hover:border-gray-500'}`}
+                                style={{ backgroundColor: color.toLowerCase() }}
+                                variants={buttonVariants} whileHover="hover" whileTap="tap"
+                                title={color}
+                            >
+                                {selectedColor === color && <FaCheckCircle className="text-white text-lg" />}
+                            </motion.button>
+                        ))}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Action Buttons */}
+            <motion.div variants={itemVariants} className="flex flex-col gap-4 mt-4">
+              <motion.button
+                onClick={handleAddToCart}
+                className="w-full flex items-center justify-center gap-3 bg-rose-500 text-white py-3.5 rounded-lg font-bold text-lg shadow-md hover:bg-rose-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                disabled={product.quantity === 0}
+                variants={buttonVariants} whileHover="hover" whileTap="tap"
+              >
+                <FaShoppingBag /> {product.quantity > 0 ? 'ADD TO BAG' : 'OUT OF STOCK'}
+              </motion.button>
+              <motion.button
+                onClick={handleToggleWishlist}
+                className={`w-full flex items-center justify-center gap-3 border-2 py-3 rounded-lg font-bold transition-colors ${inWishlist ? 'bg-gray-100 border-gray-400 text-gray-800' : 'border-gray-300 text-gray-700 hover:border-gray-500'}`}
+                variants={buttonVariants} whileHover="hover" whileTap="tap"
+              >
+                <FaHeart className={`${inWishlist ? 'text-rose-500' : 'text-gray-500'}`} /> WISHLIST
+              </motion.button>
+            </motion.div>
+            
+            <hr/>
+            
+            {/* Delivery & Services */}
+            <motion.div variants={itemVariants} className="space-y-4 text-sm">
+                <h3 className="text-sm font-bold uppercase text-gray-800">Delivery Options <FaTruck className="inline-block ml-1" /></h3>
+                <div className="flex border border-gray-300 rounded-md p-2">
+                    <input type="text" placeholder="Enter pincode" className="flex-grow focus:outline-none"/>
+                    <button className="font-semibold text-rose-500 hover:text-rose-700">CHECK</button>
+                </div>
+                <p className="text-gray-600">Please enter pincode to check delivery availability.</p>
+                <ul className="space-y-2">
+                    <li className="flex items-center gap-2"><FaUndo className="text-gray-600"/> 7-day return policy</li>
+                    <li className="flex items-center gap-2"><FaExchangeAlt className="text-gray-600"/> 7-day exchange policy</li>
+                    <li className="flex items-center gap-2"><FaMoneyBillWave className="text-gray-600"/> Cash on Delivery {product.isCashOnDeliveryAvailable ? 'available' : 'not available'}</li>
+                </ul>
+            </motion.div>
+
           </motion.div>
         </div>
+        
+        {/* Product Details Section */}
+        <motion.div variants={sectionVariants} className="mt-16">
+            <h2 className="text-xl font-bold text-gray-800 border-b-2 border-rose-500 pb-2 inline-block">Product Details</h2>
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-8 text-gray-700">
+                <div>
+                    <h3 className="font-semibold text-gray-800 mb-2">Description</h3>
+                    <p>{product.description || 'No description provided.'}</p>
+                </div>
+                 <div>
+                    <h3 className="font-semibold text-gray-800 mb-2">Specifications</h3>
+                    <ul className="space-y-1 list-disc list-inside">
+                        <li><strong>Category:</strong> {product.category?.name || 'General'}</li>
+                        <li><strong>Material:</strong> {product.material || 'N/A'}</li>
+                        <li><strong>Fit:</strong> {product.fit || 'N/A'}</li>
+                        <li><strong>Care:</strong> {product.careInstructions || 'Machine Wash'}</li>
+                        <li><strong>Sold by:</strong> {product.sellerId?.shopName || 'Anonymous Seller'}</li>
+                    </ul>
+                </div>
+            </div>
+        </motion.div>
+
 
         {/* Related Products */}
-        <motion.div variants={sectionVariants} className="mt-6">
+        <motion.div variants={sectionVariants} className="mt-16">
+          <h2 className="text-xl font-bold text-gray-800 border-b-2 border-rose-500 pb-2 inline-block mb-6">Similar Products</h2>
           <RelatedProducts product={product} />
         </motion.div>
       </motion.main>
