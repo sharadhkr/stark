@@ -18,11 +18,21 @@ const BottomNavbar = () => {
   const [lastScrollY, setLastScrollY] = useState(0);
 
   const tabs = useMemo(() => [
-    { path: '/', icon: <Home className="w-6 h-6" />, filledIcon: <Home className="w-6 h-6 fill-current" />, color: '#3B82F6' },
-    { path: '/cart', icon: <ShoppingCart className="w-6 h-6" />, filledIcon: <ShoppingCart className="w-6 h-6 fill-current" />, color: '#10B981' },
-    { path: '/categories', icon: <TbCategory className="w-6 h-6" />, filledIcon: <TbCategory className="w-6 h-6 fill-current" />, isModal: true, color: '#8B5CF6' },
-    { path: '/wishlist', icon: <Heart className="w-6 h-6" />, filledIcon: <Heart className="w-6 h-6 fill-current" />, color: '#EF4440' },
-    { path: '/dashboard', icon: <User className="w-6 h-6" />, filledIcon: <User className="w-6 h-6 fill-current" />, color: '#F97316' },
+    { path: '/', icon: 
+    <img className='w-7 h-7 opacity-80' src="	https://img.icons8.com/?size=48&id=OXVih02dFZ53&format=png" alt="" />, filledIcon: 
+    <img className='w-7 h-7 opacity-80' src="https://img.icons8.com/?size=48&id=zUlQIRAWidll&format=png" alt="" />, color: '#3B82F6' },
+    { path: '/cart', icon: 
+    <img className='w-7 h-7 opacity-80' src="	https://img.icons8.com/?size=48&id=ySRi3OLgoOJX&format=png" alt="" />, filledIcon: 
+    <img className='w-7 h-7 opacity-80' src="	https://img.icons8.com/?size=48&id=Uwwgm0gp3DTA&format=png" alt="" />, color: '#10B981' },
+    { path: '/categories', icon: 
+    <img className='w-7 h-7 opacity-80' src="https://img.icons8.com/?size=48&id=TrmgSRmieiWQ&format=png" alt="" />, filledIcon: 
+    <img className='w-7 h-7 opacity-80' src="https://img.icons8.com/?size=48&id=xbseVGfaGt5M&format=png" alt="" />, isModal: true, color: '#8B5CF6' },
+    { path: '/wishlist', icon: 
+    <img className='w-7 h-7 opacity-80' src="	https://img.icons8.com/?size=48&id=feQIjQlsqvSv&format=png" alt="" />, filledIcon: 
+    <img className='w-7 h-7 opacity-80' src="https://img.icons8.com/?size=48&id=0Na5Uhhuwejm&format=png" alt="" />, color: '#EF4440' },
+    { path: '/dashboard', icon: 
+    <img className='w-7 h-7 opacity-80' src="	https://img.icons8.com/?size=48&id=AZazdsitsrgg&format=png" alt="" />, filledIcon: 
+    <img className='w-7 h-7 opacity-80' src="https://img.icons8.com/?size=48&id=rGhKliUp2Vji&format=png" alt="" />, color: '#F97316' },
   ], []);
 
   useEffect(() => {
@@ -104,18 +114,17 @@ const BottomNavbar = () => {
                   )}
 
                   <div
-                    className={`relative z-10 transition-all duration-300 ease-out transform ${
-                      isActive
-                        ? 'scale-125 -translate-y-1'
-                        : 'text-gray-400 hover:text-gray-600 hover:scale-110 active:scale-95'
-                    }`}
+                    className={`relative z-10 transition-all duration-300 ease-in-out transform ${isActive
+                      ? ''
+                      : 'text-gray-400 hover:text-gray-600'
+                      }`}
                     style={{
                       color: isActive ? tab.color : undefined,
                       filter: isActive ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' : undefined
                     }}
                   >
                     <div
-                      className={`transition-transform duration-200 ${isActive ? 'animate-bounce' : ''}`}
+                      className={`transition-transform duration-200 ${isActive ? 'ease-in-out' : ''}`}
                       style={{
                         animationDuration: isActive ? '0.6s' : '0s',
                         animationIterationCount: '1'
@@ -145,11 +154,9 @@ const BottomNavbar = () => {
         @keyframes gentlePulse {
           0%, 100% {
             opacity: 0.15;
-            transform: scale(1);
           }
           50% {
             opacity: 0.25;
-            transform: scale(1.05);
           }
         }
 
@@ -159,8 +166,6 @@ const BottomNavbar = () => {
           70% { transform: scale(0.9) translateY(-4px); }
           100% { transform: scale(1) translateY(-4px); opacity: 1; }
         }
-
-        .animate-bounceIn { animation: bounceIn 0.5s ease-out; }
 
         .group:hover .group-hover\\:scale-105 { transform: scale(1.05); }
         .group:active .active\\:scale-95 { transform: scale(0.95); }

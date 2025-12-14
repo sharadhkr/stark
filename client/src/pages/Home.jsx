@@ -227,7 +227,7 @@ const Home = React.memo(() => {
               }}
               searchQuery={searchQuery}
               setSearchQuery={handleSearchChange}
-              placeholder={props.placeholder || 'Hey Stark'}
+              placeholder={props.placeholder || 'seach by cateogry, product or seller'}
             />
           );
 

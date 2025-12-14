@@ -10,7 +10,7 @@ const userRoutes = [
   '/seller/orders', '/order/:orderId', '/search', '/combo/:comboId',
 ];
 
-export const Layout = React.memo(({ children }) => {
+export const Navbar = React.memo(({ children }) => {
   const { pathname } = useLocation();
 
   const showNavbar = useMemo(() => {
@@ -22,7 +22,7 @@ export const Layout = React.memo(({ children }) => {
       {children}
       {showNavbar && (
         <>
-          <Bottom />
+          <BottomNavbar />
         </>
       )}
     </>
