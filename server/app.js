@@ -68,7 +68,7 @@ app.use("/api/categories", categoryRoutes);
 
 // Handle undefined routes
 app.use("*", (req, res) => {
-  res.status(404).json({ message: "API route not found" });
+  res.status(404).json({ message: "API route not foundd" });
 });
 
 module.exports = app;
