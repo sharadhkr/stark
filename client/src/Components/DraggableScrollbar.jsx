@@ -1,123 +1,196 @@
-import React, { useRef, useEffect, useState } from 'react';
+// DraggableScrollbar.tsx
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
-const DraggableScrollbar = ({ children, className = '' }) => {
-  const scrollContainerRef = useRef(null);
-  const thumbRef = useRef(null);
+interface DraggableScrollbarProps {
+  children: React.ReactNode;
+  className?: string;
+  thumbClassName?: string;
+  trackClassName?: string;
+}
+
+const DraggableScrollbar: React.FC<DraggableScrollbarProps> = ({
+  children,
+  className = '',
+  thumbClassName = '',
+  trackClassName = '',
+}) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
+
   const [isDragging, setIsDragging] = useState(false);
-  const [thumbHeight, setThumbHeight] = useState(0);
-  const [scrollHeight, setScrollHeight] = useState(0);
+  const [thumbHeight, setThumbHeight] = useState(20); // min size fallback
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Calculate thumb size, scroll height, and total pages
-  useEffect(() => {
-    const updateThumb = () => {
-      const container = scrollContainerRef.current;
-      if (!container) return;
+  // ── Measurements ────────────────────────────────────────────────
+  const updateMeasurements = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-      const contentHeight = container.scrollHeight;
-      const containerHeight = container.clientHeight;
-      const thumbSize = (containerHeight / contentHeight) * containerHeight;
-      setThumbHeight(thumbSize);
-      setScrollHeight(contentHeight - containerHeight);
+    const { scrollHeight, clientHeight } = container;
 
-      // Estimate total pages: Assume each "page" is roughly the height of the viewport
-      const pages = Math.ceil(contentHeight / containerHeight);
-      setTotalPages(pages > 0 ? pages : 1);
-    };
+    if (scrollHeight <= clientHeight) {
+      // No scrolling needed
+      setThumbHeight(clientHeight);
+      setTotalPages(1);
+      setCurrentPage(1);
+      return;
+    }
 
-    updateThumb();
-    window.addEventListener('resize', updateThumb);
-    return () => window.removeEventListener('resize', updateThumb);
+    const ratio = clientHeight / scrollHeight;
+    const calculatedThumbHeight = Math.max(20, ratio * clientHeight); // min 20px
+
+    setThumbHeight(calculatedThumbHeight);
+    setTotalPages(Math.ceil(scrollHeight / clientHeight));
   }, []);
 
-  // Update thumb position and current page on scroll
   useEffect(() => {
     const container = scrollContainerRef.current;
-    const thumb = thumbRef.current;
-    if (!container || !thumb) return;
+    if (!container) return;
 
-    const onScroll = () => {
-      if (!isDragging) {
-        const scrollRatio = container.scrollTop / scrollHeight;
-        const maxThumbTop = container.clientHeight - thumbHeight;
-        thumb.style.top = `${scrollRatio * maxThumbTop}px`;
+    updateMeasurements();
 
-        // Calculate current page based on scroll position
-        const pageHeight = container.clientHeight;
-        const currentScroll = container.scrollTop;
-        const page = Math.floor(currentScroll / pageHeight) + 1;
-        setCurrentPage(page > 0 ? page : 1);
-      }
+    // Watch for content size changes
+    const resizeObserver = new ResizeObserver(updateMeasurements);
+    resizeObserver.observe(container);
+
+    // Also watch window resize (orientation change, etc.)
+    window.addEventListener('resize', updateMeasurements);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateMeasurements);
+    };
+  }, [updateMeasurements]);
+
+  // ── Passive scroll → update thumb + page ───────────────────────
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !thumbRef.current) return;
+
+    const handleScroll = () => {
+      if (isDragging) return; // Skip during drag (already controlled)
+
+      const scrollTop = container.scrollTop;
+      const scrollable = container.scrollHeight - container.clientHeight;
+
+      if (scrollable <= 0) return;
+
+      const progress = scrollTop / scrollable;
+      const maxThumbTop = container.clientHeight - thumbHeight;
+
+      thumbRef.current.style.top = `${progress * maxThumbTop}px`;
+
+      // Page calculation
+      const page = Math.floor(scrollTop / container.clientHeight) + 1;
+      setCurrentPage(Math.min(page, totalPages));
     };
 
-    container.addEventListener('scroll', onScroll);
-    return () => container.removeEventListener('scroll', onScroll);
-  }, [isDragging, scrollHeight, thumbHeight]);
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [isDragging, thumbHeight, totalPages]);
 
-  // Handle drag
-  const handleMouseDown = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
+  // ── Drag logic ──────────────────────────────────────────────────
+  const startDragging = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(true);
 
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
+      // Better: use pointer capture
+      if (thumbRef.current) {
+        thumbRef.current.setPointerCapture(e.pointerId);
+      }
+    },
+    []
+  );
 
-    const container = scrollContainerRef.current;
-    const thumb = thumbRef.current;
-    if (!container || !thumb) return;
+  const onPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!isDragging) return;
 
-    const containerRect = container.getBoundingClientRect();
-    const maxThumbTop = container.clientHeight - thumbHeight;
-    let newThumbTop = e.clientY - containerRect.top - thumbHeight / 2;
+      const container = scrollContainerRef.current;
+      const thumb = thumbRef.current;
+      if (!container || !thumb) return;
 
-    newThumbTop = Math.max(0, Math.min(newThumbTop, maxThumbTop));
-    thumb.style.top = `${newThumbTop}px`;
+      const rect = container.getBoundingClientRect();
+      const maxThumbTop = container.clientHeight - thumbHeight;
 
-    const scrollRatio = newThumbTop / maxThumbTop;
-    container.scrollTop = scrollRatio * scrollHeight;
+      // Center thumb on cursor
+      let newTop = e.clientY - rect.top - thumbHeight / 2;
+      newTop = Math.max(0, Math.min(newTop, maxThumbTop));
 
-    // Update current page during drag
-    const pageHeight = container.clientHeight;
-    const currentScroll = container.scrollTop;
-    const page = Math.floor(currentScroll / pageHeight) + 1;
-    setCurrentPage(page > 0 ? page : 1);
-  };
+      thumb.style.top = `${newTop}px`;
 
-  const handleMouseUp = () => {
+      const progress = newTop / maxThumbTop;
+      container.scrollTop = progress * (container.scrollHeight - container.clientHeight);
+
+      // Update page indicator live
+      const page = Math.floor(container.scrollTop / container.clientHeight) + 1;
+      setCurrentPage(Math.min(page, totalPages));
+    },
+    [isDragging, thumbHeight, totalPages]
+  );
+
+  const stopDragging = useCallback(() => {
     setIsDragging(false);
-  };
+  }, []);
 
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', stopDragging);
+      window.addEventListener('pointercancel', stopDragging);
+      document.body.style.userSelect = 'none'; // Prevent text selection
     }
+
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
+      document.body.style.userSelect = '';
     };
-  }, [isDragging, scrollHeight, thumbHeight]);
+  }, [isDragging, onPointerMove, stopDragging]);
 
   return (
-    <div className={`relative w-full ${className}`}>
+    <div className={`relative w-full overflow-hidden ${className}`}>
+      {/* Scrollable content */}
       <div
         ref={scrollContainerRef}
-        className="overflow-y-auto overflow-x-hidden scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="h-full overflow-y-auto overflow-x-hidden scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {children}
       </div>
-      <div className="absolute top-0 right-2 w-2 h-full bg-gray-200 rounded-full">
+
+      {/* Custom scrollbar track */}
+      <div
+        className={`absolute top-0 right-1.5 w-2.5 h-full pointer-events-none select-none ${trackClassName}`}
+      >
         <div
           ref={thumbRef}
-          className={`absolute right-0 w-2 bg-gray-500 rounded-full cursor-grab transition-colors hover:bg-gray-600 ${isDragging ? 'cursor-grabbing' : ''}`}
-          style={{ height: `${thumbHeight}px` }}
-          onMouseDown={handleMouseDown}
+          className={`
+            absolute right-0 w-full bg-gray-500/70 rounded-full cursor-grab active:cursor-grabbing
+            transition-opacity duration-200 hover:bg-gray-600/90
+            ${isDragging ? 'opacity-100 bg-gray-700 shadow-md' : 'opacity-70'}
+            ${thumbClassName}
+          `}
+          style={{ height: `${thumbHeight}px`, minHeight: '20px' }}
+          onPointerDown={startDragging}
         >
-          <div className="absolute -left-8 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-xs font-semibold px-2 py-1 rounded-full shadow-lg">
-            {currentPage}/{totalPages}
-          </div>
+          {/* Page indicator tooltip */}
+          {totalPages > 1 && (
+            <div
+              className={`
+                absolute -left-14 top-1/2 -translate-y-1/2 
+                bg-gray-900/95 text-white text-xs font-medium 
+                px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap
+                transition-opacity duration-150
+                ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}
+              `}
+            >
+              {currentPage} / {totalPages}
+            </div>
+          )}
         </div>
       </div>
     </div>
