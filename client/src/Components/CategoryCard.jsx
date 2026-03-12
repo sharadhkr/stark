@@ -2,7 +2,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import Navbar from './Navbar';
 
 const CategoryCard = ({ category }) => {
   const navigate = useNavigate();
@@ -11,32 +10,44 @@ const CategoryCard = ({ category }) => {
     navigate(`/category/${category.name}`);
   };
 
+  // Better fallback icon handling + more reasonable sizes
+  const iconSrc = category.icon || 'https://placehold.co/64x64?text=?';
+
   const cardVariants = {
-    hover: { scale: 1., transition: { duration: 0.3 } },
-    tap: { scale: 1, transition: { duration: 0.2 } },
+    initial: { scale: 1 },
+    hover:   { scale: 1.06, transition: { duration: 0.25, ease: 'easeOut' } },
+    tap:     { scale: 0.97,  transition: { duration: 0.18 } },
   };
 
   return (
     <motion.div
       variants={cardVariants}
+      initial="initial"
       whileHover="hover"
       whileTap="tap"
       onClick={handleClick}
-      className="flex w-13 z-20 flex-col items-center rounded-lg drop-shadow-lg  py-2 cursor-pointer hover:drop-shadow-2xl transition-shadow duration-300"
+      className={`
+        group flex w-28 flex-col items-center 
+        rounded-xl bg-white/80 backdrop-blur-sm 
+        px-3 py-4 shadow-md hover:shadow-xl 
+        cursor-pointer transition-all duration-300
+        border border-gray-200/60 hover:border-gray-300
+      `}
     >
-      {category.icon ? (
+      <div className="mb-2.5 h-14 w-14 rounded-full bg-gradient-to-br from-gray-50 to-gray-100 p-2.5 shadow-inner">
         <img
-          src={category.icon}
-          alt={`${category.name} icon`}
-          className="w-8 h-8 object-contain"
-          onError={(e) => (e.target.src = 'https://placehold.co/48x48')} // Fallback if icon fails to load
+          src={iconSrc}
+          alt={category.name}
+          className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-110"
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.src = 'https://placehold.co/64x64?text=?';
+            e.currentTarget.onerror = null; // prevent infinite loop
+          }}
         />
-      ) : (
-        <div className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center">
-          <span className="text-gray-500">No Icon</span>
-        </div>
-      )}
-      <h3 className="text-sm font-semibold text-gray-800 text-center truncate w-full">
+      </div>
+
+      <h3 className="text-center text-sm font-medium text-gray-800 line-clamp-2">
         {category.name}
       </h3>
     </motion.div>
