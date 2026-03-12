@@ -226,43 +226,6 @@ router.get('/profile', userLoggedin, async (req, res) => {
   }
 });
 
-// router.put('/profile', userLoggedin, uploadSingle, async (req, res) => {
-//   try {
-//     const user = await User.findById(req.user.id);
-//     if (!user) return res.status(404).json({ message: 'User not found' });
-
-//     const { firstName, email } = req.body;
-
-//     if (firstName) user.firstName = firstName.trim();
-//     if (email) user.email = email.trim().toLowerCase();
-
-//     if (req.file) {
-//       const uploadResult = await uploadToCloudinary(req.file.buffer, {
-//         folder: 'user_profiles',
-//         resource_type: 'image',
-//         timeout: 10000,
-//       });
-//       user.profilePicture = uploadResult.url;
-//     }
-
-//     await user.save({ validateBeforeSave: true });
-//     res.status(200).json({
-//       message: 'Profile updated successfully',
-//       user: {
-//         id: user._id,
-//         phoneNumber: user.phoneNumber,
-//         firstName: user.firstName,
-//         email: user.email,
-//         profilePicture: user.profilePicture,
-//       },
-//     });
-//   } catch (error) {
-//     console.error('Update Profile Error:', error);
-//     res.status(500).json({ message: 'Failed to update profile', error: error.message });
-//   }
-// });
-
-
 router.post('/cart/add', userLoggedin, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -329,33 +292,6 @@ router.delete('/remove-address/:addressId', userLoggedin, async (req, res) => {
   }
 });
 
-// // Product Routes
-// router.get('/products', async (req, res) => {
-//   try {
-//     const { category, sellerId } = req.query;
-//     let query = {};
-
-//     if (category && category.toLowerCase() !== 'all') {
-//       const categoryDoc = await Category.findOne({
-//         name: { $regex: new RegExp(`^${category}$`, 'i') },
-//       });
-//       if (!categoryDoc) return res.status(404).json({ message: `Category '${category}' not found` });
-//       query.category = categoryDoc._id;
-//     }
-
-//     if (sellerId) query.sellerId = sellerId;
-
-//     const products = await Product.find(query)
-//       .populate('sellerId', 'name phoneNumber shopName')
-//       .populate('category', 'name');
-
-//     res.status(200).json({ products: products.length ? products : [], message: products.length ? undefined : 'No products found' });
-//   } catch (error) {
-//     console.error('Fetch Products Error:', error);
-//     res.status(500).json({ message: 'Failed to fetch products', error: error.message });
-//   }
-// });
-// Product Routes
 router.get('/products', async (req, res) => {
   try {
     const { category, sellerId, page = 1, limit = 20 } = req.query;
