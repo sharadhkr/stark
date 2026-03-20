@@ -103,23 +103,223 @@ Unlike traditional e-commerce apps, Starkk is built with:
 
 ## 📂 Project Structure
 
-```bash
-stark/
-├── frontend/
-│   ├── components/
-│   ├── pages/
-│   ├── context/
-│   ├── redux/
-│   └── utils/
-│
-├── backend/
-│   ├── routes/
-│   ├── models/
-│   ├── middleware/
-│   └── services/
-│
-└── README.md
+
 ```
+starkkkk
+├─ client
+│  ├─ @
+│  │  └─ components
+│  │     └─ ui
+│  │        ├─ button.tsx
+│  │        ├─ card.tsx
+│  │        ├─ checkbox.tsx
+│  │        ├─ dialog.tsx
+│  │        ├─ drawer.tsx
+│  │        ├─ input.tsx
+│  │        ├─ label.tsx
+│  │        ├─ scroll-area.tsx
+│  │        ├─ select.tsx
+│  │        └─ slider.tsx
+│  ├─ components
+│  │  └─ common
+│  │     ├─ FallbackImage.jsx
+│  │     └─ Loader.jsx
+│  ├─ components.json
+│  ├─ eslint.config.js
+│  ├─ index.html
+│  ├─ lib
+│  │  └─ utils.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ postcss.config.js
+│  ├─ public
+│  │  └─ logo.png
+│  ├─ README.md
+│  ├─ src
+│  │  ├─ App.jsx
+│  │  ├─ assets
+│  │  │  ├─ cod.png
+│  │  │  ├─ delivery.png
+│  │  │  ├─ images.jpeg
+│  │  │  ├─ loading.gif
+│  │  │  ├─ login-bg.webp
+│  │  │  ├─ login.jpeg
+│  │  │  ├─ logo.png
+│  │  │  ├─ logo.webp
+│  │  │  ├─ logoname.png
+│  │  │  ├─ pngtree-cash-on-delivery-icon-png-image_6364044.png
+│  │  │  ├─ profile.png
+│  │  │  ├─ return.png
+│  │  │  ├─ signn.webp
+│  │  │  ├─ slogo.webp
+│  │  │  ├─ slogooo.png
+│  │  │  ├─ slogooo.webp
+│  │  │  ├─ sslogo.png
+│  │  │  ├─ top.avif
+│  │  │  ├─ top.jpg
+│  │  │  └─ vmig7kasls34evfbkz9f.jpg
+│  │  ├─ axios.js
+│  │  ├─ Components
+│  │  │  ├─ admin
+│  │  │  │  ├─ AdminAds.jsx
+│  │  │  │  ├─ AdminCategories.jsx
+│  │  │  │  ├─ AdminComboOffer.jsx
+│  │  │  │  ├─ AdminLayout.jsx
+│  │  │  │  ├─ AdminNavBar.jsx
+│  │  │  │  ├─ AdminOrders.jsx
+│  │  │  │  ├─ AdminOverview.jsx
+│  │  │  │  ├─ AdminProducts.jsx
+│  │  │  │  ├─ AdminSellers.jsx
+│  │  │  │  ├─ AdminSponsoredProducts.jsx
+│  │  │  │  └─ AdminUsers.jsx
+│  │  │  ├─ axios.js
+│  │  │  ├─ bottom.jsx
+│  │  │  ├─ botttommm.jsx
+│  │  │  ├─ CartProductCard.jsx
+│  │  │  ├─ Category.jsx
+│  │  │  ├─ CategoryCard.jsx
+│  │  │  ├─ CategoryCardSkeleton.jsx
+│  │  │  ├─ DraggableScrollbar.jsx
+│  │  │  ├─ Filtermodel.jsx
+│  │  │  ├─ home
+│  │  │  │  ├─ CartSection.jsx
+│  │  │  │  ├─ CategoryFilterBar.jsx
+│  │  │  │  ├─ CategorySection.jsx
+│  │  │  │  ├─ CategorySectionn.jsx
+│  │  │  │  ├─ ComboOfferSection.jsx
+│  │  │  │  ├─ DoubleAdd.jsx
+│  │  │  │  ├─ GenderFilterBar.jsx
+│  │  │  │  ├─ ProductSection.jsx
+│  │  │  │  ├─ RecentlyViewedSection.jsx
+│  │  │  │  ├─ SearchBar.jsx
+│  │  │  │  ├─ SellerSection.jsx
+│  │  │  │  ├─ SingleAdd.jsx
+│  │  │  │  ├─ SkeletonSection.jsx
+│  │  │  │  ├─ SponsoredSection.jsx
+│  │  │  │  ├─ Topbox.jsx
+│  │  │  │  ├─ TrendingSection.jsx
+│  │  │  │  └─ TripleAdd.jsx
+│  │  │  ├─ HorizontalProductRow.jsx
+│  │  │  ├─ js.js
+│  │  │  ├─ LoadingSpinner.jsx
+│  │  │  ├─ magicui
+│  │  │  │  └─ dock.tsx
+│  │  │  ├─ Navbar.jsx
+│  │  │  ├─ OrderConfirmation.jsx
+│  │  │  ├─ OwnerCard.jsx
+│  │  │  ├─ PageCacheProvider.JSX
+│  │  │  ├─ ProductCard.jsx
+│  │  │  ├─ ProductCard4line.jsx
+│  │  │  ├─ ProductCardSkeleton.jsx
+│  │  │  ├─ RelatedProducts.jsx
+│  │  │  ├─ SearchBar.jsx
+│  │  │  ├─ SearchResults.jsx
+│  │  │  ├─ seller
+│  │  │  │  ├─ NavBar.jsx
+│  │  │  │  ├─ Orders.jsx
+│  │  │  │  ├─ Overview.jsx
+│  │  │  │  ├─ ProductForm.jsx
+│  │  │  │  ├─ Products.jsx
+│  │  │  │  ├─ Profile.jsx
+│  │  │  │  └─ ProfileForm.jsx
+│  │  │  ├─ selleraxios.js
+│  │  │  ├─ SellerCard.jsx
+│  │  │  ├─ SellerCardSkeleton.jsx
+│  │  │  ├─ SellerProfileSkeleton.jsx
+│  │  │  ├─ SkeletonSection.jsx
+│  │  │  ├─ useraxios.js
+│  │  │  └─ WishlistProductCard.jsx
+│  │  ├─ context
+│  │  ├─ DataProvider.jsx
+│  │  ├─ ErrorBoundary.jsx
+│  │  ├─ hooks
+│  │  │  ├─ useAdminAuth.jsx
+│  │  │  └─ useLazySection.jsx
+│  │  ├─ i18next.js
+│  │  ├─ index.css
+│  │  ├─ Layout.jsx
+│  │  ├─ lib
+│  │  │  └─ utils.ts
+│  │  ├─ main.jsx
+│  │  ├─ Middleware
+│  │  │  ├─ AdminProtectedRoute.jsx
+│  │  │  └─ Protectedroute.jsx
+│  │  ├─ Navbar.jsx
+│  │  ├─ pages
+│  │  │  ├─ AboutUs.jsx
+│  │  │  ├─ AdminAuth.jsx
+│  │  │  ├─ AdminDashboard.jsx
+│  │  │  ├─ CancellationReturn.jsx
+│  │  │  ├─ Cart.jsx
+│  │  │  ├─ CategoryPage.jsx
+│  │  │  ├─ CheckoutPage.jsx
+│  │  │  ├─ ComboPage.jsx
+│  │  │  ├─ FAQs.jsx
+│  │  │  ├─ Home.jsx
+│  │  │  ├─ LoginRegister.jsx
+│  │  │  ├─ OrderConfirmation.jsx
+│  │  │  ├─ OrderDetails.jsx
+│  │  │  ├─ OwnerProfilePage.jsx
+│  │  │  ├─ PrivacyPolicy.jsx
+│  │  │  ├─ ProductDetails.jsx
+│  │  │  ├─ ProductPage.jsx
+│  │  │  ├─ SearchResults.jsx
+│  │  │  ├─ SellerAuth.jsx
+│  │  │  ├─ SellerDashboard.jsx
+│  │  │  ├─ SellerOrders.jsx
+│  │  │  ├─ SellerProducts.jsx
+│  │  │  ├─ ShippingDelivery.jsx
+│  │  │  ├─ TermsOfUse.jsx
+│  │  │  ├─ UserDashboard.jsx
+│  │  │  └─ WishlistPage.jsx
+│  │  ├─ routes.jsx
+│  │  ├─ selleraxios.js
+│  │  ├─ services
+│  │  │  └─ HomeAPI.js
+│  │  ├─ store.js
+│  │  ├─ useraxios.js
+│  │  └─ utils
+│  │     └─ authUtils.js
+│  ├─ stats.html
+│  ├─ tailwind.config.js
+│  ├─ tsconfig.json
+│  └─ vite.config.js
+├─ package-lock.json
+├─ package.json
+├─ README.MD
+└─ server
+   ├─ app.js
+   ├─ config
+   │  ├─ cloudinaryConfig.js
+   │  ├─ db.js
+   │  └─ multerConfig.js
+   ├─ middleware
+   │  ├─ adminLoggedin.js
+   │  ├─ auth.js
+   │  └─ userLoggedin.js
+   ├─ models
+   │  ├─ adminModel.js
+   │  ├─ CategoryModel.js
+   │  ├─ ComboOfferModel.js
+   │  ├─ layoutModel.js
+   │  ├─ orderModel.js
+   │  ├─ productModel.js
+   │  ├─ sellerModel.js
+   │  ├─ SponsoredProductModel.js
+   │  ├─ TempOrderModel.js
+   │  └─ userModel.js
+   ├─ package-lock.json
+   ├─ package.json
+   ├─ routes
+   │  ├─ adminRouter.js
+   │  ├─ category.js
+   │  ├─ sellerRouter.js
+   │  ├─ userRouter.js
+   │  └─ userrr.js
+   ├─ server.js
+   └─ utils
+      ├─ cache.js
+      └─ otp.js
 
 ---
 
