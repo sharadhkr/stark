@@ -1,8 +1,9 @@
 # 🚀 Starkk.shop — Next-Gen MERN E-Commerce Platform
 
 <p align="center">
-  <img src="./strk.jpg" width="800" alt="Starkk Banner"/>
+  <img src="./i.png" width="800" alt="eventBy Banner"/>
 </p>
+
 
 <p align="center">
   <b>⚡ Blazing Fast • 🧠 Smart Search • 🛒 Full-Stack Commerce • 🎯 Production Ready</b>
