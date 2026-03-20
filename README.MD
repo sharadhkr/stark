@@ -348,12 +348,6 @@ F --> E --> B
 
 ---
 
-## 📸 Screenshots
-
-> Add your UI screenshots here for maximum impact 🚀
-
----
-
 ## 🚀 Getting Started
 
 ### 1️⃣ Clone the Repository
