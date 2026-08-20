@@ -1812,12 +1812,24 @@ router.get('/search/trending', async (req, res) => {
 router.get('/search/suggestions', async (req, res) => {
   try {
     const { q } = req.query;
-    const user = await User.findById(req.user.id);
 
     let products = [];
     let categories = [];
     let sellers = [];
-    let recentSearches = q ? [] : user.recentSearches || [];
+    let recentSearches = [];
+
+    if (!q) {
+      const token = req.header('Authorization')?.replace('Bearer ', '');
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          const user = await User.findById(decoded.id).select('recentSearches');
+          recentSearches = user?.recentSearches || [];
+        } catch (e) {
+          recentSearches = [];
+        }
+      }
+    }
 
     if (q) {
       if (elasticsearch) {
@@ -1853,14 +1865,15 @@ router.get('/search/suggestions', async (req, res) => {
       }
 
       if (!products.length) {
+        const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
         const [mongoProducts, mongoCategories, mongoSellers] = await Promise.all([
-          Product.find({ $text: { $search: q } })
+          Product.find({ $or: [{ name: regex }, { description: regex }] })
             .limit(8)
             .select('name images _id'),
-          Category.find({ $text: { $search: q } })
+          Category.find({ name: regex })
             .limit(8)
             .select('name _id'),
-          Seller.find({ $text: { $search: q } })
+          Seller.find({ $or: [{ name: regex }, { shopName: regex }] })
             .limit(8)
             .select('name shopName _id'),
         ]);
