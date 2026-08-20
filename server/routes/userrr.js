@@ -294,10 +294,19 @@ router.delete('/remove-address/:addressId', userLoggedin, async (req, res) => {
 
 router.get('/products', async (req, res) => {
   try {
-    const { category, sellerId, page = 1, limit = 20 } = req.query;
-    let query = {};
+    const { q, category, sellerId, page = 1, limit = 20 } = req.query;
+    let query = { status: 'enabled', quantity: { $gt: 0 } };
 
-    // Filter by category name (case-insensitive)
+    if (q) {
+      const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [
+        { name: regex },
+        { description: regex },
+        { brand: regex },
+        { material: regex },
+      ];
+    }
+
     if (category && category.toLowerCase() !== 'all') {
       const categoryDoc = await Category.findOne({
         name: { $regex: new RegExp(`^${category}$`, 'i') },
@@ -308,7 +317,6 @@ router.get('/products', async (req, res) => {
       query.category = categoryDoc._id;
     }
 
-    // Filter by seller
     if (sellerId) {
       query.sellerId = sellerId;
     }
@@ -316,10 +324,8 @@ router.get('/products', async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const parsedLimit = parseInt(limit);
 
-    // Get total count for all matching products (without pagination)
     const totalCount = await Product.countDocuments(query);
 
-    // Fetch paginated products
     const products = await Product.find(query)
       .skip(skip)
       .limit(parsedLimit)
@@ -331,6 +337,7 @@ router.get('/products', async (req, res) => {
       totalCount,
       currentPage: parseInt(page),
       totalPages: Math.ceil(totalCount / parsedLimit),
+      hasMore: skip + products.length < totalCount,
     });
   } catch (error) {
     console.error('Fetch Products Error:', error);
