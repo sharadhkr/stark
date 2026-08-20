@@ -266,7 +266,7 @@ export const fetchSearchSuggestions = (query) => async (dispatch, getState) => {
   try {
     const userToken = localStorage.getItem('token');
     const isTokenValid = userToken && typeof userToken === 'string' && userToken.length > 0;
-    const endpoint = isTokenValid ? '/api/user/auth/search-suggestionss' : '/api/user/auth/search-suggestions';
+    const endpoint = '/api/user/auth/search/suggestions';
     console.log('Fetching search suggestions:', {
       url: `${axios.defaults.baseURL || 'No baseURL set'}${endpoint}`,
       query,
