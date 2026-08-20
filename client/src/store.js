@@ -323,7 +323,7 @@ export const fetchTrendingSearches = () => async (dispatch, getState) => {
   try {
     const userToken = localStorage.getItem('token');
     const isTokenValid = userToken && typeof userToken === 'string' && userToken.length > 0;
-    const endpoint = isTokenValid ? '/api/user/auth/trending-searches' : '/search/trending';
+    const endpoint = '/api/user/auth/search/trending';
 
     console.log('Fetching trending searches:', {
       url: `${axios.defaults.baseURL || 'No baseURL set'}${endpoint}`,
@@ -374,8 +374,8 @@ export const fetchTrendingSearches = () => async (dispatch, getState) => {
       errorMsg = 'Authentication failed. Please log in again.';
       localStorage.removeItem('token');
       try {
-        console.log('Retrying with public endpoint: /search/trending');
-        const response = await axios.get('/search/trending');
+        console.log('Retrying with public endpoint: /api/user/auth/search/trending');
+        const response = await axios.get('/api/user/auth/search/trending');
         const data = response.data;
         const normalizeImages = (p) => ({
           _id: p._id,
@@ -444,7 +444,7 @@ export const saveSearch = (query) => async (dispatch, getState) => {
         data: { ...searchSuggestions.data, recentSearches },
       }));
       if (userToken) {
-        await axios.post('/api/user/auth/save-search', { query }, {
+        await axios.post('/api/user/auth/search/recent', { query }, {
           headers: { Authorization: `Bearer ${userToken}` },
         });
       }
@@ -471,7 +471,7 @@ export const searchProducts = (query) => async (dispatch, getState) => {
   try {
     const userToken = localStorage.getItem('token');
     const isTokenValid = userToken && typeof userToken === 'string' && userToken.length > 0;
-    const endpoint = isTokenValid ? '/api/user/auth/products' : '/search/products';
+    const endpoint = '/api/user/auth/products';
     console.log('searchProducts request:', {
       url: `${axios.defaults.baseURL || 'No baseURL set'}${endpoint}`,
       query,
@@ -507,8 +507,8 @@ export const searchProducts = (query) => async (dispatch, getState) => {
       errorMsg = 'Authentication failed. Please log in again.';
       localStorage.removeItem('token');
       try {
-        console.log('Retrying with public endpoint: /search/products');
-        const response = await axios.get('/search/products', {
+        console.log('Retrying with public endpoint: /api/user/auth/products');
+        const response = await axios.get('/api/user/auth/products', {
           params: { q: query, limit: 20, page: 1 },
         });
         const data = response.data;
@@ -564,7 +564,7 @@ export const fetchMoreProducts = () => async (dispatch, getState) => {
   try {
     const userToken = localStorage.getItem('token');
     const isTokenValid = userToken && typeof userToken === 'string' && userToken.length > 0;
-    const endpoint = isTokenValid ? '/api/user/auth/products' : '/search/products';
+    const endpoint = '/api/user/auth/products';
     console.log('fetchMoreProducts request:', {
       url: `${axios.defaults.baseURL || 'No baseURL set'}${endpoint}`,
       query: searchQuery,
