@@ -339,12 +339,6 @@ router.get('/products', async (req, res) => {
 });
 
 
-// Alias for compatibility with Home.jsx
-router.get('/user/auth/products', (req, res, next) => {
-  req.url = '/products';
-  router.handle(req, res, next);
-});
-
 router.get('/products/:productId', async (req, res) => {
   try {
     const productId = req.params.productId;
@@ -489,12 +483,6 @@ router.get('/sellers', async (req, res) => {
   }
 });
 
-
-// Alias for compatibility with Home.jsx
-router.get('/user/auth/sellers', (req, res, next) => {
-  req.url = '/sellers';
-  router.handle(req, res, next);
-});
 
 router.get('/seller/:sellerId', async (req, res) => {
   try {
