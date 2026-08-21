@@ -3,121 +3,101 @@ import axios from './useraxios';
 
 export const DataContext = createContext();
 
-const CACHE_CONFIG = {
-  STALE_TIME: 10 * 60 * 1000, 
-};
+const STALE_TIME = 10 * 60 * 1000;
 
 export const DataProvider = ({ children }) => {
   const [cache, setCache] = useState({});
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const isFetchingRef = useRef(false);
   const hasInitializedRef = useRef(false);
-  const abortControllerRef = useRef(null);
-
-  const isDataStale = useCallback((timestamp) => {
-    return !timestamp || Date.now() - timestamp > CACHE_CONFIG.STALE_TIME;
-  }, []);
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
 
   const updateCache = useCallback((key, data) => {
     setCache(prev => ({ ...prev, [key]: { data, timestamp: Date.now() } }));
   }, []);
 
-  const fetchCriticalData = useCallback(async (force = false) => {
-    if (isFetchingRef.current || (hasInitializedRef.current && !force)) return;
+  const isDataStale = useCallback((timestamp) => {
+    return !timestamp || Date.now() - timestamp > STALE_TIME;
+  }, []);
 
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    if (isFetchingRef.current) return;
+
+    const controller = new AbortController();
     isFetchingRef.current = true;
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = new AbortController();
 
-    try {
-      const { data } = await axios.get('/api/user/auth/initial-data', {
-        signal: abortControllerRef.current.signal,
+    axios.get('/api/user/auth/initial-data', { signal: controller.signal })
+      .then(({ data }) => {
+        const DEFAULT_COMBO_IMAGE = 'https://your-server.com/generic-combo-placeholder.jpg';
+        const normalize = (p) => ({
+          ...p,
+          image: p.image && p.image !== 'https://via.placeholder.com/150' ? p.image : DEFAULT_COMBO_IMAGE,
+        });
+
+        const updates = {};
+        updates.layout = { data: data.layout?.components || [], timestamp: Date.now() };
+        updates.products = { data: (data.products || []).map(normalize), timestamp: Date.now() };
+        updates.sellers = { data: data.sellers || [], timestamp: Date.now() };
+        updates.comboOffers = {
+          data: (data.comboOffers || [])
+            .filter(o => o?._id && Array.isArray(o.products) && o.products.length >= 2)
+            .map(o => ({ ...o, products: (o.products || []).map(p => ({
+              ...p,
+              images: (p.images || []).map(img => img && img !== 'https://via.placeholder.com/150' ? img : DEFAULT_COMBO_IMAGE),
+            }))})),
+          timestamp: Date.now(),
+        };
+        updates.banner = { data: data.banner || { url: DEFAULT_COMBO_IMAGE }, timestamp: Date.now() };
+        updates.searchSuggestions = { data: data.searchSuggestions || {}, timestamp: Date.now() };
+        updates.trendingSearches = { data: data.trendingSearches || {}, timestamp: Date.now() };
+        updates.categoryProducts = { data: data.categoryProducts || {}, timestamp: Date.now() };
+        updates.recentlyViewed = { data: data.recentlyViewed || [], timestamp: Date.now() };
+        updates.sponsoredProducts = { data: (data.sponsoredProducts || []).map(normalize), timestamp: Date.now() };
+        updates.trendingProducts = { data: (data.trendingProducts || []).map(normalize), timestamp: Date.now() };
+
+        const ads = data.ads || [];
+        updates.singleAds = { data: ads.find(a => a.type === 'Single Ad')?.images || [], timestamp: Date.now() };
+        updates.doubleAds = { data: ads.find(a => a.type === 'Double Ad')?.images || [], timestamp: Date.now() };
+        updates.tripleAds = { data: ads.find(a => a.type === 'Triple Ad')?.images || [], timestamp: Date.now() };
+
+        setCache(prev => {
+          const merged = { ...prev };
+          for (const [key, value] of Object.entries(updates)) {
+            const existing = merged[key];
+            if (!existing || (Date.now() - (existing.timestamp || 0)) > STALE_TIME) {
+              merged[key] = value;
+            }
+          }
+          return merged;
+        });
+
+        hasInitializedRef.current = true;
+      })
+      .catch(err => {
+        if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+          console.error('Initial data fetch failed:', err);
+        }
+      })
+      .finally(() => {
+        isFetchingRef.current = false;
+        setIsInitialLoading(false);
       });
 
-      console.log('📦 Full initial-data response:', data);
-      console.log('📦 Raw comboOffers from backend:', data.comboOffers);
-
-      
-      const singleAds = (data.ads || []).find(ad => ad.type === 'Single Ad')?.images || [];
-      const doubleAds = (data.ads || []).find(ad => ad.type === 'Double Ad')?.images || [];
-      const tripleAds = (data.ads || []).find(ad => ad.type === 'Triple Ad')?.images || [];
-
-      console.log('🎯 Extracted ad images:', { singleAds, doubleAds, tripleAds });
-
-      const DEFAULT_COMBO_IMAGE = 'https://your-server.com/generic-combo-placeholder.jpg';
-
-      const normalizedData = {
-        layout: data.layout?.components || [],
-        products: (data.products || []).map(p => ({
-          ...p,
-          image: p.image && p.image !== 'https://via.placeholder.com/150' ? p.image : DEFAULT_COMBO_IMAGE
-        })),
-        comboOffers: (data.comboOffers || [])
-          .filter(offer => offer?._id && Array.isArray(offer.products) && offer.products.length >= 2)
-          .map(offer => ({
-            ...offer,
-            products: (offer.products || []).map(p => ({
-              ...p,
-              images: (p.images || []).map(img =>
-                img && img !== 'https://via.placeholder.com/150' ? img : DEFAULT_COMBO_IMAGE
-              )
-            }))
-          })),
-        sellers: data.sellers || [],
-        banner: data.banner || { url: DEFAULT_COMBO_IMAGE },
-        searchSuggestions: data.searchSuggestions || {},
-        trendingSearches: data.trendingSearches || {},
-        categoryProducts: data.categoryProducts || {},
-        recentlyViewed: data.recentlyViewed || [],
-        sponsoredProducts: (data.sponsoredProducts || []).map(p => ({
-          ...p,
-          image: p.image && p.image !== 'https://via.placeholder.com/150' ? p.image : DEFAULT_COMBO_IMAGE
-        })),
-        trendingProducts: (data.trendingProducts || []).map(p => ({
-          ...p,
-          image: p.image && p.image !== 'https://via.placeholder.com/150' ? p.image : DEFAULT_COMBO_IMAGE
-        })),
-        singleAds,
-        doubleAds,
-        tripleAds,
-      };
-
-      console.log('✅ Normalized comboOffers before caching:', normalizedData.comboOffers);
-
-      for (const [key, value] of Object.entries(normalizedData)) {
-        const existing = cache[key];
-        if (!existing || isDataStale(existing.timestamp) || force) {
-          updateCache(key, value);
-        }
-      }
-
-      hasInitializedRef.current = true;
-    } catch (err) {
-      if (err.name !== 'CanceledError') {
-        console.error('❌ Initial data fetch failed:', err);
-      }
-    } finally {
-      isFetchingRef.current = false;
-      setIsInitialLoading(false);
-    }
-  }, [updateCache, cache, isDataStale]);
-
-  useEffect(() => {
-    fetchCriticalData();
-    return () => abortControllerRef.current?.abort();
-  }, [fetchCriticalData]);
-  
-  useEffect(() => {
-    console.log('🧠 Final cached comboOffers:', cache.comboOffers);
-  }, [cache.comboOffers]);
+    return () => controller.abort();
+  }, []);
 
   const contextValue = useMemo(() => ({
     cache,
     updateCache,
     isDataStale,
     isLoading: isInitialLoading,
-    refreshData: () => fetchCriticalData(true),
-  }), [cache, updateCache, isDataStale, isInitialLoading, fetchCriticalData]);
+    refreshData: () => {
+      hasInitializedRef.current = false;
+      isFetchingRef.current = false;
+    },
+  }), [cache, updateCache, isDataStale, isInitialLoading]);
 
   return <DataContext.Provider value={contextValue}>{children}</DataContext.Provider>;
 };

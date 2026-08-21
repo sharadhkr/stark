@@ -1,4 +1,3 @@
-// ✅ src/Layout.jsx
 import React, { useMemo } from 'react';
 import { useLocation, matchPath } from 'react-router-dom';
 import BottomNavbar from './Components/Navbar';
@@ -20,11 +19,24 @@ export const Layout = React.memo(({ children }) => {
   return (
     <>
       {children}
-      {showNavbar && (
-        <>
-          <Bottom />
-        </>
-      )}
+      {showNavbar && <Bottom />}
     </>
   );
 });
+
+export const Navbar = React.memo(({ children }) => {
+  const { pathname } = useLocation();
+
+  const showNavbar = useMemo(() => {
+    return userRoutes.some((path) => matchPath({ path, end: path === '/' }, pathname));
+  }, [pathname]);
+
+  return (
+    <>
+      {children}
+      {showNavbar && <BottomNavbar />}
+    </>
+  );
+});
+
+export default Layout;

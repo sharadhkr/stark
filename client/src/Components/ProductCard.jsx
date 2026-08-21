@@ -19,54 +19,34 @@ import { Button } from '../../@/components/ui/button';
 import { cn } from '../lib/utils';
 
 const ProductCard = React.memo(({ product = {}, wishlist = [], cart = [], onAddToCart = () => {} }) => {
-  const [isWishlisted, setIsWishlisted] = useState(wishlist.includes(String(product._id)));
-  const [isInCart, setIsInCart] = useState(cart.includes(String(product._id)));
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isInCart, setIsInCart] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
-  const [productDetails, setProductDetails] = useState(null);
-  const [fetchError, setFetchError] = useState(null);
   const navigate = useNavigate();
 
-  const { _id } = product;
-
-  useEffect(() => {
-    const fetchProductDetails = async () => {
-      if (!_id) return;
-      setLoading(true);
-      try {
-        const response = await axios.get(`/api/user/auth/products/${_id}`);
-        setProductDetails(response.data.product);
-      } catch (error) {
-        setFetchError(error.response?.data?.message || 'Failed to load product details');
-        toast.error('Failed to load product details');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProductDetails();
-  }, [_id]);
+  const {
+    _id,
+    name = 'Product',
+    description = '',
+    price = 0,
+    images = [],
+    sizes = [],
+    colors = [],
+    material = '',
+    discount = 0,
+    discountPercentage = 0,
+    quantity: quantityAvailable = 10,
+  } = product;
 
   useEffect(() => {
     setIsWishlisted(wishlist.includes(String(_id)));
     setIsInCart(cart.includes(String(_id)));
   }, [wishlist, cart, _id]);
-
-  const {
-    name = 'Product',
-    description = 'Lorem ipsum dolor sit amet',
-    price = 225,
-    images = [],
-    sizes = ['L', 'X', 'XL'],
-    colors = [],
-    material = 'Polyester',
-    discount = 0,
-    discountPercentage = 0,
-    quantityAvailable = 10,
-  } = productDetails || product;
 
   const discountedPrice = discount > 0
     ? price - discount
