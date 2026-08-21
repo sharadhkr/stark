@@ -19,7 +19,8 @@ const allowedOrigins = [
   // "http://localhost:5173",
   "http://localhost:5174",
   "https://starkk.netlify.app",
-  "https://stark-gamma.vercel.app"
+  "https://stark-gamma.vercel.app",
+  "https://kidney-1-b2qy.onrender.com"
 ];
 
 app.use(cors({
